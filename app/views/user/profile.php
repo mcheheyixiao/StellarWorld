@@ -15,6 +15,7 @@ $mcUsername = trim((string)($profile['mc_username'] ?? ''));
 $hasMcName = $mcUsername !== '';
 $renderName = $hasMcName ? $mcUsername : 'MHF_Steve';
 $minotarBodyUrl = 'https://minotar.net/armor/body/' . rawurlencode($renderName) . '/300.png';
+$minotarAvatarUrl = 'https://minotar.net/helm/' . rawurlencode($renderName) . '/96.png';
 $craftheadSkinUrl = 'https://crafthead.net/skin/' . rawurlencode($renderName);
 $muaSub = trim((string)($profile['mua_sub'] ?? ''));
 $isMuaBound = $muaSub !== '';
@@ -25,307 +26,265 @@ $roleRaw = (string)($profile['role'] ?? 'player');
 $roleLabel = $roleRaw === 'admin' ? '管理员' : '玩家';
 
 $createdAtRaw = (string)($profile['created_at'] ?? '');
-$createdAtDisplay = '—';
+$createdAtDisplay = '--';
 if ($createdAtRaw !== '') {
     $ts = strtotime($createdAtRaw);
     $createdAtDisplay = $ts !== false ? date('Y-m-d', $ts) : $createdAtRaw;
 }
+
+$qqValue = trim((string)($profile['qq'] ?? ($profile['qq_number'] ?? '')));
+$uidValue = isset($profile['id']) ? (string)$profile['id'] : '';
+$qqOrUidDisplay = $qqValue !== '' ? ('QQ ' . $qqValue) : ($uidValue !== '' ? ('UID #' . $uidValue) : '--');
+
+$gameAccountCountDisplay = '--';
+if (isset($profile['game_accounts_count']) && $profile['game_accounts_count'] !== '') {
+    $gameAccountCountDisplay = (string)$profile['game_accounts_count'];
+} elseif (isset($profile['mc_account_count']) && $profile['mc_account_count'] !== '') {
+    $gameAccountCountDisplay = (string)$profile['mc_account_count'];
+} elseif ($hasMcName) {
+    $gameAccountCountDisplay = '1';
+}
+
+$onlineDisplay = '--';
+if (isset($profile['online_count']) && $profile['online_count'] !== '') {
+    $onlineDisplay = (string)$profile['online_count'];
+} elseif (isset($profile['current_online']) && $profile['current_online'] !== '') {
+    $onlineDisplay = (string)$profile['current_online'];
+} elseif (isset($profile['is_online']) && $profile['is_online'] !== '') {
+    $onlineDisplay = ((int)$profile['is_online'] === 1) ? '在线' : '离线';
+}
+
+$durationDisplay = '--';
+if (isset($profile['total_play_time']) && $profile['total_play_time'] !== '') {
+    $durationDisplay = (string)$profile['total_play_time'];
+} elseif (isset($profile['play_time']) && $profile['play_time'] !== '') {
+    $durationDisplay = (string)$profile['play_time'];
+} elseif (isset($profile['total_duration']) && $profile['total_duration'] !== '') {
+    $durationDisplay = (string)$profile['total_duration'];
+}
+
+$deathDisplay = '--';
+if (isset($profile['death_count']) && $profile['death_count'] !== '') {
+    $deathDisplay = (string)$profile['death_count'];
+} elseif (isset($profile['deaths']) && $profile['deaths'] !== '') {
+    $deathDisplay = (string)$profile['deaths'];
+}
 ?>
 
 <style>
-.profile-page {
-    --profile-surface: rgba(2, 6, 23, 0.72);
-    --profile-surface-soft: rgba(15, 23, 42, 0.72);
-    --profile-border: rgba(148, 163, 184, 0.22);
-    --profile-border-soft: rgba(148, 163, 184, 0.28);
-    --profile-shadow: 0 22px 60px -34px rgba(0, 0, 0, 0.8);
-    --profile-text-strong: #f8fafc;
-    --profile-text-body: #cbd5e1;
-    --profile-text-muted: #94a3b8;
-    --profile-accent: #67e8f9;
-    --profile-btn-bg: rgba(14, 165, 233, 0.24);
-    --profile-btn-bg-hover: rgba(14, 165, 233, 0.36);
-    --profile-btn-border: rgba(34, 211, 238, 0.35);
-    --profile-btn-text: #e0f2fe;
-    --profile-secondary-bg: rgba(15, 23, 42, 0.72);
-    --profile-secondary-border: rgba(148, 163, 184, 0.3);
-    --profile-secondary-text: #e2e8f0;
-    --profile-meta-border: rgba(148, 163, 184, 0.3);
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 1rem 0.75rem 2.5rem;
-}
-[data-theme="light"] .profile-page {
-    --profile-surface: rgba(255, 255, 255, 0.86);
-    --profile-surface-soft: rgba(255, 255, 255, 0.95);
-    --profile-border: rgba(148, 163, 184, 0.38);
-    --profile-border-soft: rgba(148, 163, 184, 0.45);
-    --profile-shadow: 0 16px 34px -24px rgba(15, 23, 42, 0.28);
-    --profile-text-strong: #0f172a;
-    --profile-text-body: #334155;
-    --profile-text-muted: #475569;
-    --profile-accent: #0e7490;
-    --profile-btn-bg: rgba(14, 165, 233, 0.15);
-    --profile-btn-bg-hover: rgba(14, 165, 233, 0.22);
-    --profile-btn-border: rgba(14, 116, 144, 0.45);
-    --profile-btn-text: #0c4a6e;
-    --profile-secondary-bg: rgba(255, 255, 255, 0.95);
-    --profile-secondary-border: rgba(148, 163, 184, 0.5);
-    --profile-secondary-text: #0f172a;
-    --profile-meta-border: rgba(148, 163, 184, 0.45);
-}
-.profile-dashboard {
+.profile-shell {
     display: grid;
-    grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
-    gap: 1rem;
+    grid-template-columns: 1fr;
 }
 .profile-sidebar {
-    position: sticky;
-    top: 6.5rem;
-    border: 1px solid var(--profile-border);
-    border-radius: 1.5rem;
-    background: var(--profile-surface);
-    backdrop-filter: blur(20px);
-    box-shadow: var(--profile-shadow);
-    padding: 1rem;
-    text-align: center;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.8);
 }
-.profile-avatar-wrap {
-    border-radius: 1rem;
-    border: 1px solid var(--profile-border);
-    background: var(--profile-surface-soft);
-    min-height: 300px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-}
-.profile-avatar-wrap img,
-.profile-avatar-wrap canvas {
-    width: 100%;
-    max-width: 220px;
-    height: auto;
-    display: block;
-}
-.profile-username {
-    margin: 0.85rem 0 0;
-    font-size: 1.35rem;
-    font-weight: 800;
-    color: var(--profile-text-strong);
-}
-.profile-role-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    margin-top: 0.65rem;
-    padding: 0.32rem 0.8rem;
-    border-radius: 9999px;
-    border: 1px solid rgba(34, 211, 238, 0.35);
-    background: rgba(14, 165, 233, 0.16);
-    color: #a5f3fc;
-    font-size: 0.75rem;
-    font-weight: 700;
-}
-.profile-role-badge.admin {
-    border-color: rgba(245, 158, 11, 0.4);
-    background: rgba(245, 158, 11, 0.18);
-    color: #fcd34d;
-}
-.profile-meta {
-    margin-top: 0.95rem;
-    border-top: 1px dashed var(--profile-meta-border);
-    padding-top: 0.85rem;
-    font-size: 0.85rem;
-    color: var(--profile-text-body);
-    line-height: 1.8;
-}
-.profile-meta strong { color: var(--profile-text-strong); }
-.profile-unbound-hint { margin-top: 0.45rem; font-size: 0.78rem; color: var(--profile-text-muted); line-height: 1.5; }
-.profile-content-stack { display: flex; flex-direction: column; gap: 1rem; }
-.profile-card {
-    border: 1px solid var(--profile-border);
-    border-radius: 1.5rem;
-    background: var(--profile-surface);
-    backdrop-filter: blur(20px);
-    box-shadow: var(--profile-shadow);
-    padding: 1.15rem;
-}
-.profile-card h2 { margin-top: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--profile-text-strong); }
-.profile-card h2 i { color: var(--profile-accent); }
-.profile-card p { color: var(--profile-text-muted); margin-top: 0.3rem; }
-.profile-input {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid var(--profile-border-soft);
-    border-radius: 0.7rem;
-    background: var(--profile-surface-soft);
-    color: var(--profile-text-strong);
-}
-.profile-input::placeholder {
-    color: var(--profile-text-muted);
-}
-.profile-btn {
-    border-radius: 0.75rem;
-    border: 1px solid var(--profile-btn-border);
-    background: var(--profile-btn-bg);
-    color: var(--profile-btn-text);
-}
-.profile-btn:hover { background: var(--profile-btn-bg-hover); }
-[data-theme="light"] .profile-card p[style*="color:#fca5a5"] {
-    color: #b91c1c !important;
-}
-[data-theme="light"] .profile-card a[href="/auth/mua"],
-[data-theme="light"] #quick-reset-btn {
-    border-color: var(--profile-secondary-border) !important;
-    background: var(--profile-secondary-bg) !important;
-    color: var(--profile-secondary-text) !important;
-}
-[data-theme="light"] .profile-card a[href="/auth/mua"]:hover,
-[data-theme="light"] #quick-reset-btn:hover {
-    background: rgba(224, 242, 254, 0.9) !important;
-    border-color: rgba(14, 116, 144, 0.38) !important;
-    color: #0c4a6e !important;
-}
-[data-theme="light"] .profile-card strong[style*="color:#10b981"] {
-    color: #047857 !important;
-}
-[data-theme="light"] .profile-card strong[style*="color:#f59e0b"] {
-    color: #b45309 !important;
-}
-[data-theme="light"] .profile-content-stack > .profile-card div[style*="border-top:1px dashed var(--glass-border)"] {
-    border-top-color: var(--profile-meta-border) !important;
-}
-@media (max-width: 900px) {
-    .profile-dashboard { grid-template-columns: 1fr; }
-    .profile-sidebar { position: static; top: auto; }
+@media (min-width: 1024px) {
+    .profile-shell {
+        grid-template-columns: 280px minmax(0, 1fr);
+        min-height: calc(100vh - 9rem);
+    }
+    .profile-sidebar {
+        border-bottom: 0;
+        border-right: 1px solid rgba(51, 65, 85, 0.8);
+    }
 }
 </style>
 
-<div class="profile-page">
-    <div class="profile-dashboard">
-        <aside class="profile-sidebar">
-            <div class="profile-avatar-wrap"<?= $hasMcName ? '' : ' aria-hidden="true"' ?>>
-                <canvas id="skin_container_3d" style="outline:none; display:none;"></canvas>
-                <img id="skin_container_2d" src="<?= htmlspecialchars($minotarBodyUrl, ENT_QUOTES, 'UTF-8') ?>" alt="玩家角色" width="220" height="293" loading="eager" decoding="async">
-            </div>
-            <h1 class="profile-username"><?= htmlspecialchars((string)($profile['username'] ?? ''), ENT_QUOTES, 'UTF-8') ?></h1>
-            <span class="profile-role-badge <?= $roleRaw === 'admin' ? 'admin' : '' ?>">
-                <i class="mdi mdi-shield-account"></i>
-                <?= htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') ?>
-            </span>
-            <div class="profile-meta">
-                注册时间：<strong><?= htmlspecialchars($createdAtDisplay, ENT_QUOTES, 'UTF-8') ?></strong>
-            </div>
-            <?php if (!$hasMcName): ?>
-                <p class="profile-unbound-hint">尚未绑定游戏 UUID，当前为 Steve 占位图；绑定角色后将显示你的形象。</p>
-            <?php endif; ?>
-        </aside>
-
-        <div class="profile-content-stack">
-            <section class="profile-card">
-                <h2 style="margin-top:0;display:flex;align-items:center;gap:0.5rem;">
-                    <i class="mdi mdi-calendar-check"></i>
-                    <span>每日签到福利</span>
-                </h2>
-                <p style="color:var(--color-text-muted);margin-top:0.3rem;">
-                    每日在网页签到，即可获得积分或游戏内奖励。
-                </p>
-                <div style="margin-top:1rem;">
-                    <button
-                        class="btn profile-btn"
-                        type="button"
-                        onclick="alert('签到系统正在开发中，敬请期待！')"
+<div class="max-w-7xl mx-auto p-4 md:p-6">
+    <div class="overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/85 shadow-2xl backdrop-blur">
+        <div class="profile-shell">
+            <aside class="profile-sidebar p-4 md:p-5 flex flex-col gap-4">
+                <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-center text-white">
+                    <img
+                        src="<?= htmlspecialchars($minotarAvatarUrl, ENT_QUOTES, 'UTF-8') ?>"
+                        alt="用户头像"
+                        width="96"
+                        height="96"
+                        class="rounded-full w-24 h-24 mx-auto border-4 border-white/40 object-cover"
+                        loading="eager"
+                        decoding="async"
                     >
-                        立即签到
-                    </button>
+                    <h1 class="mt-3 text-2xl font-bold"><?= htmlspecialchars((string)($profile['username'] ?? ''), ENT_QUOTES, 'UTF-8') ?></h1>
+                    <p class="mt-1 text-blue-100"><?= htmlspecialchars($qqOrUidDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                    <span class="mt-3 inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-semibold"><?= htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                    <p class="mt-3 text-sm text-blue-50">注册时间：<?= htmlspecialchars($createdAtDisplay, ENT_QUOTES, 'UTF-8') ?></p>
                 </div>
-            </section>
 
-            <section class="profile-card">
-                <h2 style="margin-top:0;display:flex;align-items:center;gap:0.5rem;">
-                    <i class="mdi mdi-minecraft"></i>
-                    <span>游戏角色设置</span>
-                </h2>
-                <p style="color:var(--color-text-muted);margin-top:0.3rem;">
-                    当前绑定：<strong><?= htmlspecialchars((string)($profile['mc_username'] ?? '未绑定'), ENT_QUOTES, 'UTF-8') ?></strong>
-                </p>
-                <?php if (!$canChangeMcName): ?>
-                    <p style="color:#fca5a5;font-weight:600;margin:0.6rem 0 0.9rem;"><?= htmlspecialchars($cooldownMessage, ENT_QUOTES, 'UTF-8') ?></p>
-                <?php endif; ?>
+                <nav class="grid grid-cols-1 gap-2">
+                    <button type="button" data-profile-tab-btn data-target="panel-game" class="profile-nav-btn rounded-xl bg-blue-500 px-4 py-3 text-base font-medium text-white shadow transition-all hover:-translate-y-0.5 hover:shadow-md">游戏数据</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-bind" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all hover:-translate-y-0.5 hover:shadow-md">账号绑定</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-security" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all hover:-translate-y-0.5 hover:shadow-md">安全中心</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-player" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all hover:-translate-y-0.5 hover:shadow-md">玩家功能</button>
+                </nav>
 
-                <form id="mc-bind-form" method="post" action="/profile/mc-character/update">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
-                    <label for="mc-name-input" style="display:block;margin-bottom:0.35rem;">Minecraft Username</label>
-                    <input
-                        id="mc-name-input"
-                        name="mc_name"
-                        type="text"
-                        value="<?= htmlspecialchars((string)($profile['mc_username'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                        <?= $canChangeMcName ? '' : 'readonly' ?>
-                        required
-                        class="profile-input"
-                    >
-                    <button
-                        type="submit"
-                        class="btn profile-btn"
-                        <?= $canChangeMcName ? '' : 'disabled' ?>
-                        style="width:100%;margin-top:0.9rem;<?= $canChangeMcName ? '' : 'opacity:0.6;cursor:not-allowed;' ?>"
-                    >
-                        保存角色绑定
-                    </button>
-                </form>
-            </section>
-
-            <section class="profile-card">
-                <h2 style="margin-top:0;display:flex;align-items:center;gap:0.5rem;">
-                    <i class="mdi mdi-account-link"></i>
-                    <span>MUA Union 账号</span>
-                </h2>
-                <p style="color:var(--color-text-muted);margin-top:0.3rem;">
-                    绑定状态：
-                    <?php if ($isMuaBound): ?>
-                        <strong style="color:#10b981;">已绑定</strong>
-                    <?php else: ?>
-                        <strong style="color:#f59e0b;">未绑定</strong>
-                        <a href="/auth/mua" class="btn" style="margin-left:0.7rem;padding:0.35rem 0.75rem;border:1px solid rgba(148,163,184,.3);background:rgba(15,23,42,.72);color:#e2e8f0;border-radius:.65rem;">去绑定</a>
-                    <?php endif; ?>
-                </p>
-            </section>
-
-            <section class="profile-card">
-                <h2 style="margin-top:0;display:flex;align-items:center;gap:0.5rem;">
-                    <i class="mdi mdi-lock-reset"></i>
-                    <span>安全与密码</span>
-                </h2>
-                <form id="password-form" method="post" action="/profile/password/update">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
-                    <label for="old-password-input" style="display:block;margin-bottom:0.35rem;">旧密码</label>
-                    <input
-                        id="old-password-input"
-                        name="old_password"
-                        type="password"
-                        required
-                        class="profile-input"
-                        style="margin-bottom:0.8rem;"
-                    >
-                    <label for="new-password-input" style="display:block;margin-bottom:0.35rem;">新密码</label>
-                    <input
-                        id="new-password-input"
-                        name="new_password"
-                        type="password"
-                        minlength="6"
-                        required
-                        class="profile-input"
-                    >
-                    <button type="submit" class="btn profile-btn" style="width:100%;margin-top:0.9rem;">更新密码</button>
-                </form>
-
-                <div style="margin-top:1rem;padding-top:0.9rem;border-top:1px dashed var(--glass-border);">
-                    <button id="quick-reset-btn" type="button" class="btn" style="width:100%;font-size:0.9rem;border:1px solid rgba(148,163,184,.3);background:rgba(15,23,42,.72);color:#e2e8f0;border-radius:.75rem;">
-                        忘记了旧密码？向绑定的邮箱 (<?= htmlspecialchars($emailMasked, ENT_QUOTES, 'UTF-8') ?>) 发送重置链接
-                    </button>
+                <div class="mt-auto rounded-xl border border-slate-700/80 bg-slate-800/60 p-3 text-xs text-slate-300">
+                     
                 </div>
-            </section>
+            </aside>
+
+            <main class="flex min-w-0 flex-col gap-4 p-4 md:p-6">
+                <div class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-4">
+                    <h2 class="text-lg font-semibold text-slate-100">个人仪表盘</h2>
+                </div>
+
+                <section class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div class="rounded-xl border border-slate-700/80 bg-slate-800/70 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
+                        <p class="text-sm text-slate-400">游戏账号数量</p>
+                        <p class="mt-1 text-2xl font-bold text-slate-100"><?= htmlspecialchars($gameAccountCountDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                    </div>
+                    <div class="rounded-xl border border-slate-700/80 bg-slate-800/70 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
+                        <p class="text-sm text-slate-400">当前在线</p>
+                        <p class="mt-1 text-2xl font-bold text-slate-100"><?= htmlspecialchars($onlineDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                    </div>
+                    <div class="rounded-xl border border-slate-700/80 bg-slate-800/70 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
+                        <p class="text-sm text-slate-400">累计时长</p>
+                        <p class="mt-1 text-2xl font-bold text-slate-100"><?= htmlspecialchars($durationDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                    </div>
+                </section>
+
+                <div class="min-h-0 flex-1">
+                    <section id="panel-game" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
+                        <h3 class="text-lg font-semibold text-slate-100">A. 游戏数据</h3>
+                        <p class="mt-1 text-sm text-slate-400">游戏账号信息、在线状态、累计时长与死亡次数。</p>
+
+                        <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_1fr]">
+                            <div class="space-y-3">
+                                <div class="rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                                    <p class="text-sm text-slate-400">游戏账号信息</p>
+                                    <p class="mt-1 font-semibold text-slate-100"><?= htmlspecialchars((string)($profile['mc_username'] ?? '未绑定'), ENT_QUOTES, 'UTF-8') ?></p>
+                                    <p class="mt-1 text-xs text-slate-400">UUID：<?= htmlspecialchars((string)($profile['mc_uuid'] ?? '--'), ENT_QUOTES, 'UTF-8') ?></p>
+                                </div>
+                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                    <div class="rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                                        <p class="text-xs text-slate-400">在线状态</p>
+                                        <p class="mt-1 text-lg font-semibold text-slate-100"><?= htmlspecialchars($onlineDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                                    </div>
+                                    <div class="rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                                        <p class="text-xs text-slate-400">累计时长</p>
+                                        <p class="mt-1 text-lg font-semibold text-slate-100"><?= htmlspecialchars($durationDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                                    </div>
+                                    <div class="rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                                        <p class="text-xs text-slate-400">死亡次数</p>
+                                        <p class="mt-1 text-lg font-semibold text-slate-100"><?= htmlspecialchars($deathDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                                    </div>
+                                </div>
+                                <?php if (!$hasMcName): ?>
+                                    <p class="text-sm text-amber-400">未绑定游戏 UUID，当前显示 Steve 占位形象；绑定后自动更新。</p>
+                                <?php endif; ?>
+                            </div>
+
+                            <div class="rounded-xl border border-slate-700/80 bg-slate-900/50 p-4 flex flex-col items-center justify-center">
+                                <canvas id="skin_container_3d" class="w-full max-w-xs mx-auto"></canvas>
+                                <img id="skin_container_2d" src="<?= htmlspecialchars($minotarBodyUrl, ENT_QUOTES, 'UTF-8') ?>" alt="玩家角色" class="w-full max-w-xs mx-auto" width="220" height="293" loading="eager" decoding="async">
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="panel-bind" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
+                        <h3 class="text-lg font-semibold text-slate-100">B. 账号绑定</h3>
+                        <p class="mt-1 text-sm text-slate-400">Minecraft 与 Union 绑定管理。</p>
+
+                        <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+                            <div class="rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                                <h4 class="font-semibold text-slate-100">Minecraft 绑定</h4>
+                                <p class="mt-1 text-sm text-slate-400">当前绑定：<?= htmlspecialchars((string)($profile['mc_username'] ?? '未绑定'), ENT_QUOTES, 'UTF-8') ?></p>
+                                <?php if (!$canChangeMcName): ?>
+                                    <p class="mt-2 text-sm font-semibold text-red-400"><?= htmlspecialchars($cooldownMessage, ENT_QUOTES, 'UTF-8') ?></p>
+                                <?php endif; ?>
+
+                                <form id="mc-bind-form" method="post" action="/profile/mc-character/update" class="mt-4 space-y-3">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+                                    <label for="mc-name-input" class="block text-sm text-slate-300">Minecraft Username</label>
+                                    <input
+                                        id="mc-name-input"
+                                        name="mc_name"
+                                        type="text"
+                                        value="<?= htmlspecialchars((string)($profile['mc_username'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                        <?= $canChangeMcName ? '' : 'readonly' ?>
+                                        required
+                                        class="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                    >
+                                    <button
+                                        type="submit"
+                                        class="w-full rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                        <?= $canChangeMcName ? '' : 'disabled' ?>
+                                    >
+                                        保存角色绑定
+                                    </button>
+                                </form>
+                            </div>
+
+                            <div class="rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                                <h4 class="font-semibold text-slate-100">Union 绑定</h4>
+                                <p class="mt-2 text-sm text-slate-400">
+                                    绑定状态：
+                                    <?php if ($isMuaBound): ?>
+                                        <strong class="text-emerald-400">已绑定</strong>
+                                    <?php else: ?>
+                                        <strong class="text-amber-400">未绑定</strong>
+                                    <?php endif; ?>
+                                </p>
+                                <?php if (!$isMuaBound): ?>
+                                    <a href="/auth/mua" class="mt-4 inline-flex rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500">去绑定</a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="panel-security" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
+                        <h3 class="text-lg font-semibold text-slate-100">C. 安全中心</h3>
+                        <p class="mt-1 text-sm text-slate-400">修改密码与邮箱快速重置。</p>
+
+                        <form id="password-form" method="post" action="/profile/password/update" class="mt-5 space-y-4 rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+                            <div>
+                                <label for="old-password-input" class="block text-sm text-slate-300">旧密码</label>
+                                <input
+                                    id="old-password-input"
+                                    name="old_password"
+                                    type="password"
+                                    required
+                                    class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                >
+                            </div>
+                            <div>
+                                <label for="new-password-input" class="block text-sm text-slate-300">新密码</label>
+                                <input
+                                    id="new-password-input"
+                                    name="new_password"
+                                    type="password"
+                                    minlength="6"
+                                    required
+                                    class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                >
+                            </div>
+                            <button type="submit" class="w-full rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500">更新密码</button>
+                        </form>
+
+                        <div class="mt-4 rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                            <button id="quick-reset-btn" type="button" class="w-full rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-slate-100 transition hover:bg-blue-500">
+                                忘记旧密码？向绑定邮箱 (<?= htmlspecialchars($emailMasked, ENT_QUOTES, 'UTF-8') ?>) 发送重置链接
+                            </button>
+                        </div>
+                    </section>
+
+                    <section id="panel-player" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
+                        <h3 class="text-lg font-semibold text-slate-100">D. 玩家功能</h3>
+                        <p class="mt-1 text-sm text-slate-400">每日签到领取积分或游戏内奖励。</p>
+
+                        <div class="mt-5 rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                            <button
+                                type="button"
+                                class="rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500"
+                                onclick="alert('签到系统正在开发中，敬请期待！')"
+                            >
+                                立即签到
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            </main>
         </div>
     </div>
 </div>
@@ -333,23 +292,21 @@ if ($createdAtRaw !== '') {
 <script src="https://unpkg.com/skinview3d@3.4.1/bundles/skinview3d.bundle.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    const canvas = document.getElementById("skin_container_3d");
-    const img2d = document.getElementById("skin_container_2d");
+    const canvas = document.getElementById('skin_container_3d');
+    const img2d = document.getElementById('skin_container_2d');
     const rawSkinUrl = "<?= htmlspecialchars((string)$finalRawSkinUrl, ENT_QUOTES, 'UTF-8') ?>";
 
-    // If the user bound MUA, keep the proxy to avoid cross-origin/CORS issues.
     const isMua = <?= $useMuaSkinRender ? 'true' : 'false' ?>;
     const finalSkinUrl = isMua
-        ? ("/api/skin-proxy?url=" + encodeURIComponent(rawSkinUrl))
+        ? ('/api/skin-proxy?url=' + encodeURIComponent(rawSkinUrl))
         : rawSkinUrl;
 
     if (!canvas || !img2d || typeof skinview3d === 'undefined') {
         return;
     }
 
-    // Progressive enhancement: show 2D immediately; upgrade to 3D when it loads.
-    canvas.style.display = "none";
-    img2d.style.display = "block";
+    canvas.style.display = 'none';
+    img2d.style.display = 'block';
 
     const skinViewer = new skinview3d.SkinViewer({
         canvas: canvas,
@@ -360,23 +317,64 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
         skinViewer.loadSkin(finalSkinUrl)
             .then(() => {
-                canvas.style.display = "block";
-                img2d.style.display = "none";
+                canvas.style.display = 'block';
+                img2d.style.display = 'none';
                 if (skinViewer.animations) {
                     skinViewer.animations.add(new skinview3d.IdleAnimation());
                 }
             })
             .catch((err) => {
-                console.warn("3D Skin load failed, falling back to 2D", err);
-                canvas.style.display = "none";
-                img2d.style.display = "block";
+                console.warn('3D Skin load failed, falling back to 2D', err);
+                canvas.style.display = 'none';
+                img2d.style.display = 'block';
             });
     } catch (err) {
-        console.warn("skinview3d loadSkin threw an exception, falling back to 2D", err);
-        canvas.style.display = "none";
-        img2d.style.display = "block";
+        console.warn('skinview3d loadSkin threw an exception, falling back to 2D', err);
+        canvas.style.display = 'none';
+        img2d.style.display = 'block';
     }
 });
+</script>
+<script>
+(() => {
+    const navButtons = document.querySelectorAll('[data-profile-tab-btn]');
+    const panels = document.querySelectorAll('[data-profile-panel]');
+
+    const setActiveTab = (targetId) => {
+        panels.forEach((panel) => {
+            if (panel.id === targetId) {
+                panel.style.display = 'block';
+            } else {
+                panel.style.display = 'none';
+            }
+        });
+
+        navButtons.forEach((btn) => {
+            const isActive = btn.getAttribute('data-target') === targetId;
+            if (isActive) {
+                btn.classList.remove('bg-slate-800/70', 'text-slate-200');
+                btn.classList.add('bg-blue-500', 'text-white', 'shadow');
+            } else {
+                btn.classList.remove('bg-blue-500', 'text-white', 'shadow');
+                btn.classList.add('bg-slate-800/70', 'text-slate-200');
+            }
+        });
+    };
+
+    navButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target');
+            if (targetId) {
+                setActiveTab(targetId);
+            }
+        });
+    });
+
+    panels.forEach((panel) => {
+        panel.style.display = 'none';
+    });
+    setActiveTab('panel-game');
+})();
 </script>
 <script>
 (() => {
@@ -424,7 +422,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const quickResetBtn = document.getElementById('quick-reset-btn');
     if (quickResetBtn) {
-                quickResetBtn.addEventListener('click', async () => {
+        quickResetBtn.addEventListener('click', async () => {
             quickResetBtn.disabled = true;
             try {
                 const fd = new FormData();

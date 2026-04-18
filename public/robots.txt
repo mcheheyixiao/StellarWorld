@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+
+Disallow: /admin
+Disallow: /admin/
+Disallow: /auth
+Disallow: /auth/
+Disallow: /api
+Disallow: /api/
+Disallow: /forgot-password
+Disallow: /reset-password
+
+Sitemap: https://www.stellarvan.cn/sitemap.xml

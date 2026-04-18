@@ -1,0 +1,544 @@
+  /* Global styles ported from Astro project */
+
+  @font-face {
+    font-family: 'FusionPixel';
+    src: url('/fonts/fusion-pixel-12px-proportional-zh_hans.ttf.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'HarmonyOS Sans SC';
+    src: url('/fonts/HarmonyOS_Sans_SC_Regular.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: '像素体';
+    src: url('/fonts/像素体.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  :root {
+    /* Brand + theme tokens (Light: Cloud Sky) */
+    --gradient-brand: linear-gradient(135deg, #8FD3FF, #4A6CFF);
+    --color-glow: #9FD2FF;
+
+    --color-primary: #5A8CFF;
+    --color-primary-dark: #3F6BFF;
+    --color-secondary: #8FD3FF;
+    --color-accent: #4A6CFF;
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-info: #0ea5e9;
+
+    --color-bg: #F6F9FF;
+    --color-card-bg: rgba(255, 255, 255, 0.78);
+    --color-text: #1A2340;
+    --color-text-light: #5E6A8A;
+    --color-border: rgba(0, 0, 0, 0.08);
+
+    --glass-bg: rgba(255, 255, 255, 0.65);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --glass-shadow: 0 12px 40px rgba(159, 210, 255, 0.22);
+    --glass-backdrop: blur(20px) saturate(180%);
+
+    /* Shared readability tokens */
+    --background-overlay-opacity: 0.8;
+    --nav-icon-opacity: 0.88;
+    --nav-text-opacity: 0.9;
+
+    --radius-sm: 12px;
+    --radius-md: 20px;
+    --radius-lg: 30px;
+    --radius-xl: 50px;
+    --radius-full: 9999px;
+
+    --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-elastic: cubic-bezier(0.5, 1.8, 0.5, 1);
+
+    --shadow-sm: 0 4px 12px rgba(159, 210, 255, 0.18), 0 2px 6px rgba(26, 35, 64, 0.08);
+    --shadow-md: 0 10px 28px rgba(159, 210, 255, 0.24), 0 6px 14px rgba(26, 35, 64, 0.10);
+    --shadow-lg: 0 18px 52px rgba(159, 210, 255, 0.30), 0 10px 24px rgba(26, 35, 64, 0.12);
+    --shadow-xl: 0 26px 72px rgba(159, 210, 255, 0.34), 0 14px 34px rgba(26, 35, 64, 0.14);
+    --shadow-glow: 0 0 44px rgba(159, 210, 255, 0.55);
+
+    --font-main: 'HarmonyOS Sans SC', 'FusionPixel', '像素体', 'Quicksand', 'Noto Sans SC', sans-serif;
+    --font-title: 'HarmonyOS Sans SC', 'FusionPixel', '像素体', 'Quicksand', 'Noto Sans SC', sans-serif;
+  }
+
+  [data-theme="dark"] {
+    /* Dark: Star Sky */
+    --color-glow: #7FD4FF;
+
+    --color-primary: #6AA8FF;
+    --color-primary-dark: #4A6CFF;
+    --color-secondary: #8FD3FF;
+    --color-accent: #4A6CFF;
+
+    --color-bg: #0B132B;
+    --color-card-bg: rgba(11, 19, 43, 0.78);
+    --color-text: #FFFFFF;
+    --color-text-light: #DDE6FF;
+    --color-border: rgba(255, 255, 255, 0.20);
+
+    --glass-bg: rgba(11, 19, 43, 0.55);
+    --glass-border: rgba(255, 255, 255, 0.22);
+    --glass-shadow: 0 12px 40px rgba(10, 15, 40, 0.55);
+
+    --shadow-sm: 0 6px 16px rgba(127, 212, 255, 0.12), 0 2px 10px rgba(109, 40, 217, 0.10);
+    --shadow-md: 0 14px 34px rgba(127, 212, 255, 0.15), 0 8px 22px rgba(109, 40, 217, 0.14);
+    --shadow-lg: 0 22px 60px rgba(127, 212, 255, 0.18), 0 12px 34px rgba(109, 40, 217, 0.18);
+    --shadow-xl: 0 34px 90px rgba(127, 212, 255, 0.20), 0 18px 50px rgba(109, 40, 217, 0.22);
+    --shadow-glow: 0 0 52px rgba(127, 212, 255, 0.45);
+
+    /* Dark mode readability tuning */
+    --background-overlay-opacity: 0.9;
+    --nav-icon-opacity: 1;
+    --nav-text-opacity: 0.98;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'HarmonyOS Sans SC', 'FusionPixel', 'Quicksand', 'Noto Sans SC', sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-text);
+    background-color: var(--color-bg);
+    transition: background-color 0.3s var(--ease-smooth), color 0.3s var(--ease-smooth);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    font-smooth: antialiased;
+  }
+
+  strong,
+  b {
+    font-weight: normal;
+    text-shadow: 0 0.03em 0 currentColor;
+  }
+
+  .background-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    overflow: hidden;
+  }
+
+  .background-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0;
+    transition: opacity 1.2s var(--ease-smooth);
+  }
+
+  .background-container picture.background-image {
+    display: block;
+    background: none;
+  }
+
+  .background-container picture.background-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+  }
+
+  .background-image.active {
+    opacity: 1;
+  }
+
+  .background-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg,
+      var(--color-bg) 0%,
+      transparent 30%,
+      transparent 70%,
+      var(--color-bg) 100%
+    );
+    opacity: var(--background-overlay-opacity);
+    z-index: 1;
+  }
+
+  [data-theme="dark"] .background-overlay {
+    /* Reduce transparent area so bright background images don't wash out text */
+    background: linear-gradient(135deg,
+      rgba(11, 19, 43, 0.88) 0%,
+      rgba(11, 19, 43, 0.82) 35%,
+      rgba(11, 19, 43, 0.80) 65%,
+      rgba(11, 19, 43, 0.88) 100%
+    );
+  }
+
+  [data-theme="dark"] strong,
+  [data-theme="dark"] b {
+    text-shadow: none;
+  }
+
+  [data-theme="dark"] picture.background-image.active {
+    opacity: 0.70;
+  }
+
+  [data-theme="dark"] picture.background-image.active img {
+    filter: brightness(0.88) contrast(1.06) saturate(0.95);
+  }
+
+  .main-content {
+    min-height: 100vh;
+    padding-top: 70px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .card {
+    background: var(--color-card-bg);
+    backdrop-filter: var(--glass-backdrop);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    padding: 2rem;
+    margin: 1rem 0;
+    transition: all 0.3s var(--ease-smooth);
+  }
+
+  .card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .card.static-card:hover {
+    transform: none;
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: var(--radius-full);
+    font-family: var(--font-main);
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.3s var(--ease-smooth);
+    gap: 0.5rem;
+  }
+
+  .btn-primary {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: var(--color-primary-dark);
+    transform: translateY(-2px);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.12) inset,
+      0 10px 26px rgba(0, 0, 0, 0.10),
+      var(--shadow-glow);
+  }
+
+  .btn-secondary {
+    background: var(--glass-bg);
+    color: var(--color-text);
+    border: 1px solid var(--glass-border);
+  }
+
+  .btn-secondary:hover {
+    background: var(--color-card-bg);
+    transform: translateY(-2px);
+  }
+
+  .page-container {
+    width: calc(100% - 1.5rem);
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  @media (max-width: 768px) {
+    .page-container {
+      padding: 1rem;
+    }
+
+    .card {
+      padding: 1.5rem;
+      margin: 0.5rem 0;
+    }
+  }
+
+  .fade-in {
+    animation: fadeIn 0.6s var(--ease-smooth);
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--glass-bg);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-primary);
+    border-radius: var(--radius-full);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-accent);
+  }
+
+  ::selection {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  ::-moz-selection {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  /* Checkbox (Remember Me / Admin toggles) */
+  .cbx-input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+  }
+
+  .cbx {
+    position: relative;
+    top: 1px;
+    width: 27px;
+    height: 27px;
+    border: 1px solid var(--glass-border);
+    border-radius: 3px;
+    vertical-align: middle;
+    transition: background 0.1s ease, border-color 0.1s ease;
+    cursor: pointer;
+    display: inline-block;
+    background: transparent;
+  }
+
+  .cbx:after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 8px;
+    width: 7px;
+    height: 14px;
+    opacity: 0;
+    transform: rotate(45deg) scale(0);
+    border-right: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transition: all 0.3s ease;
+    transition-delay: 0.15s;
+  }
+
+  .lbl {
+    margin-left: 5px;
+    vertical-align: middle;
+    cursor: pointer;
+  }
+
+  .cbx-input:checked ~ .cbx {
+    border-color: transparent;
+    background: var(--color-primary);
+    animation: jelly 0.6s ease;
+  }
+
+  .cbx-input:checked ~ .cbx:after {
+    opacity: 1;
+    transform: rotate(45deg) scale(1);
+  }
+
+  .cntr {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  @keyframes jelly {
+    from {
+      transform: scale(1, 1);
+    }
+
+    30% {
+      transform: scale(1.25, 0.75);
+    }
+
+    40% {
+      transform: scale(0.75, 1.25);
+    }
+
+    50% {
+      transform: scale(1.15, 0.85);
+    }
+
+    65% {
+      transform: scale(0.95, 1.05);
+    }
+
+    75% {
+      transform: scale(1.05, 0.95);
+    }
+
+    to {
+      transform: scale(1, 1);
+    }
+  }
+
+  .hidden-xs-up {
+    display: none !important;
+  }
+
+  /* === Modern input + SVG checkbox (Login) === */
+  /* Append position: end of global.css */
+
+  .input-group {
+    display: flex;
+    align-items: center;
+    position: relative;
+    width: 100%;
+  }
+
+  .custom-input {
+    width: 100%;
+    padding: 0.6rem 0.8rem 0.6rem 3.2rem; /* left padding for absolute icon */
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    color: inherit;
+    font-family: var(--font-main);
+    outline: none;
+    transition: box-shadow 0.2s var(--ease-smooth), border-color 0.2s var(--ease-smooth);
+  }
+
+  .custom-input::placeholder {
+    color: var(--color-text-light) !important;
+    opacity: 1 !important;
+  }
+
+  .custom-input:focus {
+    outline: none;
+  }
+
+  .input-group:focus-within .custom-input {
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-glow);
+  }
+
+  .input-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1.2rem;
+    height: 1.2rem;
+    fill: var(--color-text-light);
+    pointer-events: none;
+    z-index: 2;
+    transition: fill 0.3s ease;
+  }
+
+  .input-group:focus-within .input-icon {
+    fill: var(--color-primary);
+  }
+
+  .modern-checkbox {
+    position: relative;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    gap: 0.6rem;
+  }
+
+  .modern-checkbox .hidden-input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+  }
+
+  .modern-checkbox .label-text {
+    font-size: 0.95rem;
+    color: var(--color-text-light);
+  }
+
+  .modern-checkbox .custom-checkmark {
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: var(--radius-sm);
+    border: 2px solid var(--glass-border);
+    background: var(--glass-bg);
+    transition: all 0.3s ease;
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  .modern-checkbox .custom-checkmark::after {
+    content: '✓';
+    color: #fff;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -55%) scale(0);
+    transform-origin: center;
+    font-size: 0.9rem;
+    line-height: 1;
+    transition: transform 0.25s ease;
+  }
+
+  .modern-checkbox .hidden-input:checked + .custom-checkmark {
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+  }
+
+  .modern-checkbox .hidden-input:checked + .custom-checkmark::after {
+    transform: translate(-50%, -55%) scale(1);
+  }
+

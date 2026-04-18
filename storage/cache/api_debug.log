@@ -1,0 +1,14 @@
+2026-03-05 21:25:09 - modLogin API reached
+
+=== [21:38:00] Login Request Reached ===
+- Decrypted JSON Data: Array
+(
+    [account] => mcheheyixiao
+    [passwordHash] => 8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92
+    [username] => Dev
+    [uuid] => 380df991-f603-344c-a090-369bad2a924a
+    [timestamp] => 1772717880588
+)
+
+- DB verification: Hash=$2y$10$J7G8n0LLsQgDyMUyvd266.xQMV1YCS9jXMGcIlHc1gfTp3hnLHbcS | Result=true
+- [Success] Auth passed!

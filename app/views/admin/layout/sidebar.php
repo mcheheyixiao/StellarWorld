@@ -1,7 +1,9 @@
 <aside id="admin-sidebar" class="ta-sidebar" aria-label="Admin Navigation">
     <div class="ta-sidebar-brand">
-        <p class="ta-sidebar-kicker">TailAdmin Layout</p>
-        <h2>Admin Console</h2>
+        <h2 class="ta-sidebar-brand-title">
+            <img src="/images/logo.png" alt="繁星World Logo" class="ta-sidebar-brand-logo">
+            <span>繁星World</span>
+        </h2>
     </div>
 
     <nav class="ta-sidebar-nav">

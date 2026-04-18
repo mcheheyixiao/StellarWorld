@@ -86,6 +86,18 @@ $csrfToken = htmlspecialchars(
     font-size: 1.05rem;
     color: var(--ta-text-strong);
 }
+.ta-sidebar-brand-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.ta-sidebar-brand-logo {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    border-radius: 4px;
+    flex: 0 0 auto;
+}
 .ta-sidebar-nav {
     display: grid;
     gap: 0.35rem;
@@ -389,19 +401,33 @@ $csrfToken = htmlspecialchars(
     box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
 }
 .ta-realtime-connection-pending {
-    color: #f59e0b;
+    color: #f59e0b !important;
 }
 .ta-realtime-connection-connected {
-    color: #22c55e;
+    color: #22c55e !important;
 }
 .ta-realtime-connection-reconnecting {
-    color: #f97316;
+    color: #f59e0b !important;
 }
 .ta-realtime-connection-disconnected {
-    color: #94a3b8;
+    color: #ef4444 !important;
 }
 .ta-realtime-connection-error {
-    color: #ef4444;
+    color: #ef4444 !important;
+}
+.ta-realtime-connection-connected .ta-realtime-connection-dot {
+    background: #22c55e;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.22);
+}
+.ta-realtime-connection-pending .ta-realtime-connection-dot,
+.ta-realtime-connection-reconnecting .ta-realtime-connection-dot {
+    background: #f59e0b;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.22);
+}
+.ta-realtime-connection-disconnected .ta-realtime-connection-dot,
+.ta-realtime-connection-error .ta-realtime-connection-dot {
+    background: #ef4444;
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.22);
 }
 .ta-realtime-metrics {
     display: grid;
@@ -421,6 +447,15 @@ $csrfToken = htmlspecialchars(
     font-size: 1.08rem;
     font-weight: 700;
     color: var(--ta-text-strong);
+}
+.ta-realtime-metric p.ta-metric-good {
+    color: #22c55e !important;
+}
+.ta-realtime-metric p.ta-metric-warn {
+    color: #f59e0b !important;
+}
+.ta-realtime-metric p.ta-metric-bad {
+    color: #ef4444 !important;
 }
 .ta-realtime-content-grid {
     display: grid;

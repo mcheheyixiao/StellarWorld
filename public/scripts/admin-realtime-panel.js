@@ -12,8 +12,11 @@
     var maxChatMessages = 120;
     var socket = null;
     var reconnectTimer = null;
+    var snapshotTimer = null;
     var reconnectAttempts = 0;
     var manualClose = false;
+
+    var snapshotIntervalMs = Math.max(1000, Number(config.snapshot_interval_ms || 3000));
 
     var dom = {
         connectionBanner: document.getElementById('realtime-connection-banner'),
@@ -32,12 +35,15 @@
         chatStream: document.getElementById('realtime-chat-stream')
     };
 
+    var metricToneClasses = ['ta-metric-good', 'ta-metric-warn', 'ta-metric-bad'];
+
     function connect(isReconnect) {
         if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
             return;
         }
 
         clearReconnectTimer();
+        clearSnapshotTimer();
         var wsUrl = buildWsUrl(config.ws_url, config.ws_auth_token);
         if (!wsUrl) {
             setConnectionState('error', '未配置 ws_url');
@@ -58,10 +64,26 @@
         socket.onopen = function () {
             reconnectAttempts = 0;
             setConnectionState('connected');
+            try {
+                socket.send(JSON.stringify({
+                    type: 'auth',
+                    payload: {
+                        panelId: String(config.panel_id || 'web-admin')
+                    }
+                }));
+                socket.send(JSON.stringify({
+                    type: 'snapshot',
+                    payload: {}
+                }));
+            } catch (err) {
+                // ignore send failures; reconnect loop will handle
+            }
+            startSnapshotTimer();
         };
 
         socket.onclose = function (event) {
             socket = null;
+            clearSnapshotTimer();
             if (manualClose) {
                 setConnectionState('disconnected');
                 return;
@@ -108,6 +130,7 @@
     function disconnect() {
         manualClose = true;
         clearReconnectTimer();
+        clearSnapshotTimer();
         if (socket) {
             socket.close();
             socket = null;
@@ -119,6 +142,29 @@
         if (reconnectTimer !== null) {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
+        }
+    }
+
+    function startSnapshotTimer() {
+        if (snapshotTimer !== null) {
+            return;
+        }
+        snapshotTimer = window.setInterval(function () {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                return;
+            }
+            try {
+                socket.send(JSON.stringify({ type: 'snapshot', payload: {} }));
+            } catch (err) {
+                // ignore
+            }
+        }, snapshotIntervalMs);
+    }
+
+    function clearSnapshotTimer() {
+        if (snapshotTimer !== null) {
+            clearInterval(snapshotTimer);
+            snapshotTimer = null;
         }
     }
 
@@ -146,8 +192,8 @@
             dom.connectionBanner.classList.add('ta-realtime-connection-reconnecting');
             text = '重连中';
         } else if (state === 'disconnected') {
-            dom.connectionBanner.classList.add('ta-realtime-connection-disconnected');
-            text = '已断开';
+            dom.connectionBanner.classList.add('ta-realtime-connection-error');
+            text = '未连接';
         } else {
             dom.connectionBanner.classList.add('ta-realtime-connection-error');
             text = '错误';
@@ -162,7 +208,14 @@
         }
 
         var eventType = String(payload.type || payload.event || payload.action || '');
-        var data = Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload;
+        var data = null;
+        if (Object.prototype.hasOwnProperty.call(payload, 'payload') && payload.payload && typeof payload.payload === 'object') {
+            data = payload.payload;
+        } else if (Object.prototype.hasOwnProperty.call(payload, 'data')) {
+            data = payload.data;
+        } else {
+            data = payload;
+        }
 
         switch (eventType) {
             case 'snapshot':
@@ -199,7 +252,7 @@
             return;
         }
 
-        applyStatsUpdate(data.stats || data);
+        applyStatsUpdate(data.stats || data, data);
 
         if (data.players || data.online_players) {
             applyPlayersUpdate(data.players || data.online_players);
@@ -215,20 +268,47 @@
 
         if (data.server_status || data.status) {
             applyServerStatus(data.server_status || data.status);
+        } else if (data.server && typeof data.server === 'object') {
+            applyServerStatus(data.server);
         }
     }
 
-    function applyStatsUpdate(data) {
+    function applyStatsUpdate(data, snapshotRoot) {
         if (!data || typeof data !== 'object') {
             return;
         }
 
-        var online = pickNumber(data, ['online', 'online_players', 'player_count']);
-        var maxPlayers = pickNumber(data, ['max', 'max_players']);
-        var tps = pickNumber(data, ['tps']);
-        var mspt = pickNumber(data, ['mspt']);
-        var cpu = pickNumber(data, ['cpu', 'cpu_percent']);
-        var memory = pickString(data, ['memory', 'memory_usage', 'ram']);
+        var metrics = (data.metrics && typeof data.metrics === 'object') ? data.metrics : data;
+        var online = pickNumber(metrics, ['onlinePlayers', 'online', 'online_players', 'player_count']);
+        var maxPlayers = pickNumber(metrics, ['maxPlayers', 'max', 'max_players']);
+        if (maxPlayers === null && data.serverInfo && typeof data.serverInfo === 'object') {
+            maxPlayers = pickNumber(data.serverInfo, ['maxPlayers', 'max', 'max_players']);
+        }
+        if (maxPlayers === null && snapshotRoot && typeof snapshotRoot === 'object') {
+            if (snapshotRoot.server && typeof snapshotRoot.server === 'object') {
+                maxPlayers = pickNumber(snapshotRoot.server, ['maxPlayers', 'max', 'max_players']);
+            }
+            if (maxPlayers === null && snapshotRoot.metrics && typeof snapshotRoot.metrics === 'object') {
+                maxPlayers = pickNumber(snapshotRoot.metrics, ['maxPlayers', 'max', 'max_players']);
+            }
+        }
+        var tps = pickNumber(metrics, ['tps']);
+        var mspt = pickNumber(metrics, ['mspt']);
+        var cpu = pickNumber(metrics, ['cpuUsage', 'cpu', 'cpu_percent', 'cpuLoad', 'cpu_load', 'systemCpuLoad']);
+        if (cpu === null && snapshotRoot && snapshotRoot.metrics && typeof snapshotRoot.metrics === 'object') {
+            cpu = pickNumber(snapshotRoot.metrics, ['cpuUsage', 'cpu', 'cpu_percent', 'cpuLoad', 'cpu_load']);
+        }
+        if (cpu === null && snapshotRoot && snapshotRoot.server && typeof snapshotRoot.server === 'object') {
+            cpu = pickNumber(snapshotRoot.server, ['cpuUsage', 'cpu', 'cpu_percent', 'cpuLoad', 'cpu_load']);
+        }
+        var memory = null;
+        var usedMb = pickNumber(metrics, ['memoryUsedMb']);
+        var maxMb = pickNumber(metrics, ['memoryMaxMb']);
+        if (usedMb !== null && maxMb !== null) {
+            memory = formatDecimal(usedMb, 0) + ' / ' + formatDecimal(maxMb, 0) + ' MB';
+        } else {
+            memory = pickString(metrics, ['memory', 'memory_usage', 'ram']);
+        }
 
         if (online !== null) {
             dom.onlineCount.textContent = String(online);
@@ -238,9 +318,11 @@
         }
         if (tps !== null) {
             dom.tps.textContent = formatDecimal(tps, 2);
+            applyMetricTone(dom.tps, scoreTps(tps));
         }
         if (mspt !== null) {
             dom.mspt.textContent = formatDecimal(mspt, 2) + ' ms';
+            applyMetricTone(dom.mspt, scoreMspt(mspt));
         }
         if (cpu !== null) {
             dom.cpu.textContent = formatDecimal(cpu, 1) + '%';
@@ -250,7 +332,7 @@
         }
 
         setLastUpdated(
-            pickValue(data, ['last_updated', 'updated_at', 'timestamp', 'time'])
+            pickValue(data, ['updatedAt', 'updated_at', 'last_updated', 'timestamp', 'time'])
         );
     }
 
@@ -280,7 +362,7 @@
         }
 
         var playerName = String(
-            pickValue(data, ['player', 'username', 'name', 'sender']) || '未知玩家'
+            pickValue(data, ['playerName', 'player', 'username', 'name', 'sender']) || '未知玩家'
         );
         var message = String(
             pickValue(data, ['message', 'content', 'text']) || ''
@@ -398,6 +480,9 @@
                 return null;
             }
             var player = String(pickValue(item, ['player', 'username', 'name', 'sender']) || '未知玩家');
+            if (player === '未知玩家') {
+                player = String(pickValue(item, ['playerName']) || '未知玩家');
+            }
             var message = String(pickValue(item, ['message', 'content', 'text']) || '').trim();
             var time = pickValue(item, ['time', 'timestamp', 'created_at', 'at']);
             if (message === '') {
@@ -523,6 +608,11 @@
         if (value === null || value === undefined || value === '') {
             return null;
         }
+        if (typeof value === 'string') {
+            var cleaned = value.trim().replace('%', '');
+            var parsed = Number(cleaned);
+            return Number.isFinite(parsed) ? parsed : null;
+        }
         var num = Number(value);
         return Number.isFinite(num) ? num : null;
     }
@@ -532,6 +622,46 @@
             return '--';
         }
         return Number(value).toFixed(digits);
+    }
+
+    function applyMetricTone(el, tone) {
+        if (!el) {
+            return;
+        }
+        el.classList.remove(metricToneClasses[0], metricToneClasses[1], metricToneClasses[2]);
+        if (tone === 'good') {
+            el.classList.add('ta-metric-good');
+        } else if (tone === 'warn') {
+            el.classList.add('ta-metric-warn');
+        } else if (tone === 'bad') {
+            el.classList.add('ta-metric-bad');
+        }
+    }
+
+    function scoreTps(tps) {
+        if (!Number.isFinite(tps)) {
+            return '';
+        }
+        if (tps >= 19.5) {
+            return 'good';
+        }
+        if (tps >= 17.0) {
+            return 'warn';
+        }
+        return 'bad';
+    }
+
+    function scoreMspt(mspt) {
+        if (!Number.isFinite(mspt)) {
+            return '';
+        }
+        if (mspt <= 25) {
+            return 'good';
+        }
+        if (mspt <= 50) {
+            return 'warn';
+        }
+        return 'bad';
     }
 
     function escapeHtml(text) {

@@ -7,18 +7,24 @@ $csrfToken = htmlspecialchars(
 ?>
 
 <style>
-.ta-admin-shell {
-    --ta-surface-shell: rgba(2, 6, 23, 0.72);
+:root {
+    --ta-surface-shell: rgba(2, 6, 23, 0.82);
+    --ta-surface-frame: rgba(15, 23, 42, 0.76);
     --ta-surface-sidebar: rgba(2, 6, 23, 0.84);
-    --ta-surface-header: rgba(2, 6, 23, 0.92);
-    --ta-surface-card: rgba(15, 23, 42, 0.72);
-    --ta-surface-input: rgba(15, 23, 42, 0.72);
-    --ta-border: rgba(148, 163, 184, 0.22);
-    --ta-border-strong: rgba(148, 163, 184, 0.3);
-    --ta-shadow: 0 22px 58px -34px rgba(0, 0, 0, 0.74);
+    --ta-surface-header: rgba(15, 23, 42, 0.86);
+    --ta-surface-card: rgba(15, 23, 42, 0.84);
+    --ta-surface-input: rgba(15, 23, 42, 0.9);
+    --ta-border: rgba(148, 163, 184, 0.26);
+    --ta-border-strong: rgba(148, 163, 184, 0.42);
+    --ta-shadow: 0 24px 56px -30px rgba(2, 6, 23, 0.72);
     --ta-text-strong: #f8fafc;
-    --ta-text-body: #cbd5e1;
-    --ta-text-muted: #94a3b8;
+    --ta-text-body: #e2e8f0;
+    --ta-text-muted: #cbd5e1;
+    --ta-header-title: #e2e8f0;
+    --ta-user-name: #e2e8f0;
+    --ta-toggle-bg: rgba(30, 41, 59, 0.82);
+    --ta-toggle-border: rgba(148, 163, 184, 0.42);
+    --ta-toggle-icon: #67e8f9;
     --ta-accent: #67e8f9;
     --ta-accent-bg: rgba(14, 165, 233, 0.22);
     --ta-accent-border: rgba(34, 211, 238, 0.48);
@@ -29,27 +35,25 @@ $csrfToken = htmlspecialchars(
     --ta-danger-border: rgba(248, 113, 113, 0.45);
     --ta-danger-bg: rgba(248, 113, 113, 0.12);
     --ta-danger-text: #fecaca;
-    display: flex;
-    height: 100vh;
-    overflow: hidden;
-    border: 1px solid var(--ta-border);
-    border-radius: 1rem;
-    background: var(--ta-surface-shell);
-    backdrop-filter: blur(18px);
-    color: var(--ta-text-body);
 }
-[data-theme="light"] .ta-admin-shell {
-    --ta-surface-shell: rgba(255, 255, 255, 0.9);
-    --ta-surface-sidebar: rgba(248, 250, 252, 0.95);
-    --ta-surface-header: rgba(255, 255, 255, 0.96);
-    --ta-surface-card: rgba(255, 255, 255, 0.95);
-    --ta-surface-input: rgba(255, 255, 255, 0.98);
-    --ta-border: rgba(148, 163, 184, 0.38);
-    --ta-border-strong: rgba(148, 163, 184, 0.5);
-    --ta-shadow: 0 16px 34px -24px rgba(15, 23, 42, 0.24);
+[data-theme="light"] {
+    --ta-surface-shell: rgba(241, 245, 249, 0.94);
+    --ta-surface-frame: rgba(241, 245, 249, 0.92);
+    --ta-surface-sidebar: rgba(248, 250, 252, 0.96);
+    --ta-surface-header: rgba(255, 255, 255, 0.97);
+    --ta-surface-card: rgba(255, 255, 255, 0.96);
+    --ta-surface-input: rgba(255, 255, 255, 0.99);
+    --ta-border: rgba(148, 163, 184, 0.35);
+    --ta-border-strong: rgba(148, 163, 184, 0.48);
+    --ta-shadow: 0 16px 36px -24px rgba(15, 23, 42, 0.2);
     --ta-text-strong: #0f172a;
     --ta-text-body: #1e293b;
     --ta-text-muted: #475569;
+    --ta-header-title: #0f172a;
+    --ta-user-name: #1e293b;
+    --ta-toggle-bg: rgba(241, 245, 249, 0.95);
+    --ta-toggle-border: rgba(148, 163, 184, 0.44);
+    --ta-toggle-icon: #0e7490;
     --ta-accent: #0e7490;
     --ta-accent-bg: rgba(14, 165, 233, 0.16);
     --ta-accent-border: rgba(14, 116, 144, 0.48);
@@ -61,158 +65,199 @@ $csrfToken = htmlspecialchars(
     --ta-danger-bg: rgba(254, 226, 226, 0.9);
     --ta-danger-text: #991b1b;
 }
-.ta-sidebar {
-    width: 16rem;
-    flex-shrink: 0;
-    background: var(--ta-surface-sidebar);
-    border-right: 1px solid var(--ta-border);
-    padding: 1.25rem 1rem;
-    overflow-y: auto;
+.ta-admin-layout {
+    display: flex;
+    height: calc(100vh - 1.5rem);
+    border-radius: 10px;
+    overflow: hidden;
 }
-.ta-sidebar-brand {
-    margin-bottom: 1rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--ta-border);
-}
-.ta-sidebar-kicker {
-    margin: 0;
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ta-accent);
-}
-.ta-sidebar-brand h2 {
-    margin: 0.25rem 0 0;
-    font-size: 1.05rem;
-    color: var(--ta-text-strong);
-}
-.ta-sidebar-brand-title {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-.ta-sidebar-brand-logo {
-    width: 22px;
-    height: 22px;
-    object-fit: contain;
-    border-radius: 4px;
-    flex: 0 0 auto;
-}
-.ta-sidebar-nav {
-    display: grid;
-    gap: 0.35rem;
-}
-.ta-sidebar-link {
-    width: 100%;
-    text-align: left;
-    border: 1px solid transparent;
-    border-radius: 0.65rem;
-    padding: 0.55rem 0.75rem;
-    background: transparent;
-    color: var(--ta-text-body);
-    cursor: pointer;
-    transition: all 0.18s ease;
-}
-.ta-sidebar-link:hover {
-    background: var(--ta-accent-soft-bg);
-    border-color: var(--ta-accent-border);
-}
-.ta-sidebar-link.active {
-    background: var(--ta-accent-bg);
-    border-color: var(--ta-accent-border);
-    color: var(--ta-accent);
-}
-.ta-main-frame {
+.ta-admin-frame {
     display: flex;
     flex: 1;
     flex-direction: column;
     min-width: 0;
+    background: var(--ta-surface-frame);
+    transition: background-color 0.22s ease, color 0.22s ease;
 }
-.ta-header {
+.ta-admin-main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    color: var(--ta-text-body);
+}
+@media (min-width: 768px) {
+    .ta-admin-main {
+        padding: 1.5rem;
+    }
+}
+.ta-sidebar-modern {
+    width: 18rem;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem 1rem;
+    color: #fff;
+    background: linear-gradient(to bottom, #4f46e5, #3b82f6);
+}
+.ta-sidebar-menu {
+    flex: 1;
+    overflow-y: auto;
+}
+.ta-sidebar-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border: 0;
+    border-radius: 0.6rem;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-align: left;
+    padding: 0.72rem 0.88rem;
+    cursor: pointer;
+    transition: background-color 0.18s ease;
+}
+.ta-sidebar-item:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+.ta-sidebar-item.active {
+    background: rgba(255, 255, 255, 0.2);
+}
+.ta-admin-header-modern {
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: 30;
+    background: var(--ta-surface-header);
+    border-bottom: 1px solid var(--ta-border);
+    box-shadow: 0 8px 22px -18px rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(8px);
+}
+.ta-admin-header-inner {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.9rem 1.2rem;
-    border-bottom: 1px solid var(--ta-border);
-    background: var(--ta-surface-header);
+    gap: 1rem;
+    padding: 0.8rem 1rem;
 }
-.ta-header-toggle {
-    display: none;
-    flex-direction: column;
-    gap: 3px;
-    padding: 0.45rem;
-    border: 1px solid var(--ta-border-strong);
-    border-radius: 0.45rem;
-    background: transparent;
+@media (min-width: 768px) {
+    .ta-admin-header-inner {
+        padding: 0.85rem 1.5rem;
+    }
 }
-.ta-header-toggle span {
-    width: 18px;
-    height: 2px;
-    border-radius: 3px;
-    background: var(--ta-text-body);
+.ta-admin-header-spacer {
+    flex: 1;
 }
-.ta-header-info h1 {
-    margin: 0;
-    font-size: 1.05rem;
-    color: var(--ta-text-strong);
+.ta-admin-header-title {
+    color: var(--ta-header-title);
 }
-.ta-header-eyebrow {
-    margin: 0;
-    font-size: 0.74rem;
-    color: var(--ta-text-muted);
-}
-.ta-header-user {
+.ta-admin-header-actions {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    font-size: 0.88rem;
-    color: var(--ta-text-strong);
+    gap: 0.65rem;
 }
-.ta-header-user-name {
+.ta-admin-theme-toggle {
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    min-width: 0;
+    border: 1px solid var(--ta-toggle-border);
+    border-radius: 0.62rem;
+    background: var(--ta-toggle-bg);
+    color: var(--ta-toggle-icon);
+    padding: 0.45rem 0.62rem;
+    transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
 }
-.ta-header-user-name span {
-    max-width: 14rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.ta-header-avatar {
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    border: 1px solid var(--ta-border);
-    background: #1e1e1e;
-    image-rendering: pixelated;
-    flex: 0 0 auto;
-}
-.ta-header-link {
-    padding: 0.35rem 0.6rem;
-    border: 1px solid var(--ta-border-strong);
-    border-radius: 0.5rem;
-    text-decoration: none;
-    color: var(--ta-text-body);
-}
-.ta-header-link:hover {
+.ta-admin-theme-toggle:hover {
     border-color: var(--ta-accent-border);
     color: var(--ta-accent);
 }
-.ta-main {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 1rem;
+.ta-admin-theme-toggle .ta-theme-icon {
+    width: 1rem;
+    height: 1rem;
 }
-.ta-main-stack {
-    display: grid;
-    gap: 1rem;
+.ta-admin-theme-toggle .ta-theme-icon-sun {
+    display: inline-block;
+}
+.ta-admin-theme-toggle .ta-theme-icon-moon {
+    display: none;
+}
+[data-theme="light"] .ta-admin-theme-toggle .ta-theme-icon-sun {
+    display: none;
+}
+[data-theme="light"] .ta-admin-theme-toggle .ta-theme-icon-moon {
+    display: inline-block;
+}
+.ta-admin-theme-toggle-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1;
+}
+.ta-admin-user-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border: 1px solid var(--ta-border);
+    border-radius: 0.6rem;
+    background: var(--ta-surface-card);
+    color: var(--ta-user-name);
+    padding: 0.45rem 0.7rem;
+    transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+.ta-admin-user-trigger:hover {
+    border-color: var(--ta-accent-border);
+}
+.ta-admin-user-avatar {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    border: 1px solid var(--ta-border-strong);
+    object-fit: cover;
+}
+.ta-admin-user-name {
+    max-width: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--ta-user-name);
+}
+.ta-admin-user-icon {
+    width: 1rem;
+    height: 1rem;
+    color: var(--ta-text-muted);
+}
+.ta-admin-user-dropdown {
+    border: 1px solid var(--ta-border);
+    border-radius: 0.78rem;
+    background: var(--ta-surface-card);
+    box-shadow: var(--ta-shadow);
+    padding: 0.4rem;
+}
+.ta-admin-user-link {
+    display: block;
+    border-radius: 0.55rem;
+    padding: 0.45rem 0.65rem;
+    color: var(--ta-text-body);
+    font-size: 0.86rem;
+    text-decoration: none;
+}
+.ta-admin-user-link:hover {
+    background: var(--ta-accent-soft-bg);
+    color: var(--ta-accent);
+}
+.ta-admin-user-link-btn {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+@media (max-width: 1023px) {
+    .ta-sidebar-modern {
+        display: none;
+    }
 }
 .ta-card {
     border: 1px solid var(--ta-border);
@@ -220,6 +265,7 @@ $csrfToken = htmlspecialchars(
     background: var(--ta-surface-card);
     box-shadow: var(--ta-shadow);
     padding: 1rem;
+    color: var(--ta-text-body);
 }
 .ta-card h1,
 .ta-card h2,
@@ -234,26 +280,11 @@ $csrfToken = htmlspecialchars(
 .ta-table th {
     color: inherit;
 }
-.ta-card p,
+.ta-card p {
+    color: var(--ta-text-body);
+}
 .ta-help-text {
     color: var(--ta-text-muted);
-}
-.ta-alert {
-    border-radius: 0.75rem;
-    padding: 0.9rem 1rem;
-}
-.ta-alert-danger {
-    border: 1px solid var(--ta-danger-border);
-    background: var(--ta-danger-bg);
-    color: var(--ta-danger-text);
-}
-.ta-stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-}
-.ta-stat-card {
-    padding: 1.1rem;
 }
 .ta-table-wrap {
     overflow-x: auto;
@@ -280,6 +311,7 @@ $csrfToken = htmlspecialchars(
 }
 .ta-table th {
     color: var(--ta-text-muted);
+    font-weight: 600;
 }
 .ta-table td {
     color: var(--ta-text-body);
@@ -356,18 +388,58 @@ $csrfToken = htmlspecialchars(
     padding: 0.38rem 0.72rem;
     font-size: 0.84rem;
     background: var(--ta-surface-input);
-    color: var(--ta-text-body);
+    color: var(--ta-text-strong);
     cursor: pointer;
     text-decoration: none;
+    transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
 }
 .ta-btn:hover {
     border-color: var(--ta-accent-border);
+    background: var(--ta-accent-soft-bg);
     color: var(--ta-accent);
+}
+.ta-btn-secondary {
+    background: var(--ta-surface-input);
+    color: var(--ta-text-strong);
 }
 .ta-btn-primary {
     background: var(--ta-btn-primary-bg);
     border-color: var(--ta-btn-primary-border);
     color: var(--ta-btn-primary-text);
+}
+.ta-btn-primary:hover {
+    background: var(--ta-accent-bg);
+    color: var(--ta-accent);
+}
+.ta-kpi-shell,
+.ta-kpi-card {
+    border: 1px solid var(--ta-border);
+    background: var(--ta-surface-card) !important;
+    box-shadow: var(--ta-shadow);
+}
+.ta-kpi-card {
+    border-radius: 0.8rem;
+}
+.ta-kpi-shell h1 {
+    color: var(--ta-text-strong);
+}
+.ta-kpi-shell > p {
+    color: var(--ta-text-body);
+}
+.ta-kpi-label {
+    color: var(--ta-text-muted) !important;
+}
+.ta-kpi-value {
+    color: var(--ta-text-strong) !important;
+}
+.ta-kpi-icon {
+    background: var(--ta-accent-soft-bg) !important;
+    color: var(--ta-accent) !important;
+}
+@media (max-width: 640px) {
+    .ta-admin-theme-toggle-label {
+        display: none;
+    }
 }
 .ta-tab-content.tab-hidden {
     display: none !important;
@@ -603,39 +675,25 @@ $csrfToken = htmlspecialchars(
     margin-right: 0;
 }
 @media (max-width: 1024px) {
-    .ta-admin-shell {
-        position: relative;
-    }
     .ta-realtime-head {
         align-items: flex-start;
-    }
-    .ta-sidebar {
-        position: absolute;
-        inset: 0 auto 0 0;
-        z-index: 30;
-        transform: translateX(-100%);
-        transition: transform 0.2s ease;
-    }
-    .ta-sidebar.is-open {
-        transform: translateX(0);
-    }
-    .ta-header-toggle {
-        display: inline-flex;
     }
 }
 </style>
 
-<div class="ta-admin-shell">
+<!-- MOD: TailAdmin Layout Start -->
+<div class="ta-admin-layout">
     <?php include BASE_PATH . '/app/views/admin/layout/sidebar.php'; ?>
 
-    <div class="ta-main-frame">
+    <div class="ta-admin-frame">
         <?php include BASE_PATH . '/app/views/admin/layout/header.php'; ?>
 
-        <main class="ta-main">
+        <main class="ta-admin-main">
             <?php include BASE_PATH . '/app/views/admin/layout/layout.php'; ?>
         </main>
     </div>
 </div>
+<!-- MOD: TailAdmin Layout End -->
 
 <script>
 window.adminRealtimePanelConfig = <?= json_encode(
@@ -803,6 +861,45 @@ function editTeamMember(id, username, role) {
 })();
 
 (function () {
+    var userMenuTrigger = document.getElementById('admin-user-menu-trigger');
+    var userMenuDropdown = document.getElementById('admin-user-menu-dropdown');
+    if (!userMenuTrigger || !userMenuDropdown) return;
+
+    function closeUserMenu() {
+        userMenuDropdown.classList.add('hidden');
+        userMenuTrigger.setAttribute('aria-expanded', 'false');
+    }
+
+    function openUserMenu() {
+        userMenuDropdown.classList.remove('hidden');
+        userMenuTrigger.setAttribute('aria-expanded', 'true');
+    }
+
+    userMenuTrigger.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (userMenuDropdown.classList.contains('hidden')) {
+            openUserMenu();
+        } else {
+            closeUserMenu();
+        }
+    });
+
+    document.addEventListener('click', function (event) {
+        if (userMenuDropdown.contains(event.target) || userMenuTrigger.contains(event.target)) {
+            return;
+        }
+        closeUserMenu();
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            closeUserMenu();
+        }
+    });
+})();
+
+(function () {
     var fileInput = document.getElementById('gallery-upload-input');
     var fileNameSpan = document.getElementById('gallery-file-name');
     if (!fileInput || !fileNameSpan) return;
@@ -817,21 +914,3 @@ function editTeamMember(id, username, role) {
 })();
 </script>
 
-<script>
-(function () {
-    var sidebar = document.getElementById('admin-sidebar');
-    var toggle = document.getElementById('admin-sidebar-toggle');
-    if (!sidebar || !toggle) return;
-
-    toggle.addEventListener('click', function () {
-        sidebar.classList.toggle('is-open');
-    });
-
-    document.addEventListener('click', function (event) {
-        if (window.innerWidth > 1024) return;
-        if (!sidebar.classList.contains('is-open')) return;
-        if (sidebar.contains(event.target) || toggle.contains(event.target)) return;
-        sidebar.classList.remove('is-open');
-    });
-})();
-</script>

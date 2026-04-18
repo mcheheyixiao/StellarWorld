@@ -281,6 +281,7 @@
         var metrics = (data.metrics && typeof data.metrics === 'object') ? data.metrics : data;
         var online = pickNumber(metrics, ['onlinePlayers', 'online', 'online_players', 'player_count']);
         var maxPlayers = pickNumber(metrics, ['maxPlayers', 'max', 'max_players']);
+<<<<<<< HEAD
         if (maxPlayers === null && data.serverInfo && typeof data.serverInfo === 'object') {
             maxPlayers = pickNumber(data.serverInfo, ['maxPlayers', 'max', 'max_players']);
         }
@@ -301,6 +302,11 @@
         if (cpu === null && snapshotRoot && snapshotRoot.server && typeof snapshotRoot.server === 'object') {
             cpu = pickNumber(snapshotRoot.server, ['cpuUsage', 'cpu', 'cpu_percent', 'cpuLoad', 'cpu_load']);
         }
+=======
+        var tps = pickNumber(metrics, ['tps']);
+        var mspt = pickNumber(metrics, ['mspt']);
+        var cpu = pickNumber(metrics, ['cpuUsage', 'cpu', 'cpu_percent']);
+>>>>>>> 6e20506c3674752e18482bc6122a9a1499efde78
         var memory = null;
         var usedMb = pickNumber(metrics, ['memoryUsedMb']);
         var maxMb = pickNumber(metrics, ['memoryMaxMb']);

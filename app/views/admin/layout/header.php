@@ -3,30 +3,49 @@ $adminHeaderUsername = trim((string)($_SESSION['username'] ?? ''));
 $adminHeaderAvatarUrl = 'https://minotar.net/helm/' . rawurlencode($adminHeaderUsername !== '' ? $adminHeaderUsername : 'MHF_Steve') . '/32.png';
 $adminHeaderAvatarFallback = 'https://minotar.net/helm/MHF_Steve/32.png';
 ?>
-<header class="ta-header">
-    <button type="button" id="admin-sidebar-toggle" class="ta-header-toggle" aria-label="切换侧边栏">
-        <span></span>
-        <span></span>
-        <span></span>
-    </button>
-
-    <div class="ta-header-info">
-        <p class="ta-header-eyebrow">控制台</p>
-        <h1>后台总览</h1>
-    </div>
-
-    <div class="ta-header-user">
-        <div class="ta-header-user-name">
-            <img
-                src="<?= htmlspecialchars($adminHeaderAvatarUrl, ENT_QUOTES, 'UTF-8') ?>"
-                alt="玩家头像"
-                width="24"
-                height="24"
-                class="ta-header-avatar"
-                onerror="this.onerror=null;this.src='<?= htmlspecialchars($adminHeaderAvatarFallback, ENT_QUOTES, 'UTF-8') ?>';"
-            >
-            <span><?= htmlspecialchars($adminHeaderUsername, ENT_QUOTES, 'UTF-8') ?></span>
+<!-- MOD: TailAdmin Header Start -->
+<header class="ta-admin-header-modern">
+    <div class="ta-admin-header-inner">
+        <div class="min-w-0">
+            <h1 class="ta-admin-header-title truncate text-lg font-semibold">后台总览</h1>
         </div>
-        <a href="/" class="ta-header-link">返回站点</a>
+
+        <div class="ta-admin-header-spacer"></div>
+
+        <div class="ta-admin-header-actions">
+            <button type="button" id="theme-toggle" class="ta-admin-theme-toggle" aria-label="切换主题" title="切换主题">
+                <svg class="ta-theme-icon ta-theme-icon-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5"/>
+                    <path d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07l1.77-1.77M17.3 6.7l1.77-1.77" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <svg class="ta-theme-icon ta-theme-icon-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M21 14.7a8.5 8.5 0 1 1-11.7-11.7A7 7 0 0 0 21 14.7Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                </svg>
+                <span class="ta-admin-theme-toggle-label">主题</span>
+            </button>
+
+            <div class="relative">
+                <button type="button" id="admin-user-menu-trigger" class="ta-admin-user-trigger" aria-haspopup="menu" aria-expanded="false">
+                    <img
+                        src="<?= htmlspecialchars($adminHeaderAvatarUrl, ENT_QUOTES, 'UTF-8') ?>"
+                        alt="玩家头像"
+                        width="32"
+                        height="32"
+                        class="ta-admin-user-avatar"
+                        onerror="this.onerror=null;this.src='<?= htmlspecialchars($adminHeaderAvatarFallback, ENT_QUOTES, 'UTF-8') ?>';"
+                    >
+                    <span class="ta-admin-user-name"><?= htmlspecialchars($adminHeaderUsername, ENT_QUOTES, 'UTF-8') ?></span>
+                    <svg class="ta-admin-user-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+
+                <div id="admin-user-menu-dropdown" class="ta-admin-user-dropdown absolute right-0 mt-2 hidden w-48" role="menu">
+                    <a href="/" class="ta-admin-user-link">返回站点</a>
+                    <button type="button" class="ta-admin-user-link ta-admin-user-link-btn">个人设置</button>
+                </div>
+            </div>
+        </div>
     </div>
 </header>
+<!-- MOD: TailAdmin Header End -->

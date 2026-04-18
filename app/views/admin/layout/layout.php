@@ -1,36 +1,61 @@
-<div id="admin-main-content" class="ta-main-stack">
+<div id="admin-main-content" class="space-y-6">
 
     <div id="tab-dashboard" class="ta-tab-content">
     <?php if (($_GET['err'] ?? '') === 'csrf'): ?>
-        <div class="ta-alert ta-alert-danger">
+        <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
             安全校验失败（CSRF）。请刷新后台页面后重试。
         </div>
     <?php endif; ?>
-    <div class="ta-card">
+    <!-- MOD: TailAdmin KPI Card Start -->
+    <div class="ta-kpi-shell rounded-xl bg-white p-6 shadow-md">
         <h1>后台总览</h1>
-        <p>
+        <p class="mt-2 text-sm ta-kpi-label">
             欢迎，<?= htmlspecialchars($_SESSION['username'] ?? '', ENT_QUOTES, 'UTF-8') ?>（管理员）。
         </p>
-        <div class="ta-stat-grid">
-            <div class="ta-card ta-stat-card">
-                <h2>玩家总数</h2>
-                <div><?= (int)$userCount ?></div>
+        <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div class="ta-kpi-card bg-white rounded-xl shadow-md p-6 flex items-center gap-4">
+                <div class="ta-kpi-icon flex h-12 w-12 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+                    <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="ta-kpi-label text-sm text-slate-500">玩家总数</h2>
+                    <div class="ta-kpi-value text-2xl font-bold text-slate-900"><?= (int)$userCount ?></div>
+                </div>
             </div>
-            <div class="ta-card ta-stat-card">
-                <h2>公告数量</h2>
-                <div><?= (int)$announcementCount ?></div>
+            <div class="ta-kpi-card bg-white rounded-xl shadow-md p-6 flex items-center gap-4">
+                <div class="ta-kpi-icon flex h-12 w-12 items-center justify-center rounded-lg bg-sky-100 text-sky-600">
+                    <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M3 11.5 21 5v14l-18-6v-1.5ZM8 13v4.5a2.5 2.5 0 0 0 5 0V14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="ta-kpi-label text-sm text-slate-500">公告数量</h2>
+                    <div class="ta-kpi-value text-2xl font-bold text-slate-900"><?= (int)$announcementCount ?></div>
+                </div>
             </div>
-            <div class="ta-card ta-stat-card">
-                <h2>相册图片</h2>
-                <div><?= (int)$galleryCount ?></div>
+            <div class="ta-kpi-card bg-white rounded-xl shadow-md p-6 flex items-center gap-4">
+                <div class="ta-kpi-icon flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+                    <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                        <circle cx="9" cy="10" r="1.5" fill="currentColor"/>
+                        <path d="m21 16-5.2-5.2a1.5 1.5 0 0 0-2.1 0L8 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="ta-kpi-label text-sm text-slate-500">相册图片</h2>
+                    <div class="ta-kpi-value text-2xl font-bold text-slate-900"><?= (int)$galleryCount ?></div>
+                </div>
             </div>
         </div>
     </div>
+    <!-- MOD: TailAdmin KPI Card End -->
 
         </div>
 
 <!-- Tab 导航 -->
-    <div class="ta-card">
+    <div class="space-y-6">
         <?php if (!empty($realtimePanelEnabled)): ?>
             <?php include BASE_PATH . '/app/views/admin/layout/realtime_panel.php'; ?>
         <?php endif; ?>

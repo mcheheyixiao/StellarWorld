@@ -34,9 +34,45 @@ if ($createdAtRaw !== '') {
 
 <style>
 .profile-page {
+    --profile-surface: rgba(2, 6, 23, 0.72);
+    --profile-surface-soft: rgba(15, 23, 42, 0.72);
+    --profile-border: rgba(148, 163, 184, 0.22);
+    --profile-border-soft: rgba(148, 163, 184, 0.28);
+    --profile-shadow: 0 22px 60px -34px rgba(0, 0, 0, 0.8);
+    --profile-text-strong: #f8fafc;
+    --profile-text-body: #cbd5e1;
+    --profile-text-muted: #94a3b8;
+    --profile-accent: #67e8f9;
+    --profile-btn-bg: rgba(14, 165, 233, 0.24);
+    --profile-btn-bg-hover: rgba(14, 165, 233, 0.36);
+    --profile-btn-border: rgba(34, 211, 238, 0.35);
+    --profile-btn-text: #e0f2fe;
+    --profile-secondary-bg: rgba(15, 23, 42, 0.72);
+    --profile-secondary-border: rgba(148, 163, 184, 0.3);
+    --profile-secondary-text: #e2e8f0;
+    --profile-meta-border: rgba(148, 163, 184, 0.3);
     max-width: 1200px;
     margin: 0 auto;
     padding: 1rem 0.75rem 2.5rem;
+}
+[data-theme="light"] .profile-page {
+    --profile-surface: rgba(255, 255, 255, 0.86);
+    --profile-surface-soft: rgba(255, 255, 255, 0.95);
+    --profile-border: rgba(148, 163, 184, 0.38);
+    --profile-border-soft: rgba(148, 163, 184, 0.45);
+    --profile-shadow: 0 16px 34px -24px rgba(15, 23, 42, 0.28);
+    --profile-text-strong: #0f172a;
+    --profile-text-body: #334155;
+    --profile-text-muted: #475569;
+    --profile-accent: #0e7490;
+    --profile-btn-bg: rgba(14, 165, 233, 0.15);
+    --profile-btn-bg-hover: rgba(14, 165, 233, 0.22);
+    --profile-btn-border: rgba(14, 116, 144, 0.45);
+    --profile-btn-text: #0c4a6e;
+    --profile-secondary-bg: rgba(255, 255, 255, 0.95);
+    --profile-secondary-border: rgba(148, 163, 184, 0.5);
+    --profile-secondary-text: #0f172a;
+    --profile-meta-border: rgba(148, 163, 184, 0.45);
 }
 .profile-dashboard {
     display: grid;
@@ -46,18 +82,18 @@ if ($createdAtRaw !== '') {
 .profile-sidebar {
     position: sticky;
     top: 6.5rem;
-    border: 1px solid rgba(148, 163, 184, 0.22);
+    border: 1px solid var(--profile-border);
     border-radius: 1.5rem;
-    background: rgba(2, 6, 23, 0.72);
+    background: var(--profile-surface);
     backdrop-filter: blur(20px);
-    box-shadow: 0 24px 64px -32px rgba(0, 0, 0, 0.75);
+    box-shadow: var(--profile-shadow);
     padding: 1rem;
     text-align: center;
 }
 .profile-avatar-wrap {
     border-radius: 1rem;
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid var(--profile-border);
+    background: var(--profile-surface-soft);
     min-height: 300px;
     display: flex;
     align-items: center;
@@ -75,7 +111,7 @@ if ($createdAtRaw !== '') {
     margin: 0.85rem 0 0;
     font-size: 1.35rem;
     font-weight: 800;
-    color: #f8fafc;
+    color: var(--profile-text-strong);
 }
 .profile-role-badge {
     display: inline-flex;
@@ -97,41 +133,68 @@ if ($createdAtRaw !== '') {
 }
 .profile-meta {
     margin-top: 0.95rem;
-    border-top: 1px dashed rgba(148, 163, 184, 0.3);
+    border-top: 1px dashed var(--profile-meta-border);
     padding-top: 0.85rem;
     font-size: 0.85rem;
-    color: #cbd5e1;
+    color: var(--profile-text-body);
     line-height: 1.8;
 }
-.profile-meta strong { color: #f8fafc; }
-.profile-unbound-hint { margin-top: 0.45rem; font-size: 0.78rem; color: #94a3b8; line-height: 1.5; }
+.profile-meta strong { color: var(--profile-text-strong); }
+.profile-unbound-hint { margin-top: 0.45rem; font-size: 0.78rem; color: var(--profile-text-muted); line-height: 1.5; }
 .profile-content-stack { display: flex; flex-direction: column; gap: 1rem; }
 .profile-card {
-    border: 1px solid rgba(148, 163, 184, 0.22);
+    border: 1px solid var(--profile-border);
     border-radius: 1.5rem;
-    background: rgba(2, 6, 23, 0.72);
+    background: var(--profile-surface);
     backdrop-filter: blur(20px);
-    box-shadow: 0 22px 60px -34px rgba(0, 0, 0, 0.8);
+    box-shadow: var(--profile-shadow);
     padding: 1.15rem;
 }
-.profile-card h2 { margin-top: 0; display: flex; align-items: center; gap: 0.5rem; color: #f8fafc; }
-.profile-card h2 i { color: #67e8f9; }
-.profile-card p { color: #94a3b8; margin-top: 0.3rem; }
+.profile-card h2 { margin-top: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--profile-text-strong); }
+.profile-card h2 i { color: var(--profile-accent); }
+.profile-card p { color: var(--profile-text-muted); margin-top: 0.3rem; }
 .profile-input {
     width: 100%;
     padding: 0.75rem;
-    border: 1px solid rgba(148, 163, 184, 0.28);
+    border: 1px solid var(--profile-border-soft);
     border-radius: 0.7rem;
-    background: rgba(15, 23, 42, 0.72);
-    color: #e2e8f0;
+    background: var(--profile-surface-soft);
+    color: var(--profile-text-strong);
+}
+.profile-input::placeholder {
+    color: var(--profile-text-muted);
 }
 .profile-btn {
     border-radius: 0.75rem;
-    border: 1px solid rgba(34, 211, 238, 0.35);
-    background: rgba(14, 165, 233, 0.24);
-    color: #e0f2fe;
+    border: 1px solid var(--profile-btn-border);
+    background: var(--profile-btn-bg);
+    color: var(--profile-btn-text);
 }
-.profile-btn:hover { background: rgba(14, 165, 233, 0.36); }
+.profile-btn:hover { background: var(--profile-btn-bg-hover); }
+[data-theme="light"] .profile-card p[style*="color:#fca5a5"] {
+    color: #b91c1c !important;
+}
+[data-theme="light"] .profile-card a[href="/auth/mua"],
+[data-theme="light"] #quick-reset-btn {
+    border-color: var(--profile-secondary-border) !important;
+    background: var(--profile-secondary-bg) !important;
+    color: var(--profile-secondary-text) !important;
+}
+[data-theme="light"] .profile-card a[href="/auth/mua"]:hover,
+[data-theme="light"] #quick-reset-btn:hover {
+    background: rgba(224, 242, 254, 0.9) !important;
+    border-color: rgba(14, 116, 144, 0.38) !important;
+    color: #0c4a6e !important;
+}
+[data-theme="light"] .profile-card strong[style*="color:#10b981"] {
+    color: #047857 !important;
+}
+[data-theme="light"] .profile-card strong[style*="color:#f59e0b"] {
+    color: #b45309 !important;
+}
+[data-theme="light"] .profile-content-stack > .profile-card div[style*="border-top:1px dashed var(--glass-border)"] {
+    border-top-color: var(--profile-meta-border) !important;
+}
 @media (max-width: 900px) {
     .profile-dashboard { grid-template-columns: 1fr; }
     .profile-sidebar { position: static; top: auto; }

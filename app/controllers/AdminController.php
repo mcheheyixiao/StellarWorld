@@ -28,9 +28,45 @@ class AdminController extends Controller
         }
     }
 
+    /**
+     * @return array{
+     *   enable_realtime_panel: bool,
+     *   ws_url: string,
+     *   ws_auth_token: string,
+     *   reconnect_interval_ms: int
+     * }
+     */
+    private function getRealtimePanelConfig(): array
+    {
+        $enabled = defined('REALTIME_ENABLE_PANEL') ? (bool)REALTIME_ENABLE_PANEL : false;
+        $wsUrl = defined('REALTIME_WS_URL') ? trim((string)REALTIME_WS_URL) : '';
+        $authToken = defined('REALTIME_WS_AUTH_TOKEN') ? (string)REALTIME_WS_AUTH_TOKEN : '';
+        $reconnectIntervalMs = defined('REALTIME_RECONNECT_INTERVAL_MS') ? (int)REALTIME_RECONNECT_INTERVAL_MS : 3000;
+
+        return [
+            'enable_realtime_panel' => $enabled,
+            'ws_url' => $wsUrl,
+            'ws_auth_token' => $authToken,
+            'reconnect_interval_ms' => max(500, $reconnectIntervalMs),
+        ];
+    }
+
+    public function realtime(): void
+    {
+        $config = $this->getRealtimePanelConfig();
+        if (($config['enable_realtime_panel'] ?? false) !== true) {
+            header('Location: /admin?tab=dashboard');
+            exit;
+        }
+
+        header('Location: /admin?tab=realtime');
+        exit;
+    }
+
     public function dashboard(): string
     {
         $this->generateCsrfToken();
+        $realtimeWsConfig = $this->getRealtimePanelConfig();
         $db = Database::connection();
         $userCount = (int)$db->query('SELECT COUNT(*) FROM users')->fetchColumn();
         $announcementCount = (int)$db->query('SELECT COUNT(*) FROM announcements')->fetchColumn();
@@ -81,6 +117,8 @@ class AdminController extends Controller
             'siteSettings' => $siteSettings,
             'teamMembers' => $teamMembers,
             'ipWhitelist' => $ipWhitelist,
+            'realtimePanelEnabled' => (bool)$realtimeWsConfig['enable_realtime_panel'],
+            'realtimeWsConfig' => $realtimeWsConfig,
         ]);
     }
 

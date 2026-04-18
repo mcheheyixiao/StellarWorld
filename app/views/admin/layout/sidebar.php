@@ -6,6 +6,9 @@
 
     <nav class="ta-sidebar-nav">
         <button type="button" class="ta-sidebar-link admin-tab-btn active" data-tab-target="tab-dashboard">后台总览</button>
+        <?php if (!empty($realtimePanelEnabled)): ?>
+            <button type="button" class="ta-sidebar-link admin-tab-btn" data-tab-target="tab-realtime">实时监控</button>
+        <?php endif; ?>
         <button type="button" class="ta-sidebar-link admin-tab-btn" data-tab-target="tab-players">玩家管理</button>
         <button type="button" class="ta-sidebar-link admin-tab-btn" data-tab-target="tab-announcements">公告管理</button>
         <button type="button" class="ta-sidebar-link admin-tab-btn" data-tab-target="tab-milestones">里程碑管理</button>

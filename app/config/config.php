@@ -38,6 +38,14 @@ define('RCON_PORT', (int)(getenv('RCON_PORT') ?: 25575));
 define('RCON_PASSWORD', getenv('RCON_PASSWORD') ?: '');
 define('RCON_TIMEOUT', (float)(getenv('RCON_TIMEOUT') ?: 3.0));
 
+// Admin realtime panel websocket config
+$_realtimeEnabledEnv = strtolower((string)(getenv('REALTIME_ENABLE_PANEL') ?: '1'));
+define('REALTIME_ENABLE_PANEL', !in_array($_realtimeEnabledEnv, ['0', 'false', 'off', 'no'], true));
+unset($_realtimeEnabledEnv);
+define('REALTIME_WS_URL', getenv('REALTIME_WS_URL') ?: 'ws://127.0.0.1:8080');
+define('REALTIME_WS_AUTH_TOKEN', getenv('REALTIME_WS_AUTH_TOKEN') !== false ? (string)getenv('REALTIME_WS_AUTH_TOKEN') : '');
+define('REALTIME_RECONNECT_INTERVAL_MS', max(500, (int)(getenv('REALTIME_RECONNECT_INTERVAL_MS') ?: 3000)));
+
 // Redis（可选；扩展未加载或连接失败时全站自动降级）
 $_redisEnv = strtolower((string)(getenv('REDIS_ENABLED') ?: '1'));
 define('REDIS_ENABLED', !in_array($_redisEnv, ['0', 'false', 'off', 'no'], true));

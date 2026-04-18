@@ -360,6 +360,170 @@ $csrfToken = htmlspecialchars(
 .ta-tab-content.tab-hidden {
     display: none !important;
 }
+.ta-realtime-panel {
+    display: grid;
+    gap: 1rem;
+}
+.ta-realtime-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.85rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.ta-realtime-connection {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: 1px solid var(--ta-border-strong);
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.85rem;
+    background: rgba(148, 163, 184, 0.1);
+}
+.ta-realtime-connection-dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
+}
+.ta-realtime-connection-pending {
+    color: #f59e0b;
+}
+.ta-realtime-connection-connected {
+    color: #22c55e;
+}
+.ta-realtime-connection-reconnecting {
+    color: #f97316;
+}
+.ta-realtime-connection-disconnected {
+    color: #94a3b8;
+}
+.ta-realtime-connection-error {
+    color: #ef4444;
+}
+.ta-realtime-metrics {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+}
+.ta-realtime-metric {
+    padding: 0.85rem;
+}
+.ta-realtime-metric h3 {
+    margin: 0 0 0.4rem;
+    font-size: 0.8rem;
+    color: var(--ta-text-muted);
+}
+.ta-realtime-metric p {
+    margin: 0;
+    font-size: 1.08rem;
+    font-weight: 700;
+    color: var(--ta-text-strong);
+}
+.ta-realtime-content-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.ta-realtime-section {
+    padding: 0.9rem;
+}
+.ta-realtime-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    margin-bottom: 0.75rem;
+}
+.ta-realtime-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.15rem 0.58rem;
+    font-size: 0.76rem;
+    border: 1px solid var(--ta-accent-border);
+    background: var(--ta-accent-soft-bg);
+    color: var(--ta-accent);
+}
+.ta-realtime-player-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+}
+.ta-realtime-player-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: 1px solid var(--ta-border);
+    border-radius: 0.65rem;
+    padding: 0.5rem 0.7rem;
+    background: rgba(148, 163, 184, 0.08);
+}
+.ta-realtime-plugin-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 4.5rem;
+    border-radius: 999px;
+    padding: 0.2rem 0.62rem;
+    font-size: 0.76rem;
+    border: 1px solid var(--ta-border-strong);
+}
+.ta-realtime-plugin-enabled {
+    color: #22c55e;
+    border-color: rgba(34, 197, 94, 0.5);
+    background: rgba(34, 197, 94, 0.12);
+}
+.ta-realtime-plugin-disabled {
+    color: #94a3b8;
+    border-color: rgba(148, 163, 184, 0.46);
+    background: rgba(148, 163, 184, 0.14);
+}
+.ta-realtime-chat-stream {
+    display: grid;
+    gap: 0.5rem;
+    max-height: 22rem;
+    overflow-y: auto;
+}
+.ta-realtime-chat-item {
+    border: 1px solid var(--ta-border);
+    border-radius: 0.65rem;
+    padding: 0.55rem 0.7rem;
+    background: rgba(148, 163, 184, 0.08);
+}
+.ta-realtime-chat-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    margin-bottom: 0.28rem;
+    font-size: 0.78rem;
+}
+.ta-realtime-chat-player {
+    font-weight: 600;
+    color: var(--ta-text-strong);
+}
+.ta-realtime-chat-time {
+    color: var(--ta-text-muted);
+}
+.ta-realtime-chat-message {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--ta-text-body);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.ta-realtime-empty {
+    color: var(--ta-text-muted);
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 0.9rem 0.65rem;
+}
 #admin-main-content input[type="text"],
 #admin-main-content input[type="number"],
 #admin-main-content input[type="datetime-local"],
@@ -407,6 +571,9 @@ $csrfToken = htmlspecialchars(
     .ta-admin-shell {
         position: relative;
     }
+    .ta-realtime-head {
+        align-items: flex-start;
+    }
     .ta-sidebar {
         position: absolute;
         inset: 0 auto 0 0;
@@ -434,6 +601,19 @@ $csrfToken = htmlspecialchars(
         </main>
     </div>
 </div>
+
+<script>
+window.adminRealtimePanelConfig = <?= json_encode(
+    $realtimeWsConfig ?? [
+        'enable_realtime_panel' => false,
+        'ws_url' => '',
+        'ws_auth_token' => '',
+        'reconnect_interval_ms' => 3000,
+    ],
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+) ?>;
+</script>
+<script src="/scripts/admin-realtime-panel.js"></script>
 
 <script>
 function toDatetimeLocalValue(mysqlDatetime) {
@@ -569,6 +749,7 @@ function editTeamMember(id, username, role) {
     var initial = params.get('tab');
     var map = {
         dashboard: 'tab-dashboard',
+        realtime: 'tab-realtime',
         players: 'tab-players',
         users: 'tab-players',
         announcements: 'tab-announcements',
@@ -580,6 +761,9 @@ function editTeamMember(id, username, role) {
         'ip-blacklist': 'tab-ip-blacklist'
     };
     var initialId = map[initial] || 'tab-dashboard';
+    if (!document.getElementById(initialId)) {
+        initialId = 'tab-dashboard';
+    }
     activateTab(initialId);
 })();
 

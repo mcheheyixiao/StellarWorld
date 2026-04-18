@@ -31,6 +31,10 @@
 
 <!-- Tab 导航 -->
     <div class="ta-card">
+        <?php if (!empty($realtimePanelEnabled)): ?>
+            <?php include BASE_PATH . '/app/views/admin/layout/realtime_panel.php'; ?>
+        <?php endif; ?>
+
         <!-- 玩家管理 Tab -->
         <div id="tab-players" class="ta-tab-content tab-hidden">
             <div class="ta-card">

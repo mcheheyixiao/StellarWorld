@@ -52,6 +52,7 @@ $router->get('/sitemap.xml', [PageController::class, 'sitemap']);
 
 // Admin panel (requires admin role)
 $router->get('/admin', [AdminController::class, 'dashboard']);
+$router->get('/admin/realtime', [AdminController::class, 'realtime']);
 $router->post('/admin/players/update', [AdminController::class, 'playerUpdate']);
 $router->post('/admin/players/delete', [AdminController::class, 'playerDelete']);
 $router->post('/admin/players/unbind', [AdminController::class, 'playerUnbind']);

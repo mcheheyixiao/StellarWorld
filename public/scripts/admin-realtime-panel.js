@@ -12,8 +12,11 @@
     var maxChatMessages = 120;
     var socket = null;
     var reconnectTimer = null;
+    var snapshotTimer = null;
     var reconnectAttempts = 0;
     var manualClose = false;
+
+    var snapshotIntervalMs = Math.max(1000, Number(config.snapshot_interval_ms || 3000));
 
     var dom = {
         connectionBanner: document.getElementById('realtime-connection-banner'),
@@ -38,6 +41,7 @@
         }
 
         clearReconnectTimer();
+        clearSnapshotTimer();
         var wsUrl = buildWsUrl(config.ws_url, config.ws_auth_token);
         if (!wsUrl) {
             setConnectionState('error', '未配置 ws_url');
@@ -58,10 +62,26 @@
         socket.onopen = function () {
             reconnectAttempts = 0;
             setConnectionState('connected');
+            try {
+                socket.send(JSON.stringify({
+                    type: 'auth',
+                    payload: {
+                        panelId: String(config.panel_id || 'web-admin')
+                    }
+                }));
+                socket.send(JSON.stringify({
+                    type: 'snapshot',
+                    payload: {}
+                }));
+            } catch (err) {
+                // ignore send failures; reconnect loop will handle
+            }
+            startSnapshotTimer();
         };
 
         socket.onclose = function (event) {
             socket = null;
+            clearSnapshotTimer();
             if (manualClose) {
                 setConnectionState('disconnected');
                 return;
@@ -108,6 +128,7 @@
     function disconnect() {
         manualClose = true;
         clearReconnectTimer();
+        clearSnapshotTimer();
         if (socket) {
             socket.close();
             socket = null;
@@ -119,6 +140,29 @@
         if (reconnectTimer !== null) {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
+        }
+    }
+
+    function startSnapshotTimer() {
+        if (snapshotTimer !== null) {
+            return;
+        }
+        snapshotTimer = window.setInterval(function () {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                return;
+            }
+            try {
+                socket.send(JSON.stringify({ type: 'snapshot', payload: {} }));
+            } catch (err) {
+                // ignore
+            }
+        }, snapshotIntervalMs);
+    }
+
+    function clearSnapshotTimer() {
+        if (snapshotTimer !== null) {
+            clearInterval(snapshotTimer);
+            snapshotTimer = null;
         }
     }
 
@@ -162,7 +206,14 @@
         }
 
         var eventType = String(payload.type || payload.event || payload.action || '');
-        var data = Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload;
+        var data = null;
+        if (Object.prototype.hasOwnProperty.call(payload, 'payload') && payload.payload && typeof payload.payload === 'object') {
+            data = payload.payload;
+        } else if (Object.prototype.hasOwnProperty.call(payload, 'data')) {
+            data = payload.data;
+        } else {
+            data = payload;
+        }
 
         switch (eventType) {
             case 'snapshot':
@@ -223,12 +274,20 @@
             return;
         }
 
-        var online = pickNumber(data, ['online', 'online_players', 'player_count']);
-        var maxPlayers = pickNumber(data, ['max', 'max_players']);
-        var tps = pickNumber(data, ['tps']);
-        var mspt = pickNumber(data, ['mspt']);
-        var cpu = pickNumber(data, ['cpu', 'cpu_percent']);
-        var memory = pickString(data, ['memory', 'memory_usage', 'ram']);
+        var metrics = (data.metrics && typeof data.metrics === 'object') ? data.metrics : data;
+        var online = pickNumber(metrics, ['onlinePlayers', 'online', 'online_players', 'player_count']);
+        var maxPlayers = pickNumber(metrics, ['maxPlayers', 'max', 'max_players']);
+        var tps = pickNumber(metrics, ['tps']);
+        var mspt = pickNumber(metrics, ['mspt']);
+        var cpu = pickNumber(metrics, ['cpuUsage', 'cpu', 'cpu_percent']);
+        var memory = null;
+        var usedMb = pickNumber(metrics, ['memoryUsedMb']);
+        var maxMb = pickNumber(metrics, ['memoryMaxMb']);
+        if (usedMb !== null && maxMb !== null) {
+            memory = formatDecimal(usedMb, 0) + ' / ' + formatDecimal(maxMb, 0) + ' MB';
+        } else {
+            memory = pickString(metrics, ['memory', 'memory_usage', 'ram']);
+        }
 
         if (online !== null) {
             dom.onlineCount.textContent = String(online);
@@ -250,7 +309,7 @@
         }
 
         setLastUpdated(
-            pickValue(data, ['last_updated', 'updated_at', 'timestamp', 'time'])
+            pickValue(data, ['updatedAt', 'updated_at', 'last_updated', 'timestamp', 'time'])
         );
     }
 

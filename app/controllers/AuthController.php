@@ -262,7 +262,7 @@ class AuthController extends Controller
 
             $body = str_replace(
                 ['LOGO_URL', 'SERVER_NAME', 'USERNAME', 'RESET_LINK'],
-                ['https://8.135.36.26/images/logo.png', '繁星World', htmlspecialchars($username, ENT_QUOTES, 'UTF-8'), htmlspecialchars($resetUrl, ENT_QUOTES, 'UTF-8')],
+                ['https://www.stellarvan.cn/images/logo.png', '繁星World', htmlspecialchars($username, ENT_QUOTES, 'UTF-8'), htmlspecialchars($resetUrl, ENT_QUOTES, 'UTF-8')],
                 $template
             );
 
@@ -883,7 +883,7 @@ class AuthController extends Controller
 
         $body = str_replace(
             ['LOGO_URL', 'SERVER_NAME', 'USERNAME', 'VERIFY_LINK'],
-            ['https://8.135.36.26/images/logo.png', '繁星World', htmlspecialchars($username, ENT_QUOTES, 'UTF-8'), htmlspecialchars($verifyUrl, ENT_QUOTES, 'UTF-8')],
+            ['https://www.stellarvan.cn/images/logo.png', '繁星World', htmlspecialchars($username, ENT_QUOTES, 'UTF-8'), htmlspecialchars($verifyUrl, ENT_QUOTES, 'UTF-8')],
             $template
         );
 

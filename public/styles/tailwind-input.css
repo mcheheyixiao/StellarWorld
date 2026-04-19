@@ -13,6 +13,14 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "HarmonyOS Sans SC";
+  src: url("/fonts/HarmonyOS_Sans_SC_Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --mc-accent: #22d3ee;
@@ -32,7 +40,7 @@
   }
 
   body {
-    font-family: "FusionPixel", "HarmonyOS Sans SC", "Noto Sans SC", sans-serif;
+    font-family: "HarmonyOS Sans SC", "FusionPixel", "Noto Sans SC", sans-serif;
     min-height: 100vh;
     overflow-x: hidden;
     color: var(--mc-text);
@@ -255,7 +263,7 @@
 
 @layer utilities {
   .text-fusion-pixel {
-    font-family: "FusionPixel", "HarmonyOS Sans SC", "Noto Sans SC", sans-serif;
+    font-family: "HarmonyOS Sans SC", "FusionPixel", "Noto Sans SC", sans-serif;
   }
 
   @media (width >= 40rem) {

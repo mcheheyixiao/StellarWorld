@@ -29,15 +29,17 @@ class FontManager {
     useDefaultFonts() {
         this.fontConfig = {
             main: {
-                family: '像素体',
-                file: '/fonts/像素体.ttf',
-                fallback: "'Quicksand', 'Noto Sans SC', sans-serif",
+                family: 'HarmonyOS Sans SC',
+                file: '/fonts/HarmonyOS_Sans_SC_Regular.woff2',
+                format: 'woff2',
+                fallback: "'FusionPixel', 'Quicksand', 'Noto Sans SC', sans-serif",
                 weight: 'normal'
             },
             title: {
-                family: '像素体',
-                file: '/fonts/像素体.ttf',
-                fallback: "'Quicksand', 'Noto Sans SC', sans-serif",
+                family: 'HarmonyOS Sans SC',
+                file: '/fonts/HarmonyOS_Sans_SC_Regular.woff2',
+                format: 'woff2',
+                fallback: "'FusionPixel', 'Quicksand', 'Noto Sans SC', sans-serif",
                 weight: 'bold'
             }
         };
@@ -55,12 +57,19 @@ class FontManager {
         const style = document.createElement('style');
         style.id = 'dynamic-fonts';
 
+        const faceFormat = (cfg) => {
+            if (cfg.format) return cfg.format;
+            const p = String(cfg.file || '');
+            return p.endsWith('.woff2') ? 'woff2' : 'truetype';
+        };
+
         let css = '';
         if (this.fontConfig.main) {
+            const ff = faceFormat(this.fontConfig.main);
             css += `
 @font-face {
     font-family: '${this.fontConfig.main.family}';
-    src: url('${this.fontConfig.main.file}') format('truetype');
+    src: url('${this.fontConfig.main.file}') format('${ff}');
     font-weight: ${this.fontConfig.main.weight};
     font-style: normal;
     font-display: swap;
@@ -69,10 +78,11 @@ class FontManager {
         }
 
         if (this.fontConfig.title && this.fontConfig.title.family !== this.fontConfig.main.family) {
+            const ff = faceFormat(this.fontConfig.title);
             css += `
 @font-face {
     font-family: '${this.fontConfig.title.family}';
-    src: url('${this.fontConfig.title.file}') format('truetype');
+    src: url('${this.fontConfig.title.file}') format('${ff}');
     font-weight: ${this.fontConfig.title.weight};
     font-style: normal;
     font-display: swap;
@@ -113,7 +123,7 @@ class FontManager {
             link.rel = 'preload';
             link.href = fontFile;
             link.as = 'font';
-            link.type = 'font/ttf';
+            link.type = String(fontFile).endsWith('.woff2') ? 'font/woff2' : 'font/ttf';
             link.crossOrigin = 'anonymous';
             document.head.appendChild(link);
         });

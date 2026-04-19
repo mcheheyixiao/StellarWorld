@@ -217,15 +217,17 @@ foreach ($backgroundImages as $rel) {
         window.websiteConfig = {
             fonts: {
                 main: {
-                    family: '像素体',
-                    file: '/fonts/像素体.ttf',
-                    fallback: "'Quicksand', 'Noto Sans SC', sans-serif",
+                    family: 'HarmonyOS Sans SC',
+                    file: '/fonts/HarmonyOS_Sans_SC_Regular.woff2',
+                    format: 'woff2',
+                    fallback: "'FusionPixel', 'Quicksand', 'Noto Sans SC', sans-serif",
                     weight: 'normal'
                 },
                 title: {
-                    family: '像素体',
-                    file: '/fonts/像素体.ttf',
-                    fallback: "'Quicksand', 'Noto Sans SC', sans-serif",
+                    family: 'HarmonyOS Sans SC',
+                    file: '/fonts/HarmonyOS_Sans_SC_Regular.woff2',
+                    format: 'woff2',
+                    fallback: "'FusionPixel', 'Quicksand', 'Noto Sans SC', sans-serif",
                     weight: 'bold'
                 }
             },

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Tailwind v4: explicitly scan templates (no Node). */
 @source "../../app/views/**/*.php";

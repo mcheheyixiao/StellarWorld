@@ -8,11 +8,11 @@
 
             <div class="navbar-menu md:flex-1">
                 <ul class="flex flex-col gap-2 md:flex-row md:items-center md:justify-center md:gap-2">
-                    <li><a href="/" class="nav-link inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-200 transition hover:bg-cyan-400/15 hover:text-cyan-200"><i class="mdi mdi-home text-base"></i><span>主页</span></a></li>
-                    <li><a href="/gallery" class="nav-link inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-200 transition hover:bg-cyan-400/15 hover:text-cyan-200"><i class="mdi mdi-image-multiple text-base"></i><span>相册</span></a></li>
-                    <li><a href="/leaderboard" class="nav-link inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-200 transition hover:bg-cyan-400/15 hover:text-cyan-200"><i class="mdi mdi-format-list-numbered text-base"></i><span>排行榜</span></a></li>
-                    <li><a href="/announcements" class="nav-link inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-200 transition hover:bg-cyan-400/15 hover:text-cyan-200"><i class="mdi mdi-bullhorn text-base"></i><span>公告板</span></a></li>
-                    <li><a href="/about" class="nav-link inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-200 transition hover:bg-cyan-400/15 hover:text-cyan-200"><i class="mdi mdi-information text-base"></i><span>关于我们</span></a></li>
+                    <li><a href="/" class="nav-link relative group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-200 transition-colors duration-300 hover:bg-cyan-400/15 hover:text-cyan-400 dark:hover:text-cyan-300"><i class="mdi mdi-home text-base"></i><span>主页</span><span class="nav-underline absolute left-1/2 bottom-0 h-[2px] w-0 bg-cyan-400 dark:bg-cyan-300 transition-all duration-300 ease-out group-hover:w-full group-hover:left-0"></span></a></li>
+                    <li><a href="/gallery" class="nav-link relative group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-200 transition-colors duration-300 hover:bg-cyan-400/15 hover:text-cyan-400 dark:hover:text-cyan-300"><i class="mdi mdi-image-multiple text-base"></i><span>相册</span><span class="nav-underline absolute left-1/2 bottom-0 h-[2px] w-0 bg-cyan-400 dark:bg-cyan-300 transition-all duration-300 ease-out group-hover:w-full group-hover:left-0"></span></a></li>
+                    <li><a href="/leaderboard" class="nav-link relative group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-200 transition-colors duration-300 hover:bg-cyan-400/15 hover:text-cyan-400 dark:hover:text-cyan-300"><i class="mdi mdi-format-list-numbered text-base"></i><span>排行榜</span><span class="nav-underline absolute left-1/2 bottom-0 h-[2px] w-0 bg-cyan-400 dark:bg-cyan-300 transition-all duration-300 ease-out group-hover:w-full group-hover:left-0"></span></a></li>
+                    <li><a href="/announcements" class="nav-link relative group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-200 transition-colors duration-300 hover:bg-cyan-400/15 hover:text-cyan-400 dark:hover:text-cyan-300"><i class="mdi mdi-bullhorn text-base"></i><span>公告板</span><span class="nav-underline absolute left-1/2 bottom-0 h-[2px] w-0 bg-cyan-400 dark:bg-cyan-300 transition-all duration-300 ease-out group-hover:w-full group-hover:left-0"></span></a></li>
+                    <li><a href="/about" class="nav-link relative group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-200 transition-colors duration-300 hover:bg-cyan-400/15 hover:text-cyan-400 dark:hover:text-cyan-300"><i class="mdi mdi-information text-base"></i><span>关于我们</span><span class="nav-underline absolute left-1/2 bottom-0 h-[2px] w-0 bg-cyan-400 dark:bg-cyan-300 transition-all duration-300 ease-out group-hover:w-full group-hover:left-0"></span></a></li>
                 </ul>
                 <?php if (!empty($_SESSION['user_id'])): ?>
                     <?php
@@ -136,7 +136,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var href = link.getAttribute('href') || '';
         var isActive = currentPath === href || (href !== '/' && currentPath.indexOf(href) === 0);
         if (isActive) {
-            link.classList.add('bg-cyan-500/20', 'text-cyan-200');
+            link.classList.add('is-active', 'bg-cyan-500/20', 'text-cyan-200');
         }
     });
 
@@ -201,7 +201,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var root = document.documentElement;
     function syncThemeFab() {
         if (!themeToggle) return;
-        var activeTheme = root.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+        var activeTheme = root.classList.contains('dark') ? 'dark' : 'light';
         var isDark = activeTheme === 'dark';
         themeToggle.classList.toggle('is-dark', isDark);
         themeToggle.setAttribute('aria-pressed', isDark ? 'true' : 'false');
@@ -219,6 +219,13 @@ document.addEventListener('DOMContentLoaded', function () {
 #navbar.hidden {
     transform: translateX(-50%) translateY(-115%);
     opacity: 0;
+}
+.nav-link .nav-underline {
+    pointer-events: none;
+}
+.nav-link.is-active .nav-underline {
+    width: 100%;
+    left: 0;
 }
 .navbar-menu {
     position: absolute;
@@ -358,7 +365,7 @@ document.addEventListener('DOMContentLoaded', function () {
     position: fixed;
     left: 1rem;
     bottom: 1rem;
-    z-index: 60;
+    z-index: 90;
     width: 3rem;
     height: 3rem;
     display: inline-flex;

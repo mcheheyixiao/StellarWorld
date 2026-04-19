@@ -49,15 +49,43 @@ foreach ($backgroundImages as $rel) {
     <link rel="stylesheet" href="https://cdn.staticfile.net/MaterialDesign-Webfont/7.4.47/css/materialdesignicons.min.css">
     <link rel="stylesheet" href="/styles/tailwind-dist.css">
     <style>
+        :root {
+            --mc-bg: #f8fafc;
+            --mc-bg-alt: #eef2ff;
+            --mc-surface: #ffffff;
+            --mc-surface-soft: rgba(255, 255, 255, 0.86);
+            --mc-border: #e2e8f0;
+            --mc-text: #0f172a;
+            --mc-muted: #475569;
+            --mc-accent: #22d3ee;
+            --mc-accent-strong: #0891b2;
+            --mc-glow: rgba(34, 211, 238, 0.3);
+        }
+
+        html.dark {
+            --mc-bg: #020617;
+            --mc-bg-alt: #0b1120;
+            --mc-surface: rgba(15, 23, 42, 0.6);
+            --mc-surface-soft: rgba(15, 23, 42, 0.76);
+            --mc-border: rgba(255, 255, 255, 0.08);
+            --mc-text: #e2e8f0;
+            --mc-muted: #94a3b8;
+            --mc-glow: rgba(34, 211, 238, 0.4);
+        }
+
         body {
             position: relative;
-            background-color: #020617;
-            color: #e2e8f0;
+            background-color: var(--mc-bg);
+            color: var(--mc-text);
+            transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
         }
-        [data-theme="light"] body {
-            background-color: #edf4ff;
-            color: #1e293b;
+
+        body *,
+        body *::before,
+        body *::after {
+            transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
         }
+
         .mc-site-shell {
             position: relative;
             min-height: 100vh;
@@ -73,15 +101,17 @@ foreach ($backgroundImages as $rel) {
             content: "";
             position: absolute;
             inset: 0;
-            background: radial-gradient(circle at 12% 20%, rgba(34, 211, 238, 0.22), transparent 42%),
-                        radial-gradient(circle at 82% 0%, rgba(14, 165, 233, 0.18), transparent 38%),
-                        linear-gradient(135deg, #020617 0%, #0f172a 52%, #030712 100%);
+            background: radial-gradient(circle at 10% 18%, rgba(14, 165, 233, 0.18), transparent 42%),
+                        radial-gradient(circle at 82% 0%, rgba(56, 189, 248, 0.16), transparent 40%),
+                        linear-gradient(135deg, #f8fbff 0%, #eef4ff 55%, #e8f0ff 100%);
         }
-        [data-theme="light"] .mc-site-bg::before {
-            background: radial-gradient(circle at 12% 20%, rgba(59, 130, 246, 0.15), transparent 42%),
-                        radial-gradient(circle at 82% 0%, rgba(14, 165, 233, 0.12), transparent 38%),
-                        linear-gradient(135deg, #f8fbff 0%, #eef5ff 52%, #e5efff 100%);
+
+        html.dark .mc-site-bg::before {
+            background: radial-gradient(circle at 12% 20%, rgba(34, 211, 238, 0.24), transparent 42%),
+                        radial-gradient(circle at 82% 0%, rgba(14, 165, 233, 0.22), transparent 40%),
+                        linear-gradient(135deg, #020617 0%, #0b1120 58%, #020617 100%);
         }
+
         .mc-site-bg::after {
             content: "";
             position: absolute;
@@ -92,9 +122,10 @@ foreach ($backgroundImages as $rel) {
             mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.58), transparent 90%);
             opacity: 0.5;
         }
-        [data-theme="light"] .mc-site-bg::after {
-            opacity: 0.2;
+        html.dark .mc-site-bg::after {
+            opacity: 0.46;
         }
+
         /*
          * 与 #navbar 同宽：顶栏为 position:fixed，其宽度百分比相对视口；
          * 主内容若在普通流里单独写 calc(100%-1.5rem)，可能与顶栏产生 1～数像素偏差。
@@ -118,98 +149,68 @@ foreach ($backgroundImages as $rel) {
         .main-content--admin .ta-admin-shell {
             height: calc(100vh - 1.5rem);
         }
-        [data-theme="light"] #navbar > div,
-        [data-theme="light"] footer,
-        [data-theme="light"] .mc-glass-card {
-            background: rgba(255, 255, 255, 0.78) !important;
-            border-color: rgba(148, 163, 184, 0.28) !important;
-            box-shadow: 0 16px 34px -24px rgba(15, 23, 42, 0.28) !important;
+
+        #navbar > div,
+        footer,
+        .mc-glass-card {
+            background: var(--mc-surface-soft) !important;
+            border-color: var(--mc-border) !important;
+            box-shadow: 0 16px 36px -24px rgba(15, 23, 42, 0.34) !important;
+            backdrop-filter: blur(24px);
         }
-        /* Global light-theme harmonization for Tailwind utility heavy pages. */
-        [data-theme="light"] [class*="bg-slate-950"],
-        [data-theme="light"] [class*="bg-slate-900"],
-        [data-theme="light"] [class*="bg-slate-800"] {
-            background: rgba(255, 255, 255, 0.78) !important;
+
+        html.dark #navbar > div,
+        html.dark footer,
+        html.dark .mc-glass-card {
+            box-shadow: 0 24px 56px -30px rgba(0, 0, 0, 0.85) !important;
         }
-        [data-theme="light"] [class*="border-white/"],
-        [data-theme="light"] [class*="border-slate-"] {
-            border-color: rgba(148, 163, 184, 0.34) !important;
+
+        :is(html.light, html[data-theme="light"]) [class*="bg-slate-950"],
+        :is(html.light, html[data-theme="light"]) [class*="bg-slate-900"],
+        :is(html.light, html[data-theme="light"]) [class*="bg-slate-800"] {
+            background: rgba(255, 255, 255, 0.86) !important;
         }
-        [data-theme="light"] .text-white,
-        [data-theme="light"] .text-slate-100,
-        [data-theme="light"] .text-slate-200,
-        [data-theme="light"] .text-slate-300 {
-            color: #1e293b !important;
+
+        :is(html.light, html[data-theme="light"]) [class*="border-white/"],
+        :is(html.light, html[data-theme="light"]) [class*="border-slate-"] {
+            border-color: #cbd5e1 !important;
         }
-        [data-theme="light"] .text-slate-400 {
-            color: #475569 !important;
-        }
-        [data-theme="light"] [class*="text-cyan-200"],
-        [data-theme="light"] [class*="text-cyan-300"],
-        [data-theme="light"] [class*="text-cyan-400"] {
-            color: #0e7490 !important;
-        }
-        /* text-cyan-100 在浅色底上几乎不可见，需单独加深 */
-        [data-theme="light"] .text-cyan-100,
-        [data-theme="light"] [class*="text-cyan-100"] {
-            color: #0f766e !important;
-        }
-        /* 登录/注册等 auth 表单：浅色模式下输入框与图标对比度 */
-        [data-theme="light"] .custom-input {
-            background: rgba(255, 255, 255, 0.98) !important;
-            border-color: rgba(100, 116, 139, 0.5) !important;
+
+        :is(html.light, html[data-theme="light"]) .text-white,
+        :is(html.light, html[data-theme="light"]) .text-slate-100,
+        :is(html.light, html[data-theme="light"]) .text-slate-200,
+        :is(html.light, html[data-theme="light"]) .text-slate-300 {
             color: #0f172a !important;
         }
-        [data-theme="light"] .custom-input::placeholder {
-            color: #64748b !important;
+
+        :is(html.light, html[data-theme="light"]) .text-slate-400 {
+            color: #475569 !important;
         }
-        [data-theme="light"] .input-group .input-icon {
+
+        :is(html.light, html[data-theme="light"]) [class*="text-cyan-200"],
+        :is(html.light, html[data-theme="light"]) [class*="text-cyan-300"],
+        :is(html.light, html[data-theme="light"]) [class*="text-cyan-400"] {
+            color: #0e7490 !important;
+        }
+
+        :is(html.light, html[data-theme="light"]) .custom-input {
+            background: #fff !important;
+            border-color: #94a3b8 !important;
+            color: #0f172a !important;
+        }
+
+        :is(html.light, html[data-theme="light"]) .custom-input::placeholder,
+        :is(html.light, html[data-theme="light"]) .input-group .input-icon,
+        :is(html.light, html[data-theme="light"]) .modern-checkbox .label-text,
+        :is(html.light, html[data-theme="light"]) .auth-remember-label {
             color: #64748b !important;
             fill: currentColor !important;
         }
-        [data-theme="light"] .input-group:focus-within .input-icon {
-            color: #0e7490 !important;
-        }
-        [data-theme="light"] .input-group:focus-within .custom-input {
-            border-color: rgba(14, 116, 144, 0.55) !important;
-            box-shadow: 0 0 0 1px rgba(14, 116, 144, 0.2), 0 0 20px -6px rgba(14, 116, 144, 0.35) !important;
-        }
-        [data-theme="light"] .modern-checkbox .label-text {
-            color: #334155 !important;
-        }
-        [data-theme="light"] .auth-remember-label {
-            color: #334155 !important;
-        }
-        [data-theme="light"] .modern-checkbox .custom-checkmark {
-            background: rgba(255, 255, 255, 0.95) !important;
-            border-color: rgba(100, 116, 139, 0.45) !important;
-        }
-        [data-theme="light"] [class*="bg-cyan-500/10"] {
-            background: rgba(14, 116, 144, 0.08) !important;
-        }
-        [data-theme="light"] [class*="hover:bg-cyan-500/20"]:hover,
-        [data-theme="light"] [class*="hover:bg-cyan-500/25"]:hover,
-        [data-theme="light"] [class*="hover:bg-cyan-400/15"]:hover {
-            background: rgba(14, 116, 144, 0.14) !important;
-        }
-        [data-theme="light"] .theme-fab {
-            background: rgba(255, 255, 255, 0.9) !important;
+
+        :is(html.light, html[data-theme="light"]) .theme-fab {
+            background: rgba(255, 255, 255, 0.92) !important;
             color: #0f172a !important;
-            border-color: rgba(148, 163, 184, 0.42) !important;
-        }
-        [data-theme="light"] .mc-glass-card h1.text-fusion-pixel {
-            color: #0f172a !important;
-        }
-        /* 登录/注册主按钮、次按钮：浅色下固定对比度（避免 text-cyan-200 与浅底发灰、bg-slate-900 被全局规则冲掉） */
-        [data-theme="light"] .auth-action-btn--primary {
-            background: rgba(6, 182, 212, 0.2) !important;
-            border-color: rgba(8, 145, 178, 0.55) !important;
-            color: #0c4a6e !important;
-        }
-        [data-theme="light"] .auth-action-btn--secondary {
-            background: rgba(241, 245, 249, 0.98) !important;
-            border-color: rgba(148, 163, 184, 0.45) !important;
-            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
         }
     </style>
 
@@ -240,8 +241,21 @@ foreach ($backgroundImages as $rel) {
 
     <script>
         (function() {
-            const savedTheme = localStorage.getItem('theme') || 'dark';
-            document.documentElement.setAttribute('data-theme', savedTheme);
+            let savedTheme = null;
+            try {
+                savedTheme = localStorage.getItem('theme');
+            } catch (e) {
+                savedTheme = null;
+            }
+            const followsSystemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const resolvedTheme = (savedTheme === 'dark' || savedTheme === 'light')
+                ? savedTheme
+                : (followsSystemDark ? 'dark' : 'light');
+            const root = document.documentElement;
+            root.classList.toggle('dark', resolvedTheme === 'dark');
+            root.classList.toggle('light', resolvedTheme !== 'dark');
+            root.setAttribute('data-theme', resolvedTheme);
+            root.style.colorScheme = resolvedTheme;
 
             function initializeRandomBackground() {
                 const pic = document.getElementById('background-picture');

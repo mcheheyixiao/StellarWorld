@@ -223,6 +223,21 @@ CREATE TABLE IF NOT EXISTS auth_tokens (
     CONSTRAINT fk_auth_tokens_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS avatar_cache (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(32) NOT NULL,
+    size_px SMALLINT UNSIGNED NOT NULL DEFAULT 32,
+    source_url VARCHAR(512) NOT NULL,
+    content_hash CHAR(64) NOT NULL,
+    storage_rel_path VARCHAR(255) NOT NULL,
+    mime VARCHAR(64) NOT NULL DEFAULT 'image/png',
+    http_code SMALLINT UNSIGNED NOT NULL DEFAULT 200,
+    fetched_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_avatar_cache_username_size (username, size_px),
+    INDEX idx_avatar_cache_fetched_at (fetched_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS ip_blacklist (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     ip_cidr VARCHAR(45) NOT NULL COMMENT '精确 IPv4/IPv6 或 CIDR，如 192.168.1.0/24',

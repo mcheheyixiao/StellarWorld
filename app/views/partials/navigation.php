@@ -17,8 +17,8 @@
                 <?php if (!empty($_SESSION['user_id'])): ?>
                     <?php
                         $mobileNavUsername = (string)($_SESSION['username'] ?? '');
-                        $mobileNavAvatarUrl = 'https://minotar.net/helm/' . rawurlencode($mobileNavUsername !== '' ? $mobileNavUsername : 'MHF_Steve') . '/32.png';
-                        $mobileNavFallbackAvatar = 'https://minotar.net/helm/MHF_Steve/32.png';
+                        $mobileNavAvatarUrl = '/api/avatar?username=' . rawurlencode($mobileNavUsername !== '' ? $mobileNavUsername : 'MHF_Steve') . '&size=32';
+                        $mobileNavFallbackAvatar = '/images/owner_avatar.png';
                     ?>
                     <div class="mobile-user-menu user-menu-wrap md:hidden" id="mobileUserMenuWrap">
                         <button
@@ -73,8 +73,8 @@
                     <?php else: ?>
                         <?php
                             $navUsername = (string)($_SESSION['username'] ?? '');
-                            $navAvatarUrl = 'https://minotar.net/helm/' . rawurlencode($navUsername !== '' ? $navUsername : 'MHF_Steve') . '/32.png';
-                            $navFallbackAvatar = 'https://minotar.net/helm/MHF_Steve/32.png';
+                            $navAvatarUrl = '/api/avatar?username=' . rawurlencode($navUsername !== '' ? $navUsername : 'MHF_Steve') . '&size=32';
+                            $navFallbackAvatar = '/images/owner_avatar.png';
                         ?>
                         <div class="user-menu-wrap" id="userMenuWrap">
                             <button

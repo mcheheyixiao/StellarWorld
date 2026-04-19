@@ -33,6 +33,7 @@ $router->post('/api/server/status/update', [ApiController::class, 'updateServerS
 $router->get('/api/status/cache', [ApiController::class, 'getServerStatus']);
 $router->get('/api/leaderboard/search', [ApiController::class, 'searchLeaderboard']);
 $router->get('/api/skin-proxy', [ApiController::class, 'proxySkin']);
+$router->get('/api/avatar', [ApiController::class, 'avatar']);
 
 // Profile pages
 $router->get('/profile', [ProfileController::class, 'index']);

@@ -1,7 +1,7 @@
 <?php
 $adminHeaderUsername = trim((string)($_SESSION['username'] ?? ''));
-$adminHeaderAvatarUrl = 'https://minotar.net/helm/' . rawurlencode($adminHeaderUsername !== '' ? $adminHeaderUsername : 'MHF_Steve') . '/32.png';
-$adminHeaderAvatarFallback = 'https://minotar.net/helm/MHF_Steve/32.png';
+$adminHeaderAvatarUrl = '/api/avatar?username=' . rawurlencode($adminHeaderUsername !== '' ? $adminHeaderUsername : 'MHF_Steve') . '&size=32';
+$adminHeaderAvatarFallback = '/images/owner_avatar.png';
 ?>
 <!-- MOD: TailAdmin Header Start -->
 <header class="ta-admin-header-modern">

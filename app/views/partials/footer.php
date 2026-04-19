@@ -14,8 +14,13 @@
             </div>
         </div>
         <div class="space-y-2 text-sm text-slate-400 md:text-right">
-            <p>© <?= date('Y') ?> 繁星World 公益服务器</p>
+            <p>© <?= date('Y') ?> 繁星World. All rights reserved.</p>
             <p>Powered by StellarVan</p>
+            <a href="https://beian.mps.gov.cn/#/query/webSearch" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-slate-400 transition hover:text-cyan-200">
+                <img src="https://www.stellarvan.cn/images/GaBA.png" alt="公安备案图标" width="16" height="16">
+                闽公网安备35010402351856号
+            </a>
+            <br> <!-- 手动换行 -->
             <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" class="inline-flex text-slate-400 transition hover:text-cyan-200">闽ICP备2026007132号-1</a>
         </div>
     </div>

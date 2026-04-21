@@ -15,8 +15,10 @@
     var snapshotTimer = null;
     var reconnectAttempts = 0;
     var manualClose = false;
+    var lastSnapshotRequestAt = 0;
 
-    var snapshotIntervalMs = Math.max(1000, Number(config.snapshot_interval_ms || 3000));
+    var minSnapshotIntervalMs = Math.max(1500, Number(config.min_snapshot_interval_ms || 2000));
+    var snapshotIntervalMs = Math.max(minSnapshotIntervalMs, Number(config.snapshot_interval_ms || 3000));
 
     var dom = {
         connectionBanner: document.getElementById('realtime-connection-banner'),
@@ -38,6 +40,10 @@
     var metricToneClasses = ['ta-metric-good', 'ta-metric-warn', 'ta-metric-bad'];
 
     function connect(isReconnect) {
+        if (document.hidden || !isRealtimeTabActive()) {
+            return;
+        }
+
         if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
             return;
         }
@@ -71,10 +77,7 @@
                         panelId: String(config.panel_id || 'web-admin')
                     }
                 }));
-                socket.send(JSON.stringify({
-                    type: 'snapshot',
-                    payload: {}
-                }));
+                requestSnapshot(true);
             } catch (err) {
                 // ignore send failures; reconnect loop will handle
             }
@@ -115,7 +118,7 @@
     }
 
     function reconnect() {
-        if (manualClose || reconnectTimer !== null) {
+        if (manualClose || reconnectTimer !== null || document.hidden || !isRealtimeTabActive()) {
             return;
         }
 
@@ -150,14 +153,7 @@
             return;
         }
         snapshotTimer = window.setInterval(function () {
-            if (!socket || socket.readyState !== WebSocket.OPEN) {
-                return;
-            }
-            try {
-                socket.send(JSON.stringify({ type: 'snapshot', payload: {} }));
-            } catch (err) {
-                // ignore
-            }
+            requestSnapshot(false);
         }, snapshotIntervalMs);
     }
 
@@ -165,6 +161,28 @@
         if (snapshotTimer !== null) {
             clearInterval(snapshotTimer);
             snapshotTimer = null;
+        }
+    }
+
+    function requestSnapshot(force) {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            return;
+        }
+
+        if (document.hidden || !isRealtimeTabActive()) {
+            return;
+        }
+
+        var now = Date.now();
+        if (!force && (now - lastSnapshotRequestAt) < minSnapshotIntervalMs) {
+            return;
+        }
+
+        try {
+            socket.send(JSON.stringify({ type: 'snapshot', payload: {} }));
+            lastSnapshotRequestAt = now;
+        } catch (err) {
+            // ignore
         }
     }
 
@@ -281,7 +299,6 @@
         var metrics = (data.metrics && typeof data.metrics === 'object') ? data.metrics : data;
         var online = pickNumber(metrics, ['onlinePlayers', 'online', 'online_players', 'player_count']);
         var maxPlayers = pickNumber(metrics, ['maxPlayers', 'max', 'max_players']);
-<<<<<<< HEAD
         if (maxPlayers === null && data.serverInfo && typeof data.serverInfo === 'object') {
             maxPlayers = pickNumber(data.serverInfo, ['maxPlayers', 'max', 'max_players']);
         }
@@ -302,11 +319,6 @@
         if (cpu === null && snapshotRoot && snapshotRoot.server && typeof snapshotRoot.server === 'object') {
             cpu = pickNumber(snapshotRoot.server, ['cpuUsage', 'cpu', 'cpu_percent', 'cpuLoad', 'cpu_load']);
         }
-=======
-        var tps = pickNumber(metrics, ['tps']);
-        var mspt = pickNumber(metrics, ['mspt']);
-        var cpu = pickNumber(metrics, ['cpuUsage', 'cpu', 'cpu_percent']);
->>>>>>> 6e20506c3674752e18482bc6122a9a1499efde78
         var memory = null;
         var usedMb = pickNumber(metrics, ['memoryUsedMb']);
         var maxMb = pickNumber(metrics, ['memoryMaxMb']);
@@ -714,10 +726,33 @@
         return !realtimeTab.classList.contains('tab-hidden');
     }
 
-    function maybeConnectForVisibleTab() {
-        if (isRealtimeTabActive()) {
-            connect(false);
+    function pauseRealtimePolling() {
+        clearReconnectTimer();
+        clearSnapshotTimer();
+
+        if (socket) {
+            manualClose = true;
+            try {
+                socket.close();
+            } catch (err) {
+                // ignore
+            }
+            socket = null;
         }
+
+        if (document.hidden) {
+            setConnectionState('disconnected', '页面不可见');
+        } else if (!isRealtimeTabActive()) {
+            setConnectionState('disconnected', '等待打开面板');
+        }
+    }
+
+    function maybeConnectForVisibleTab() {
+        if (!isRealtimeTabActive() || document.hidden) {
+            pauseRealtimePolling();
+            return;
+        }
+        connect(false);
     }
 
     function watchTabVisibility() {
@@ -748,7 +783,12 @@
     }
 
     document.addEventListener('visibilitychange', function () {
-        if (!document.hidden && isRealtimeTabActive()) {
+        if (document.hidden) {
+            pauseRealtimePolling();
+            return;
+        }
+
+        if (isRealtimeTabActive()) {
             connect(false);
         }
     });

@@ -3,6 +3,9 @@
 
 /* Tailwind v4: explicitly scan templates (no Node). */
 @source "../../app/views/**/*.php";
+@source "../../app/views/**/*.html";
+@source "../../public/**/*.php";
+@source "../../public/**/*.html";
 @source "../../public/scripts/**/*.js";
 @source inline("bg-[radial-gradient(circle_at_15%_20%,rgba(34,211,238,0.2),transparent_36%),radial-gradient(circle_at_88%_0%,rgba(59,130,246,0.2),transparent_38%)]");
 

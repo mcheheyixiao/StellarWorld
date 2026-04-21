@@ -69,7 +69,7 @@ class FontManager {
             css += `
 @font-face {
     font-family: '${this.fontConfig.main.family}';
-    src: url('${this.fontConfig.main.file}') format('${ff}');
+    src: local('${this.fontConfig.main.family}'), url('${this.fontConfig.main.file}') format('${ff}');
     font-weight: ${this.fontConfig.main.weight};
     font-style: normal;
     font-display: swap;
@@ -82,7 +82,7 @@ class FontManager {
             css += `
 @font-face {
     font-family: '${this.fontConfig.title.family}';
-    src: url('${this.fontConfig.title.file}') format('${ff}');
+    src: local('${this.fontConfig.title.family}'), url('${this.fontConfig.title.file}') format('${ff}');
     font-weight: ${this.fontConfig.title.weight};
     font-style: normal;
     font-display: swap;
@@ -119,6 +119,10 @@ class FontManager {
             fontsToPreload.add(this.fontConfig.title.file);
         }
         fontsToPreload.forEach(fontFile => {
+            const existingPreload = document.querySelector(`link[rel="preload"][as="font"][href="${fontFile}"]`);
+            if (existingPreload) {
+                return;
+            }
             const link = document.createElement('link');
             link.rel = 'preload';
             link.href = fontFile;
@@ -131,4 +135,3 @@ class FontManager {
 }
 
 window.fontManager = new FontManager();
-

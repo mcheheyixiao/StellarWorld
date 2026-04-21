@@ -44,9 +44,10 @@ foreach ($backgroundImages as $rel) {
 
     <link rel="preconnect" href="https://fonts.loli.net">
     <link rel="preconnect" href="https://gstatic.loli.net" crossorigin>
-    <link rel="preload" href="https://fonts.loli.net/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&family=Quicksand:wght@400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <link rel="preload" href="https://fonts.loli.net/css2?family=Noto+Sans+SC:wght@400;600;700&family=Quicksand:wght@500;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
 
-    <link rel="stylesheet" href="https://cdn.staticfile.net/MaterialDesign-Webfont/7.4.47/css/materialdesignicons.min.css">
+    <link rel="preload" href="https://cdn.staticfile.net/MaterialDesign-Webfont/7.4.47/css/materialdesignicons.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdn.staticfile.net/MaterialDesign-Webfont/7.4.47/css/materialdesignicons.min.css"></noscript>
     <link rel="stylesheet" href="/styles/tailwind-dist.css">
     <style>
         :root {
@@ -80,10 +81,16 @@ foreach ($backgroundImages as $rel) {
             transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
         }
 
-        body *,
-        body *::before,
-        body *::after {
-            transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+        a,
+        button,
+        [role="button"],
+        .mc-glass-card,
+        .ta-card,
+        .ta-btn,
+        .music-toggle,
+        .music-panel,
+        .playlist-item {
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
         }
 
         .mc-site-shell {
@@ -163,6 +170,52 @@ foreach ($backgroundImages as $rel) {
         html.dark footer,
         html.dark .mc-glass-card {
             box-shadow: 0 24px 56px -30px rgba(0, 0, 0, 0.85) !important;
+        }
+
+        @media (max-width: 768px) {
+            #navbar > div,
+            footer,
+            .mc-glass-card,
+            .music-panel,
+            .ta-admin-header-modern,
+            .ta-admin-user-dropdown {
+                backdrop-filter: blur(14px) !important;
+                -webkit-backdrop-filter: blur(14px) !important;
+                box-shadow: 0 12px 28px -20px rgba(15, 23, 42, 0.28) !important;
+            }
+
+            html.dark #navbar > div,
+            html.dark footer,
+            html.dark .mc-glass-card,
+            html.dark .music-panel,
+            html.dark .ta-admin-header-modern,
+            html.dark .ta-admin-user-dropdown {
+                box-shadow: 0 18px 38px -24px rgba(0, 0, 0, 0.72) !important;
+            }
+        }
+
+        @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+            #navbar > div,
+            footer,
+            .mc-glass-card,
+            .music-panel,
+            .ta-admin-header-modern,
+            .ta-admin-user-dropdown {
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+                background: rgba(255, 255, 255, 0.94) !important;
+                box-shadow: 0 12px 28px -20px rgba(15, 23, 42, 0.24) !important;
+            }
+
+            html.dark #navbar > div,
+            html.dark footer,
+            html.dark .mc-glass-card,
+            html.dark .music-panel,
+            html.dark .ta-admin-header-modern,
+            html.dark .ta-admin-user-dropdown {
+                background: rgba(15, 23, 42, 0.92) !important;
+                box-shadow: 0 18px 38px -24px rgba(0, 0, 0, 0.72) !important;
+            }
         }
 
         :is(html.light, html[data-theme="light"]) [class*="bg-slate-950"],

@@ -1,3 +1,8 @@
+<?php
+$defaultBgmUrl = '/assets/music/bgm.mp3';
+$defaultBgmFile = PUBLIC_PATH . '/assets/music/bgm.mp3';
+$hasDefaultBgm = is_file($defaultBgmFile);
+?>
 <div style="position: fixed !important; bottom: 1.5rem !important; right: 1.5rem !important; left: auto !important; z-index: 999999 !important;">
 <div id="music-player" class="music-player">
     <!-- 播放器按钮 -->
@@ -71,8 +76,10 @@
     </div>
 
     <!-- 物理音频标签，保持与原项目兼容 -->
-    <audio id="bgm-audio" loop>
-        <source src="/assets/music/bgm.mp3" type="audio/mpeg">
+    <audio id="bgm-audio" loop data-default-src="<?= $hasDefaultBgm ? $defaultBgmUrl : '' ?>">
+        <?php if ($hasDefaultBgm): ?>
+        <source src="<?= htmlspecialchars($defaultBgmUrl, ENT_QUOTES, 'UTF-8') ?>" type="audio/mpeg">
+        <?php endif; ?>
         <!-- 如果浏览器不支持 audio，将自动静默失败 -->
     </audio>
 </div>
@@ -96,7 +103,8 @@ let isPlaying = false;
 let isMuted = false;
 let volume = 0.8;
 let isShuffled = false;
-let isRepeating = 0; // 0: 不循环, 1: 单曲循环, 2: 列表循环
+let isRepeating = 0; // 0: 涓嶅惊鐜? 1: 鍗曟洸寰幆, 2: 鍒楄〃寰幆
+let defaultBgmUrl = '';
 
 // 初始化音乐播放器
 document.addEventListener('DOMContentLoaded', function () {
@@ -109,6 +117,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!audio) {
         return;
     }
+    defaultBgmUrl = (audio.dataset && typeof audio.dataset.defaultSrc === 'string') ? audio.dataset.defaultSrc.trim() : '';
     audio.volume = volume;
 
     // 设置音频事件监听器
@@ -185,41 +194,69 @@ function initUIEvents() {
 // 加载播放列表
 async function loadPlaylist() {
     try {
-        const response = await fetch('https://api.i-meto.com/meting/api?server=netease&type=playlist&id=5186526688');
+        const controller = (typeof AbortController === 'function') ? new AbortController() : null;
+        const timeoutId = window.setTimeout(function () {
+            if (controller) {
+                controller.abort();
+            }
+        }, 2500);
+
+        const response = await fetch('https://api.i-meto.com/meting/api?server=netease&type=playlist&id=5186526688', controller ? {
+            signal: controller.signal,
+            cache: 'no-store'
+        } : {
+            cache: 'no-store'
+        });
+
+        clearTimeout(timeoutId);
+
         if (!response.ok) throw new Error('API请求失败');
 
         const data = await response.json();
+        if (!Array.isArray(data)) {
+            throw new Error('API响应格式错误');
+        }
+
         playlist = data.map((song, index) => ({
             id: song.id || index,
-            title: song.name || song.title || '未知歌曲',
-            artist: song.artist || song.author || '未知艺术家',
+            title: song.name || song.title || 'Unknown Track',
+            artist: song.artist || song.author || 'Unknown Artist',
             cover: song.pic || '',
             url: song.url || '',
             duration: song.duration || 0
-        }));
+        })).filter(function (song) {
+            return typeof song.url === 'string' && song.url.trim() !== '';
+        });
+
+        if (playlist.length === 0) {
+            throw new Error('API无可播放歌曲');
+        }
 
         updatePlaylistUI();
 
-        // 如果有歌曲，加载第一首
         if (playlist.length > 0) {
             loadSong(0);
         }
     } catch (error) {
         console.error('加载播放列表失败:', error);
-        // 使用备用播放列表（首个为项目原有 bgm.mp3）
         loadFallbackPlaylist();
     }
 }
-
 // 备用播放列表，确保本地 /assets/music/bgm.mp3 可播放
 function loadFallbackPlaylist() {
+    if (!defaultBgmUrl) {
+        playlist = [];
+        updatePlaylistUI();
+        return;
+    }
+
     playlist = [
         {
             id: 1,
-            title: '服务器背景音乐',
-            artist: 'Wan\'s MC Web',
+            title: 'Server BGM',
+            artist: "Wan's MC Web",
             cover: '',
-            url: '/assets/music/bgm.mp3',
+            url: defaultBgmUrl,
             duration: 0
         }
     ];
@@ -229,7 +266,6 @@ function loadFallbackPlaylist() {
         loadSong(0);
     }
 }
-
 // 加载歌曲
 function loadSong(index) {
     if (index < 0 || index >= playlist.length || !audio) return;
@@ -246,7 +282,15 @@ function loadSong(index) {
     if (coverEl) coverEl.src = currentSong.cover || '';
 
     // 设置音频源（依然基于页面上的 <audio>）
-    audio.src = currentSong.url || '/assets/music/bgm.mp3';
+    var resolvedUrl = currentSong.url || defaultBgmUrl;
+    if (!resolvedUrl) {
+        audio.removeAttribute('src');
+        audio.load();
+        updatePlaylistUI();
+        return;
+    }
+
+    audio.src = resolvedUrl;
     audio.load();
 
     // 高亮当前播放的歌曲
@@ -398,7 +442,12 @@ function updatePlaylistUI() {
 
     if (!playlistElement || !countElement) return;
 
-    countElement.textContent = playlist.length + ' 首歌曲';
+    countElement.textContent = playlist.length + " songs";
+
+    if (playlist.length === 0) {
+        playlistElement.innerHTML = '<div class="playlist-item"><div class="playlist-content"><span class="playlist-title">暂无可播放歌曲</span></div></div>';
+        return;
+    }
 
     playlistElement.innerHTML = playlist.map(function (song, index) {
         var isActive = index === currentIndex ? 'active' : '';
@@ -413,7 +462,6 @@ function updatePlaylistUI() {
         );
     }).join('');
 
-    // 添加点击事件
     playlistElement.querySelectorAll('.playlist-item').forEach(function (item, index) {
         item.addEventListener('click', function () {
             loadSong(index);

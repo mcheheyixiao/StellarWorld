@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 $csrfToken = htmlspecialchars(
     $_SESSION['csrf_token'] ?? '',
     ENT_QUOTES,
@@ -793,7 +793,7 @@ function editTeamMember(id, username, role) {
 }
 
 (function () {
-    // 公告表单交互
+    // 闁稿浚鍓欓幉锛勬偘閵娿儱绀嬪ù婧垮€撶花?
     var form = document.querySelector('form[action="/admin/announcements/save"]');
     if (form) {
         form.addEventListener('change', function (e) {
@@ -806,7 +806,7 @@ function editTeamMember(id, username, role) {
         updatePublishUi(form);
     }
 
-    // Tabs 切换逻辑
+    // Tabs 闁告帒娲﹀畷鏌ユ焻閺勫繒甯?
     var tabButtons = document.querySelectorAll('.admin-tab-btn');
     var tabContents = document.querySelectorAll('.ta-tab-content');
 
@@ -820,7 +820,8 @@ function editTeamMember(id, username, role) {
         });
 
         tabButtons.forEach(function (btn) {
-            if (btn.getAttribute('data-tab-target') === targetId) {
+            var btnTarget = btn.getAttribute('data-tab-target');
+            if (btnTarget === targetId) {
                 btn.classList.add('active');
             } else {
                 btn.classList.remove('active');
@@ -828,16 +829,8 @@ function editTeamMember(id, username, role) {
         });
     }
 
-    tabButtons.forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var target = btn.getAttribute('data-tab-target');
-            if (target) {
-                activateTab(target);
-            }
-        });
-    });
 
-    // 根据 URL ?tab=xxx 选择初始 Tab
+    // 闁哄秷顫夊畵?URL ?tab=xxx 闂侇偄顦扮€氥劑宕氬┑鍡╂綏 Tab
     var params = new URLSearchParams(window.location.search);
     var initial = params.get('tab');
     var map = {
@@ -857,6 +850,34 @@ function editTeamMember(id, username, role) {
     if (!document.getElementById(initialId)) {
         initialId = 'tab-dashboard';
     }
+
+    var reverseMap = {};
+    Object.keys(map).forEach(function (key) {
+        var id = map[key];
+        if (!reverseMap[id]) {
+            reverseMap[id] = key;
+        }
+    });
+
+    tabButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var target = btn.getAttribute('data-tab-target');
+            if (!target) return;
+
+            var currentTabKey = reverseMap[initialId] || 'dashboard';
+            var targetTabKey = reverseMap[target] || 'dashboard';
+
+            if (targetTabKey !== currentTabKey) {
+                var nextParams = new URLSearchParams(window.location.search);
+                nextParams.set('tab', targetTabKey);
+                window.location.search = nextParams.toString();
+                return;
+            }
+
+            activateTab(target);
+        });
+    });
+
     activateTab(initialId);
 })();
 

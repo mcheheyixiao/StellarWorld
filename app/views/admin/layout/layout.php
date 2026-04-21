@@ -1,3 +1,31 @@
+<?php
+$renderAdminPagination = static function (array $meta, string $tab): void {
+    $currentPage = (int)($meta['page'] ?? 1);
+    $totalPages = (int)($meta['total_pages'] ?? 1);
+    $param = (string)($meta['param'] ?? 'page');
+
+    if ($totalPages <= 1) {
+        return;
+    }
+
+    $buildUrl = static function (int $page) use ($tab, $param): string {
+        $query = $_GET;
+        $query['tab'] = $tab;
+        $query[$param] = $page;
+        return '/admin?' . http_build_query($query);
+    };
+
+    $prevPage = max(1, $currentPage - 1);
+    $nextPage = min($totalPages, $currentPage + 1);
+    ?>
+    <div class="mt-4 flex items-center justify-end gap-2">
+        <a href="<?= htmlspecialchars($buildUrl($prevPage), ENT_QUOTES, 'UTF-8') ?>" class="ta-btn ta-btn-secondary <?= $currentPage <= 1 ? 'pointer-events-none opacity-50' : '' ?>">Prev</a>
+        <span class="ta-help-text">Page <?= $currentPage ?> / <?= $totalPages ?></span>
+        <a href="<?= htmlspecialchars($buildUrl($nextPage), ENT_QUOTES, 'UTF-8') ?>" class="ta-btn ta-btn-secondary <?= $currentPage >= $totalPages ? 'pointer-events-none opacity-50' : '' ?>">Next</a>
+    </div>
+    <?php
+};
+?>
 <div id="admin-main-content" class="space-y-6">
 
     <div id="tab-dashboard" class="ta-tab-content">
@@ -166,6 +194,7 @@
                         </tbody>
                     </table>
                 </div>
+                <?php $renderAdminPagination($playersPagination ?? [], 'players'); ?>
             </div>
         </div>
 
@@ -228,6 +257,7 @@
                 </table>
 
                 <h2>新建 / 编辑公告</h2>
+                <?php $renderAdminPagination($announcementsPagination ?? [], 'announcements'); ?>
                 <form method="post" action="/admin/announcements/save">
                     <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
                     <input type="hidden" name="id" value="">
@@ -322,6 +352,7 @@
                 </table>
 
                 <h2>新建 / 编辑纪事</h2>
+                <?php $renderAdminPagination($milestonesPagination ?? [], 'milestones'); ?>
                 <form method="post" action="/admin/milestones/save">
                     <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
                     <input type="hidden" name="id" value="">
@@ -400,6 +431,7 @@
                         </div>
                     <?php endforeach; ?>
                 </div>
+                <?php $renderAdminPagination($imagesPagination ?? [], 'gallery'); ?>
             </div>
         </div>
 
@@ -500,6 +532,7 @@
                 </div>
 
                 <h2>新建 / 编辑成员</h2>
+                <?php $renderAdminPagination($teamMembersPagination ?? [], 'team'); ?>
                 <form method="post" action="/admin/team-members/save">
                     <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
                     <input type="hidden" name="id" value="">
@@ -564,6 +597,7 @@
                 </table>
 
                 <h2>添加规则</h2>
+                <?php $renderAdminPagination($ipWhitelistPagination ?? [], 'ip-whitelist'); ?>
                 <form method="post" action="/admin/ip-whitelist/add">
                     <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
                     <div>
@@ -627,6 +661,7 @@
                 </table>
 
                 <h2>添加规则</h2>
+                <?php $renderAdminPagination($ipBlacklistPagination ?? [], 'ip-blacklist'); ?>
                 <form method="post" action="/admin/ip-blacklist/add">
                     <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
                     <div>

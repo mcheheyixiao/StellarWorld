@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Controller;
 
 use Core\Controller;
+use Core\BaiduSEO;
 use Core\Database;
 use Core\ImageProcessor;
 use Core\MinecraftUuid;
@@ -71,37 +72,139 @@ class AdminController extends Controller
         $userCount = (int)$db->query('SELECT COUNT(*) FROM users')->fetchColumn();
         $announcementCount = (int)$db->query('SELECT COUNT(*) FROM announcements')->fetchColumn();
         $galleryCount = (int)$db->query('SELECT COUNT(*) FROM gallery_images')->fetchColumn();
-        $players = $db->query('SELECT id, username, mc_username, mc_uuid, email, role, status, created_at, ip, regip, lastlogin, regdate FROM users ORDER BY created_at DESC')->fetchAll() ?: [];
-        $announcements = $db->query('SELECT * FROM announcements ORDER BY created_at DESC')->fetchAll() ?: [];
-        $milestones = $db->query('SELECT * FROM milestones ORDER BY created_at DESC, id DESC')->fetchAll() ?: [];
-        $images = $db->query('SELECT * FROM gallery_images ORDER BY created_at DESC')->fetchAll() ?: [];
 
+        $perPage = 20;
+        $readPage = static function (string $param): int {
+            $page = (int)($_GET[$param] ?? 1);
+            return $page > 0 ? $page : 1;
+        };
+        $buildPagination = static function (int $total, int $page, int $perPage, string $param): array {
+            $totalPages = max(1, (int)ceil($total / max(1, $perPage)));
+            $currentPage = min(max(1, $page), $totalPages);
+            return [
+                'page' => $currentPage,
+                'per_page' => $perPage,
+                'total' => $total,
+                'total_pages' => $totalPages,
+                'param' => $param,
+            ];
+        };
+
+        $activeTab = trim((string)($_GET['tab'] ?? 'dashboard'));
+        $allowedTabs = ['dashboard', 'realtime', 'players', 'announcements', 'milestones', 'gallery', 'site-settings', 'team', 'ip-whitelist', 'ip-blacklist'];
+        if (!in_array($activeTab, $allowedTabs, true)) {
+            $activeTab = 'dashboard';
+        }
+
+        $players = [];
+        $announcements = [];
+        $milestones = [];
+        $images = [];
         $ipBlacklist = [];
-        try {
-            $ipBlacklist = $db->query('SELECT id, ip_cidr, reason, created_at FROM ip_blacklist ORDER BY id DESC')->fetchAll() ?: [];
-        } catch (\Throwable $e) {
-            $ipBlacklist = [];
-        }
-
         $siteSettings = [];
-        try {
-            $siteSettings = $db->query('SELECT id, setting_key, setting_value, description FROM site_settings ORDER BY id ASC')->fetchAll() ?: [];
-        } catch (\Throwable $e) {
-            $siteSettings = [];
-        }
-
         $teamMembers = [];
-        try {
-            $teamMembers = $db->query('SELECT id, username, role, created_at FROM team_members ORDER BY id ASC')->fetchAll() ?: [];
-        } catch (\Throwable $e) {
-            $teamMembers = [];
+        $ipWhitelist = [];
+
+        $playersPagination = $buildPagination(0, 1, $perPage, 'players_page');
+        $announcementsPagination = $buildPagination(0, 1, $perPage, 'announcements_page');
+        $milestonesPagination = $buildPagination(0, 1, $perPage, 'milestones_page');
+        $imagesPagination = $buildPagination(0, 1, $perPage, 'gallery_page');
+        $ipBlacklistPagination = $buildPagination(0, 1, $perPage, 'blacklist_page');
+        $teamMembersPagination = $buildPagination(0, 1, $perPage, 'team_page');
+        $ipWhitelistPagination = $buildPagination(0, 1, $perPage, 'whitelist_page');
+
+        if ($activeTab === 'players') {
+            $playersPagination = $buildPagination($userCount, $readPage('players_page'), $perPage, 'players_page');
+            $playersOffset = ($playersPagination['page'] - 1) * $perPage;
+            $players = $db->query(sprintf(
+                'SELECT id, username, mc_username, mc_uuid, email, role, status, created_at, ip, regip, lastlogin, regdate FROM users ORDER BY created_at DESC LIMIT %d OFFSET %d',
+                $perPage,
+                $playersOffset
+            ))->fetchAll() ?: [];
         }
 
-        $ipWhitelist = [];
-        try {
-            $ipWhitelist = $db->query('SELECT id, ip_cidr, reason, created_at FROM ip_whitelist ORDER BY id DESC')->fetchAll() ?: [];
-        } catch (\Throwable $e) {
-            $ipWhitelist = [];
+        if ($activeTab === 'announcements') {
+            $announcementsPagination = $buildPagination($announcementCount, $readPage('announcements_page'), $perPage, 'announcements_page');
+            $announcementsOffset = ($announcementsPagination['page'] - 1) * $perPage;
+            $announcements = $db->query(sprintf(
+                'SELECT * FROM announcements ORDER BY created_at DESC LIMIT %d OFFSET %d',
+                $perPage,
+                $announcementsOffset
+            ))->fetchAll() ?: [];
+        }
+
+        if ($activeTab === 'milestones') {
+            $milestonesCount = (int)$db->query('SELECT COUNT(*) FROM milestones')->fetchColumn();
+            $milestonesPagination = $buildPagination($milestonesCount, $readPage('milestones_page'), $perPage, 'milestones_page');
+            $milestonesOffset = ($milestonesPagination['page'] - 1) * $perPage;
+            $milestones = $db->query(sprintf(
+                'SELECT * FROM milestones ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d',
+                $perPage,
+                $milestonesOffset
+            ))->fetchAll() ?: [];
+        }
+
+        if ($activeTab === 'gallery') {
+            $imagesPagination = $buildPagination($galleryCount, $readPage('gallery_page'), $perPage, 'gallery_page');
+            $imagesOffset = ($imagesPagination['page'] - 1) * $perPage;
+            $images = $db->query(sprintf(
+                'SELECT * FROM gallery_images ORDER BY created_at DESC LIMIT %d OFFSET %d',
+                $perPage,
+                $imagesOffset
+            ))->fetchAll() ?: [];
+        }
+
+        if ($activeTab === 'ip-blacklist') {
+            try {
+                $ipBlacklistCount = (int)$db->query('SELECT COUNT(*) FROM ip_blacklist')->fetchColumn();
+                $ipBlacklistPagination = $buildPagination($ipBlacklistCount, $readPage('blacklist_page'), $perPage, 'blacklist_page');
+                $ipBlacklistOffset = ($ipBlacklistPagination['page'] - 1) * $perPage;
+                $ipBlacklist = $db->query(sprintf(
+                    'SELECT id, ip_cidr, reason, created_at FROM ip_blacklist ORDER BY id DESC LIMIT %d OFFSET %d',
+                    $perPage,
+                    $ipBlacklistOffset
+                ))->fetchAll() ?: [];
+            } catch (\Throwable $e) {
+                $ipBlacklist = [];
+            }
+        }
+
+        if ($activeTab === 'site-settings') {
+            try {
+                $siteSettings = $db->query('SELECT id, setting_key, setting_value, description FROM site_settings ORDER BY id ASC')->fetchAll() ?: [];
+            } catch (\Throwable $e) {
+                $siteSettings = [];
+            }
+        }
+
+        if ($activeTab === 'team') {
+            try {
+                $teamMembersCount = (int)$db->query('SELECT COUNT(*) FROM team_members')->fetchColumn();
+                $teamMembersPagination = $buildPagination($teamMembersCount, $readPage('team_page'), $perPage, 'team_page');
+                $teamMembersOffset = ($teamMembersPagination['page'] - 1) * $perPage;
+                $teamMembers = $db->query(sprintf(
+                    'SELECT id, username, role, created_at FROM team_members ORDER BY id ASC LIMIT %d OFFSET %d',
+                    $perPage,
+                    $teamMembersOffset
+                ))->fetchAll() ?: [];
+            } catch (\Throwable $e) {
+                $teamMembers = [];
+            }
+        }
+
+        if ($activeTab === 'ip-whitelist') {
+            try {
+                $ipWhitelistCount = (int)$db->query('SELECT COUNT(*) FROM ip_whitelist')->fetchColumn();
+                $ipWhitelistPagination = $buildPagination($ipWhitelistCount, $readPage('whitelist_page'), $perPage, 'whitelist_page');
+                $ipWhitelistOffset = ($ipWhitelistPagination['page'] - 1) * $perPage;
+                $ipWhitelist = $db->query(sprintf(
+                    'SELECT id, ip_cidr, reason, created_at FROM ip_whitelist ORDER BY id DESC LIMIT %d OFFSET %d',
+                    $perPage,
+                    $ipWhitelistOffset
+                ))->fetchAll() ?: [];
+            } catch (\Throwable $e) {
+                $ipWhitelist = [];
+            }
         }
 
         return $this->render('admin/dashboard', [
@@ -110,16 +213,72 @@ class AdminController extends Controller
             'announcementCount' => $announcementCount,
             'galleryCount' => $galleryCount,
             'players' => $players,
+            'playersPagination' => $playersPagination,
             'announcements' => $announcements,
+            'announcementsPagination' => $announcementsPagination,
             'milestones' => $milestones,
+            'milestonesPagination' => $milestonesPagination,
             'images' => $images,
+            'imagesPagination' => $imagesPagination,
             'ipBlacklist' => $ipBlacklist,
+            'ipBlacklistPagination' => $ipBlacklistPagination,
             'siteSettings' => $siteSettings,
             'teamMembers' => $teamMembers,
+            'teamMembersPagination' => $teamMembersPagination,
             'ipWhitelist' => $ipWhitelist,
+            'ipWhitelistPagination' => $ipWhitelistPagination,
             'realtimePanelEnabled' => (bool)$realtimeWsConfig['enable_realtime_panel'],
             'realtimeWsConfig' => $realtimeWsConfig,
         ]);
+    }
+
+    /**
+     * 后台手动触发：百度“普通收录 -> API 提交”
+     */
+    public function manualSeoPush(): void
+    {
+        // 1) 管理员鉴权（构造器已校验，这里再做一次确保 Ajax 返回 JSON）
+        if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+            $this->json(['status' => false, 'message' => 'Unauthorized'], 403);
+            return;
+        }
+
+        // 2) CSRF 校验（Ajax 必须携带 csrf_token）
+        $this->validateCsrfToken();
+
+        try {
+            $seo = new BaiduSEO();
+            $urls = $seo->collectPublicUrls();
+            $pushRes = $seo->pushUrlsToBaidu($urls);
+
+            if (($pushRes['status'] ?? false) === true) {
+                $this->json([
+                    'status' => true,
+                    'urls_count' => count($urls),
+                    'success_count' => $pushRes['success_count'],
+                    'remain' => $pushRes['remain'],
+                    'not_same_site' => $pushRes['not_same_site'],
+                    'not_valid' => $pushRes['not_valid'],
+                    'message' => $pushRes['message'],
+                ]);
+                return;
+            }
+
+            $this->json([
+                'status' => false,
+                'urls_count' => count($urls),
+                'success_count' => $pushRes['success_count'] ?? 0,
+                'remain' => $pushRes['remain'] ?? null,
+                'not_same_site' => $pushRes['not_same_site'] ?? null,
+                'not_valid' => $pushRes['not_valid'] ?? null,
+                'message' => $pushRes['message'] ?? '百度推送失败',
+            ], 500);
+        } catch (\Throwable $e) {
+            $this->json([
+                'status' => false,
+                'message' => '系统异常：' . ($e->getMessage() !== '' ? $e->getMessage() : 'unknown'),
+            ], 500);
+        }
     }
 
     public function playerUpdate(): void
@@ -661,4 +820,3 @@ class AdminController extends Controller
         @file_get_contents($endpoint, false, $context);
     }
 }
-

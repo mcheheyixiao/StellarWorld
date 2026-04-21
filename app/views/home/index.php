@@ -32,7 +32,8 @@ if (is_file($aboutConfigPath)) {
                             <span>🏰</span>
                             <span>Minecraft 公益服务器</span>
                         </p>
-                        <h1 class="text-fusion-pixel text-3xl text-slate-900 dark:text-white md:text-5xl">繁星World · 中世纪冒险生存</h1>
+                        <h1 class="text-fusion-pixel text-3xl text-slate-900 dark:text-white md:text-5xl">繁星World</h1>
+                        <h1 class="text-fusion-pixel text-3xl text-slate-900 dark:text-white md:text-4xl">原版+中世纪冒险生存</h1>
                         <p class="mt-3 max-w-[520px] text-sm leading-relaxed text-slate-600 dark:text-slate-300 md:text-base">
                             用稳定、纯净、长期维护的方式做一个真正适合长期驻留的服务器。你可以慢慢建造，也可以和伙伴一起开荒探索。
                         </p>
@@ -44,11 +45,7 @@ if (is_file($aboutConfigPath)) {
                         </div>
 
                         <div class="mt-6 flex flex-wrap items-center gap-3">
-                            <button id="joinServerBtn" class="join-btn mc-btn mc-btn-primary js-join-server inline-flex w-full sm:w-auto items-center gap-2 rounded-2xl border border-cyan-200/45 border-opacity-10 px-5 py-3 text-sm font-semibold shadow-xl backdrop-blur-xl">
-                                <i class="mdi mdi-rocket-launch"></i>
-                                <span>🚀 立即加入服务器</span>
-                            </button>
-                            <button id="copyAddressBtn" class="copy-btn mc-btn mc-btn-secondary js-copy-ip inline-flex w-full sm:w-auto items-center gap-2 rounded-2xl border border-white/15 border-opacity-10 px-5 py-3 text-sm font-semibold shadow-xl backdrop-blur-xl">
+                            <button id="copyAddressBtn" class="copy-btn mc-btn mc-btn-primary js-copy-ip inline-flex w-full sm:w-auto items-center gap-2 rounded-2xl border border-cyan-200/45 border-opacity-10 px-5 py-3 text-sm font-semibold shadow-xl backdrop-blur-xl">
                                 <i class="mdi mdi-content-copy"></i>
                                 <span>📋 复制 IP</span>
                             </button>
@@ -151,14 +148,10 @@ if (is_file($aboutConfigPath)) {
             <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h2 class="text-fusion-pixel text-xl text-slate-900 dark:text-white md:text-2xl">🚀 立即加入服务器</h2>
-                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">第一步：加入群拿公告。第二步：复制 IP 进服。第三步：开荒或直接进城镇。</p>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">加入我们，一起在新的世界里开荒</p>
                 </div>
                 <div class="flex flex-wrap gap-3">
-                    <button id="joinServerBtnBottom" class="join-btn mc-btn mc-btn-primary js-join-server inline-flex items-center gap-2 rounded-2xl border border-cyan-200/45 border-opacity-10 px-5 py-3 text-sm font-semibold shadow-xl backdrop-blur-xl">
-                        <i class="mdi mdi-rocket-launch"></i>
-                        <span>🚀 立即加入服务器</span>
-                    </button>
-                    <button id="copyAddressBtnBottom" class="copy-btn mc-btn mc-btn-secondary js-copy-ip inline-flex items-center gap-2 rounded-2xl border border-slate-300/60 border-opacity-10 px-5 py-3 text-sm font-semibold shadow-xl backdrop-blur-xl dark:border-white/15">
+                    <button id="copyAddressBtnBottom" class="copy-btn mc-btn mc-btn-primary js-copy-ip inline-flex items-center gap-2 rounded-2xl border border-cyan-200/45 border-opacity-10 px-5 py-3 text-sm font-semibold shadow-xl backdrop-blur-xl">
                         <i class="mdi mdi-content-copy"></i>
                         <span>📋 复制 IP</span>
                     </button>
@@ -489,7 +482,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 .mc-hero-stage-bg {
     z-index: 0;
-    background-image: url('/images/HeroSection.png');
+    background-image: url('/images/HeroSection.webp');
     background-position: center;
     background-size: cover;
 }

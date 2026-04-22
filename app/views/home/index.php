@@ -561,6 +561,23 @@ document.addEventListener('DOMContentLoaded', function () {
     z-index: 2;
 }
 
+/* light theme hero background adaptation: reduce dark overlay and preserve warm sunset layers in Hero */
+:is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-stage-gradient {
+    background-image: linear-gradient(
+        to bottom,
+        rgba(248, 250, 252, 0.02) 0%,
+        rgba(255, 255, 255, 0.08) 48%,
+        rgba(248, 250, 252, 0.20) 100%
+    );
+}
+
+/* light theme hero background adaptation: add subtle warm highlight for better original-image fidelity */
+:is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-stage-glow {
+    background:
+        radial-gradient(circle at 16% 14%, rgba(251, 191, 36, 0.14), transparent 46%),
+        radial-gradient(circle at 84% 8%, rgba(249, 115, 22, 0.11), transparent 44%);
+}
+
 .mc-hero-stage-inner {
     min-height: min(82vh, 900px);
     display: flex;

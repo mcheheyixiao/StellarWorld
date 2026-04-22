@@ -89,6 +89,21 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
         <?php endif; ?>
 
         <!-- 玩家管理 Tab -->
+        <!-- Check-in Rewards Tab -->
+        <div id="tab-checkin-rewards" class="ta-tab-content tab-hidden">
+            <?php include BASE_PATH . '/app/views/admin/checkin/rewards.php'; ?>
+        </div>
+
+        <!-- Check-in Logs Tab -->
+        <div id="tab-checkin-logs" class="ta-tab-content tab-hidden">
+            <?php include BASE_PATH . '/app/views/admin/checkin/logs.php'; ?>
+        </div>
+
+        <!-- Check-in Stats Tab -->
+        <div id="tab-checkin-stats" class="ta-tab-content tab-hidden">
+            <?php include BASE_PATH . '/app/views/admin/checkin/stats.php'; ?>
+        </div>
+
         <div id="tab-players" class="ta-tab-content tab-hidden">
             <div class="ta-card">
                 <h1>玩家管理</h1>

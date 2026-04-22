@@ -72,12 +72,55 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 ?>
 
 <style>
+.profile-page-root {
+    color: var(--text-primary);
+}
 .profile-shell {
     display: grid;
     grid-template-columns: 1fr;
+    --profile-surface: var(--card-bg-soft);
+    --profile-surface-muted: var(--card-bg-muted);
+    --profile-border: var(--border-color-strong);
+    --profile-text: var(--text-primary);
+    --profile-muted: var(--text-muted);
 }
 .profile-sidebar {
-    border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+    border-bottom: 1px solid var(--profile-border);
+}
+.duration-200 {
+    transition-duration: 200ms;
+}
+.ease-in-out {
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bg-gray-100 {
+    background-color: var(--card-bg-muted) !important;
+}
+.text-gray-700 {
+    color: var(--text-primary) !important;
+}
+[data-theme="dark"] .dark\:bg-gray-800 {
+    background-color: var(--card-bg-muted) !important;
+}
+[data-theme="dark"] .dark\:text-gray-300 {
+    color: var(--text-primary) !important;
+}
+@media (hover: hover) {
+    .hover\:bg-blue-600:hover {
+        background-color: var(--primary-strong) !important;
+    }
+    .hover\:bg-slate-700\/80:hover {
+        background-color: var(--card-bg-muted) !important;
+    }
+    [data-theme="light"] .hover\:bg-slate-700\/80:hover {
+        background-color: var(--card-bg-muted) !important;
+    }
+    .hover\:bg-gray-200:hover {
+        background-color: var(--card-bg-muted) !important;
+    }
+    [data-theme="dark"] .dark\:hover\:bg-gray-700:hover {
+        background-color: var(--card-bg-muted) !important;
+    }
 }
 @media (min-width: 1024px) {
     .profile-shell {
@@ -86,13 +129,401 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
     }
     .profile-sidebar {
         border-bottom: 0;
-        border-right: 1px solid rgba(51, 65, 85, 0.8);
+        border-right: 1px solid var(--profile-border);
+    }
+}
+
+.profile-page-shell {
+    background: var(--profile-surface) !important;
+    border-color: var(--profile-border) !important;
+}
+
+.profile-page-root .profile-nav-btn.bg-slate-800\/70 {
+    background: var(--card-bg-muted) !important;
+    border: 1px solid var(--border-color);
+    color: var(--profile-text) !important;
+}
+
+.profile-page-root .profile-nav-btn.bg-blue-500 {
+    background: var(--primary) !important;
+    color: var(--on-primary) !important;
+    border: 1px solid color-mix(in srgb, var(--primary-strong) 75%, transparent);
+}
+
+.profile-page-root .profile-sidebar,
+.profile-page-root main > div,
+.profile-page-root [data-profile-panel] {
+    color: var(--profile-text);
+    border-color: var(--profile-border) !important;
+    background: var(--profile-surface-muted) !important;
+}
+
+.profile-page-root [data-profile-panel] p,
+.profile-page-root [data-profile-panel] span,
+.profile-page-root [data-profile-panel] label {
+    color: var(--profile-muted);
+}
+
+.profile-page-root [data-profile-panel] h3,
+.profile-page-root [data-profile-panel] h4,
+.profile-page-root [data-profile-panel] strong {
+    color: var(--profile-text);
+}
+
+.profile-shell button:not(:disabled) {
+    transition: all 0.2s ease;
+}
+
+.profile-shell button:not(:disabled):hover {
+    transform: translateY(-2px);
+}
+
+#panel-player .checkin-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 1rem;
+}
+
+#panel-player .checkin-card-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+#panel-player .checkin-card-main {
+    background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+    border: 1px solid var(--primary-strong);
+}
+
+#panel-player .checkin-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+#panel-player .checkin-card-status {
+    font-size: 0.8rem;
+    color: var(--on-primary);
+    background: var(--on-primary-soft-bg);
+    border: 1px solid var(--on-primary-soft-border);
+    border-radius: 999px;
+    padding: 0.2rem 0.6rem;
+    white-space: nowrap;
+}
+
+#panel-player .checkin-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.9rem;
+}
+
+#panel-player .checkin-kpi-grid::after {
+    content: "再签到 2 天可获得额外奖励";
+    grid-column: 1 / -1;
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.82rem;
+    color: var(--on-primary-muted);
+}
+
+#panel-player .checkin-kpi-item {
+    border-radius: 12px;
+    padding: 0.75rem;
+    background: var(--on-primary-panel-bg);
+    border: 1px solid var(--on-primary-panel-border);
+}
+
+#panel-player .checkin-kpi-item span {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--on-primary-muted);
+}
+
+#panel-player .checkin-kpi-item strong {
+    margin-top: 0.25rem;
+    display: block;
+    color: var(--on-primary);
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+#panel-player .checkin-streak-tip {
+    margin-top: 0.7rem;
+    font-size: 0.82rem;
+    color: var(--on-primary);
+}
+
+#panel-player .checkin-action-btn {
+    margin-top: 1rem;
+    width: 100%;
+    border: 0;
+    border-radius: 12px;
+    padding: 0.7rem 1rem;
+    font-weight: 600;
+    color: var(--on-primary);
+    cursor: pointer;
+}
+
+#panel-player .checkin-action-btn.is-idle {
+    background: linear-gradient(90deg, var(--primary), var(--primary-strong));
+    box-shadow: 0 0 15px var(--primary-glow);
+}
+
+#panel-player .checkin-action-btn.is-idle:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 0 22px var(--primary-glow);
+}
+
+#panel-player .checkin-action-btn.is-done {
+    background: linear-gradient(135deg, var(--button-done-from), var(--button-done-to));
+    box-shadow: 0 10px 20px -14px var(--border-color-strong);
+}
+
+#panel-player .checkin-reward-row {
+    margin-top: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+#panel-player .checkin-reward-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    padding: 0.45rem 0.8rem;
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    line-height: 1;
+}
+
+#panel-player .checkin-reward-item.reward-gold,
+#panel-player .checkin-reward-item:nth-child(1) {
+    background: var(--reward-gold-bg);
+    border-color: var(--reward-gold-border);
+    color: var(--reward-gold-text);
+}
+
+#panel-player .checkin-reward-item.reward-iron,
+#panel-player .checkin-reward-item:nth-child(2) {
+    background: var(--reward-iron-bg);
+    border-color: var(--reward-iron-border);
+    color: var(--reward-iron-text);
+}
+
+#panel-player .checkin-reward-icon {
+    font-size: 1.3rem;
+    line-height: 1;
+}
+
+#panel-player .checkin-reward-text {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+#panel-player .checkin-reward-label {
+    font-size: 0.82rem;
+    opacity: 0.85;
+}
+
+#panel-player .checkin-reward-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+#panel-player .checkin-calendar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+#panel-player .checkin-calendar-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+#panel-player .checkin-calendar-btn {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 10px;
+    border: 1px solid var(--border-color-strong);
+    background: var(--card-bg-muted);
+    color: var(--text-primary);
+}
+
+#panel-player .checkin-calendar-month {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+#panel-player .checkin-week-row {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.35rem;
+    margin-top: 0.9rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+#panel-player .checkin-calendar-grid {
+    margin-top: 0.45rem;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.35rem;
+}
+
+#panel-player .checkin-day {
+    min-height: 2.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    border: 1px solid var(--day-muted-border);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    background: var(--day-empty-bg);
+    cursor: default;
+}
+
+#panel-player .checkin-day.is-empty {
+    visibility: hidden;
+}
+
+#panel-player .checkin-day.is-missed {
+    background: var(--day-muted-bg);
+    border-color: var(--day-muted-border);
+    color: var(--day-muted-text);
+}
+
+#panel-player .checkin-day.is-signed {
+    background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+    box-shadow: 0 0 12px var(--primary-glow);
+    border-color: var(--primary-strong);
+    color: var(--on-primary);
+}
+
+#panel-player .checkin-day.is-today {
+    background: var(--day-today-bg);
+    border: 1px solid var(--day-today-border);
+    color: var(--day-today-text);
+    animation: checkinPulse 2s infinite;
+}
+
+#panel-player .checkin-day.is-clickable {
+    cursor: pointer;
+}
+
+#panel-player .checkin-day.is-clickable:hover {
+    filter: brightness(1.1);
+}
+
+#panel-player .checkin-calendar-legend {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+#panel-player .checkin-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+#panel-player .checkin-legend-dot {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 999px;
+    display: inline-block;
+}
+
+#panel-player .checkin-legend-dot.is-signed {
+    background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+    box-shadow: 0 0 8px var(--primary-glow);
+}
+
+#panel-player .checkin-legend-dot.is-today {
+    background: var(--day-today-border);
+    border: 1px solid var(--day-today-border);
+    animation: checkinPulse 2s infinite;
+}
+
+#panel-player .checkin-legend-dot.is-missed {
+    background: var(--day-muted-border);
+}
+
+#panel-player .checkin-history-toggle {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid var(--border-color-strong);
+    background: var(--card-bg-muted);
+    color: var(--text-primary);
+    font-weight: 600;
+    padding: 0.7rem 0.9rem;
+    text-align: left;
+}
+
+#panel-player .checkin-history-list {
+    margin-top: 0.75rem;
+}
+
+#panel-player .checkin-history-item {
+    border-radius: 12px;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font-size: 0.88rem;
+}
+
+#panel-player .checkin-history-empty {
+    border-radius: 12px;
+    padding: 0.65rem 0.75rem;
+    border: 1px dashed var(--border-color-strong);
+    background: var(--card-bg);
+    color: var(--text-muted);
+    font-size: 0.88rem;
+}
+
+@keyframes checkinPulse {
+    0% {
+        box-shadow: 0 0 0 0 var(--pulse-color);
+    }
+    70% {
+        box-shadow: 0 0 0 8px var(--pulse-fade);
+    }
+    100% {
+        box-shadow: 0 0 0 0 var(--pulse-fade);
+    }
+}
+
+@media (max-width: 640px) {
+    #panel-player .checkin-card-head,
+    #panel-player .checkin-calendar-head {
+        flex-direction: column;
+        align-items: flex-start;
     }
 }
 </style>
 
-<div class="max-w-7xl mx-auto p-4 md:p-6">
-    <div class="overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/85 shadow-2xl backdrop-blur">
+<div class="profile-page-root max-w-7xl mx-auto p-4 md:p-6">
+    <div class="profile-page-shell overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/85 shadow-2xl backdrop-blur">
         <div class="profile-shell">
             <aside class="profile-sidebar p-4 md:p-5 flex flex-col gap-4">
                 <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-center text-white">
@@ -112,10 +543,10 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                 </div>
 
                 <nav class="grid grid-cols-1 gap-2">
-                    <button type="button" data-profile-tab-btn data-target="panel-game" class="profile-nav-btn rounded-xl bg-blue-500 px-4 py-3 text-base font-medium text-white shadow transition-all hover:-translate-y-0.5 hover:shadow-md">游戏数据</button>
-                    <button type="button" data-profile-tab-btn data-target="panel-bind" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all hover:-translate-y-0.5 hover:shadow-md">账号绑定</button>
-                    <button type="button" data-profile-tab-btn data-target="panel-security" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all hover:-translate-y-0.5 hover:shadow-md">安全中心</button>
-                    <button type="button" data-profile-tab-btn data-target="panel-player" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all hover:-translate-y-0.5 hover:shadow-md">玩家功能</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-game" class="profile-nav-btn rounded-xl bg-blue-500 px-4 py-3 text-base font-medium text-white shadow transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-blue-600 hover:shadow-md">游戏数据</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-bind" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">账号绑定</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-security" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">安全中心</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-player" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">玩家功能</button>
                 </nav>
 
                 <div class="mt-auto rounded-xl border border-slate-700/80 bg-slate-800/60 p-3 text-xs text-slate-300">
@@ -207,7 +638,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                     >
                                     <button
                                         type="submit"
-                                        class="w-full rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                        class="w-full rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500 transition-all duration-200 ease-in-out hover:bg-blue-600 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
                                         <?= $canChangeMcName ? '' : 'disabled' ?>
                                     >
                                         保存角色绑定
@@ -226,7 +657,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                     <?php endif; ?>
                                 </p>
                                 <?php if (!$isMuaBound): ?>
-                                    <a href="/auth/mua" class="mt-4 inline-flex rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500">去绑定</a>
+                                    <a href="/auth/mua" class="mt-4 inline-flex rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500 transition-all duration-200 ease-in-out hover:bg-blue-600 hover:shadow-md">去绑定</a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -259,28 +690,138 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                     class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
                                 >
                             </div>
-                            <button type="submit" class="w-full rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500">更新密码</button>
+                            <button type="submit" class="w-full rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500 transition-all duration-200 ease-in-out hover:bg-blue-600 hover:shadow-md">更新密码</button>
                         </form>
 
                         <div class="mt-4 rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
-                            <button id="quick-reset-btn" type="button" class="w-full rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-slate-100 transition hover:bg-blue-500">
+                            <button id="quick-reset-btn" type="button" class="w-full rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 transition-all duration-200 ease-in-out hover:bg-blue-600 hover:shadow-md">
                                 忘记旧密码？向绑定邮箱 (<?= htmlspecialchars($emailMasked, ENT_QUOTES, 'UTF-8') ?>) 发送重置链接
                             </button>
                         </div>
                     </section>
 
                     <section id="panel-player" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
-                        <h3 class="text-lg font-semibold text-slate-100">D. 玩家功能</h3>
-                        <p class="mt-1 text-sm text-slate-400">每日签到领取积分或游戏内奖励。</p>
+                        <h3 class="text-lg font-semibold text-slate-100">D. 玩家签到系统</h3>
+                        <p class="mt-1 text-sm text-slate-400">展示静态签到界面与交互，不涉及真实数据写入。</p>
 
-                        <div class="mt-5 rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
-                            <button
-                                type="button"
-                                class="rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500"
-                                onclick="alert('签到系统正在开发中，敬请期待！')"
-                            >
-                                立即签到
-                            </button>
+                        <div class="player-checkin-wrap mt-5 space-y-4">
+                            <article class="checkin-card checkin-card-main">
+                                <div class="checkin-card-head">
+                                    <h4 class="checkin-card-title">每日签到</h4>
+                                    <span class="checkin-card-status" data-checkin-status>今日状态：未签到</span>
+                                </div>
+                                <div class="checkin-kpi-grid">
+                                    <div class="checkin-kpi-item">
+                                        <span>连续签到</span>
+                                        <strong data-checkin-streak>1 天</strong>
+                                    </div>
+                                    <div class="checkin-kpi-item">
+                                        <span>本月签到</span>
+                                        <strong data-checkin-month-count>1 次</strong>
+                                    </div>
+                                </div>
+                                <button type="button" class="checkin-action-btn is-idle" data-checkin-action data-state="idle">立即签到</button>
+                            </article>
+
+                            <article class="checkin-card checkin-card-reward">
+                                <h4 class="checkin-card-title">今日奖励</h4>
+                                <div class="checkin-reward-row">
+                                    <div class="checkin-reward-item">
+                                        <span class="checkin-reward-icon" aria-hidden="true">🪙</span>
+                                        <span class="checkin-reward-text">金币 x120</span>
+                                    </div>
+                                    <div class="checkin-reward-item">
+                                        <span class="checkin-reward-icon" aria-hidden="true">⛓️</span>
+                                        <span class="checkin-reward-text">铁锭 x10</span>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article class="checkin-card checkin-card-calendar">
+                                <div class="checkin-calendar-head">
+                                    <h4 class="checkin-card-title">签到日历</h4>
+                                    <div class="checkin-calendar-switch">
+                                        <button type="button" class="checkin-calendar-btn" aria-label="上一月（静态）">‹</button>
+                                        <span class="checkin-calendar-month">2026 年 4 月</span>
+                                        <button type="button" class="checkin-calendar-btn" aria-label="下一月（静态）">›</button>
+                                    </div>
+                                </div>
+                                <div class="checkin-week-row">
+                                    <span>一</span>
+                                    <span>二</span>
+                                    <span>三</span>
+                                    <span>四</span>
+                                    <span>五</span>
+                                    <span>六</span>
+                                    <span>日</span>
+                                </div>
+                                <div class="checkin-calendar-grid">
+                                    <div class="checkin-day is-empty"></div>
+                                    <div class="checkin-day is-empty"></div>
+                                    <div class="checkin-day is-signed">1</div>
+                                    <div class="checkin-day is-signed">2</div>
+                                    <div class="checkin-day is-signed">3</div>
+                                    <div class="checkin-day is-signed">4</div>
+                                    <div class="checkin-day is-missed">5</div>
+                                    <div class="checkin-day is-missed">6</div>
+                                    <div class="checkin-day is-signed">7</div>
+                                    <div class="checkin-day is-missed">8</div>
+                                    <div class="checkin-day is-signed">9</div>
+                                    <div class="checkin-day is-signed">10</div>
+                                    <div class="checkin-day is-missed">11</div>
+                                    <div class="checkin-day is-missed">12</div>
+                                    <div class="checkin-day is-missed">13</div>
+                                    <div class="checkin-day is-signed">14</div>
+                                    <div class="checkin-day is-missed">15</div>
+                                    <div class="checkin-day is-missed">16</div>
+                                    <div class="checkin-day is-signed">17</div>
+                                    <div class="checkin-day is-missed">18</div>
+                                    <div class="checkin-day is-today">19</div>
+                                    <div class="checkin-day is-missed">20</div>
+                                    <div class="checkin-day is-missed">21</div>
+                                    <div class="checkin-day is-missed">22</div>
+                                    <div class="checkin-day is-missed">23</div>
+                                    <div class="checkin-day is-missed">24</div>
+                                    <div class="checkin-day is-missed">25</div>
+                                    <div class="checkin-day is-missed">26</div>
+                                    <div class="checkin-day is-missed">27</div>
+                                    <div class="checkin-day is-missed">28</div>
+                                    <div class="checkin-day is-missed">29</div>
+                                    <div class="checkin-day is-missed">30</div>
+                                    <div class="checkin-day is-empty"></div>
+                                    <div class="checkin-day is-empty"></div>
+                                    <div class="checkin-day is-empty"></div>
+                                </div>
+                                <div class="checkin-calendar-legend">
+                                    <span class="checkin-legend-item">
+                                        <i class="checkin-legend-dot is-signed"></i>
+                                        已签到
+                                    </span>
+                                    <span class="checkin-legend-item">
+                                        <i class="checkin-legend-dot is-today"></i>
+                                        今日
+                                    </span>
+                                    <span class="checkin-legend-item">
+                                        <i class="checkin-legend-dot is-missed"></i>
+                                        未签到
+                                    </span>
+                                </div>
+                            </article>
+
+                            <article class="checkin-card checkin-card-history">
+                                <button
+                                    type="button"
+                                    class="checkin-history-toggle"
+                                    data-checkin-history-toggle
+                                    aria-expanded="false"
+                                    aria-controls="checkin-history-list"
+                                >
+                                    最近记录
+                                </button>
+                                <div id="checkin-history-list" class="checkin-history-list" hidden>
+                                    <div class="checkin-history-item">2026-04-17 +120金币</div>
+                                </div>
+                            </article>
                         </div>
                     </section>
                 </div>
@@ -374,6 +915,81 @@ document.addEventListener('DOMContentLoaded', () => {
         panel.style.display = 'none';
     });
     setActiveTab('panel-game');
+})();
+</script>
+<script>
+(() => {
+    const actionBtn = document.querySelector('[data-checkin-action]');
+    const statusText = document.querySelector('[data-checkin-status]');
+    const streakText = document.querySelector('[data-checkin-streak]');
+    const monthCountText = document.querySelector('[data-checkin-month-count]');
+    const historyToggle = document.querySelector('[data-checkin-history-toggle]');
+    const historyList = document.getElementById('checkin-history-list');
+    let historyEmpty = historyList ? historyList.querySelector('[data-checkin-history-empty]') : null;
+    const rewardTexts = document.querySelectorAll('#panel-player .checkin-reward-text');
+
+    rewardTexts.forEach((node) => {
+        if (!node || node.querySelector('.checkin-reward-value')) return;
+        const raw = (node.textContent || '').trim();
+        const matched = raw.match(/^(.+?)\s*x\s*(\d+)$/i);
+        if (!matched) return;
+        const label = document.createElement('span');
+        label.className = 'checkin-reward-label';
+        label.textContent = matched[1].trim();
+        const value = document.createElement('strong');
+        value.className = 'checkin-reward-value';
+        value.textContent = matched[2];
+        node.textContent = '';
+        node.appendChild(label);
+        node.appendChild(value);
+    });
+
+    const syncHistoryEmptyState = () => {
+        if (!historyList) return;
+        if (!historyEmpty) {
+            historyEmpty = document.createElement('div');
+            historyEmpty.className = 'checkin-history-empty';
+            historyEmpty.setAttribute('data-checkin-history-empty', 'true');
+            historyEmpty.textContent = '暂无签到记录';
+            historyList.appendChild(historyEmpty);
+        }
+        const hasHistoryItem = historyList.querySelector('[data-checkin-history-item], .checkin-history-item') !== null;
+        historyEmpty.hidden = hasHistoryItem;
+    };
+
+    const applyCheckinState = (isDone) => {
+        if (!actionBtn || !statusText) return;
+
+        actionBtn.dataset.state = isDone ? 'done' : 'idle';
+        actionBtn.classList.toggle('is-idle', !isDone);
+        actionBtn.classList.toggle('is-done', isDone);
+        actionBtn.textContent = isDone ? '今日已签到' : '立即签到';
+        statusText.textContent = isDone ? '今日状态：已签到' : '今日状态：未签到';
+
+        if (streakText) {
+            streakText.textContent = isDone ? '2 天' : '1 天';
+        }
+        if (monthCountText) {
+            monthCountText.textContent = isDone ? '2 次' : '1 次';
+        }
+    };
+
+    if (actionBtn) {
+        actionBtn.addEventListener('click', () => {
+            const done = actionBtn.dataset.state === 'done';
+            applyCheckinState(!done);
+        });
+        applyCheckinState(false);
+    }
+
+    if (historyToggle && historyList) {
+        syncHistoryEmptyState();
+        historyToggle.addEventListener('click', () => {
+            const willExpand = historyList.hidden;
+            historyList.hidden = !willExpand;
+            historyToggle.setAttribute('aria-expanded', String(willExpand));
+        });
+    }
 })();
 </script>
 <script>

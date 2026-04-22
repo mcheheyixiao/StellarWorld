@@ -42,7 +42,7 @@ $adminHeaderAvatarFallback = '/images/owner_avatar.png';
 
                 <div id="admin-user-menu-dropdown" class="ta-admin-user-dropdown absolute right-0 mt-2 hidden w-48" role="menu">
                     <a href="/" class="ta-admin-user-link">返回站点</a>
-                    <button type="button" class="ta-admin-user-link ta-admin-user-link-btn">个人设置</button>
+                    <a href="/profile" class="ta-admin-user-link">个人设置</a>
                 </div>
             </div>
         </div>

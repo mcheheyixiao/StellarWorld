@@ -125,6 +125,24 @@ $csrfToken = htmlspecialchars(
 .ta-sidebar-item.active {
     background: rgba(255, 255, 255, 0.2);
 }
+.ta-sidebar-group {
+    margin: 0.35rem 0 0.7rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 0.65rem;
+    padding: 0.45rem 0.45rem 0.35rem;
+    background: rgba(2, 6, 23, 0.14);
+}
+.ta-sidebar-group-label {
+    margin: 0 0 0.35rem;
+    padding: 0 0.35rem;
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.72);
+}
+.ta-sidebar-subitem {
+    font-size: 0.83rem;
+    padding-left: 0.6rem;
+}
 .ta-admin-header-modern {
     position: sticky;
     top: 0;
@@ -443,6 +461,243 @@ $csrfToken = htmlspecialchars(
 }
 .ta-tab-content.tab-hidden {
     display: none !important;
+}
+.ta-checkin-page .ta-card {
+    border-radius: 0.95rem;
+}
+.ta-checkin-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin-bottom: 0.55rem;
+}
+.ta-checkin-weekdays span {
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--ta-text-muted);
+}
+.ta-checkin-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+.ta-checkin-day {
+    min-height: 92px;
+    border: 1px solid rgba(148, 163, 184, 0.34);
+    border-radius: 0.72rem;
+    padding: 0.6rem 0.52rem;
+    background: rgba(148, 163, 184, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    text-align: left;
+    transition: all 0.2s ease;
+}
+.ta-checkin-day:hover {
+    transform: scale(1.02);
+}
+.ta-checkin-day--placeholder {
+    pointer-events: none;
+    min-height: 92px;
+    border-style: dashed;
+    opacity: 0.45;
+}
+.ta-checkin-day--modified {
+    border-color: rgba(59, 130, 246, 0.78);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+}
+.ta-checkin-day--today {
+    border-color: rgba(56, 189, 248, 0.95);
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35), 0 0 24px -12px rgba(56, 189, 248, 0.92);
+}
+.ta-checkin-day--selected {
+    background: var(--ta-accent-soft-bg);
+}
+.ta-checkin-day-number {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--ta-text-strong);
+}
+.ta-checkin-day-line {
+    font-size: 0.78rem;
+    color: var(--ta-text-body);
+}
+.ta-checkin-preview-card {
+    height: fit-content;
+    position: sticky;
+    top: 1rem;
+}
+.ta-checkin-preview-line {
+    font-size: 0.85rem;
+    color: var(--ta-text-body);
+}
+.ta-checkin-json-preview {
+    background: var(--ta-surface-input);
+    border: 1px solid var(--ta-border-strong);
+    border-radius: 0.72rem;
+    padding: 0.7rem;
+    max-height: 310px;
+    overflow: auto;
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+.ta-checkin-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+.ta-checkin-modal.hidden {
+    display: none !important;
+}
+.ta-checkin-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.62);
+    backdrop-filter: blur(3px);
+}
+.ta-checkin-modal-panel {
+    position: relative;
+    width: min(760px, 100%);
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    z-index: 1;
+}
+.ta-checkin-input-card {
+    border: 1px solid var(--ta-border);
+    border-radius: 0.7rem;
+    background: rgba(148, 163, 184, 0.08);
+    padding: 0.55rem;
+    display: grid;
+    gap: 0.45rem;
+}
+.ta-checkin-scope-option {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 1px solid var(--ta-border);
+    border-radius: 0.6rem;
+    padding: 0.55rem 0.65rem;
+    background: rgba(148, 163, 184, 0.08);
+}
+.ta-checkin-status-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.76rem;
+    border: 1px solid var(--ta-border-strong);
+}
+.ta-checkin-status-pill--done {
+    color: #22c55e;
+    border-color: rgba(34, 197, 94, 0.48);
+    background: rgba(34, 197, 94, 0.12);
+}
+.ta-checkin-status-pill--pending {
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.45);
+    background: rgba(245, 158, 11, 0.12);
+}
+.ta-checkin-stat-card {
+    min-height: 115px;
+}
+.ta-checkin-stat-value {
+    margin-top: 0.45rem;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--ta-text-strong);
+}
+.ta-checkin-chart-surface {
+    min-height: 220px;
+    border: 1px dashed var(--ta-border-strong);
+    border-radius: 0.8rem;
+    padding: 0.85rem;
+    background: linear-gradient(180deg, rgba(14, 165, 233, 0.1), rgba(148, 163, 184, 0.04));
+}
+.ta-checkin-line-chart {
+    position: relative;
+    height: 180px;
+}
+.ta-checkin-line-chart::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    border-bottom: 2px solid rgba(56, 189, 248, 0.4);
+}
+.ta-checkin-line-dot {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(56, 189, 248, 0.95);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+}
+.ta-checkin-line-dot:nth-child(1) { left: 5%; }
+.ta-checkin-line-dot:nth-child(2) { left: 20%; }
+.ta-checkin-line-dot:nth-child(3) { left: 35%; }
+.ta-checkin-line-dot:nth-child(4) { left: 50%; }
+.ta-checkin-line-dot:nth-child(5) { left: 65%; }
+.ta-checkin-line-dot:nth-child(6) { left: 80%; }
+.ta-checkin-line-dot:nth-child(7) { left: 95%; }
+.ta-checkin-bar-chart {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.ta-checkin-bar-col {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+}
+.ta-checkin-bar {
+    display: block;
+    width: 100%;
+    border-radius: 0.5rem 0.5rem 0.35rem 0.35rem;
+    background: linear-gradient(180deg, rgba(59, 130, 246, 0.95), rgba(14, 165, 233, 0.7));
+}
+.ta-checkin-bar-label {
+    font-size: 0.72rem;
+    color: var(--ta-text-muted);
+}
+.ta-checkin-player-card {
+    border: 1px solid var(--ta-border);
+    border-radius: 0.72rem;
+    background: rgba(148, 163, 184, 0.08);
+    padding: 0.8rem;
+}
+.ta-checkin-player-value {
+    margin-top: 0.35rem;
+    color: var(--ta-text-strong);
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+.ta-checkin-player-value--time {
+    font-size: 0.95rem;
+}
+@media (max-width: 1023px) {
+    .ta-checkin-preview-card {
+        position: static;
+    }
+}
+@media (min-width: 768px) {
+    .ta-checkin-input-card {
+        grid-template-columns: 1fr 140px auto;
+        align-items: center;
+    }
+    .ta-checkin-input-card input[data-checkin-command-text] {
+        grid-column: 1 / span 2;
+    }
 }
 .ta-realtime-panel {
     display: grid;
@@ -836,6 +1091,9 @@ function editTeamMember(id, username, role) {
     var map = {
         dashboard: 'tab-dashboard',
         realtime: 'tab-realtime',
+        'checkin-rewards': 'tab-checkin-rewards',
+        'checkin-logs': 'tab-checkin-logs',
+        'checkin-stats': 'tab-checkin-stats',
         players: 'tab-players',
         users: 'tab-players',
         announcements: 'tab-announcements',

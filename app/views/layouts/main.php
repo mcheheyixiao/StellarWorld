@@ -50,28 +50,105 @@ foreach ($backgroundImages as $rel) {
     <noscript><link rel="stylesheet" href="https://cdn.staticfile.net/MaterialDesign-Webfont/7.4.47/css/materialdesignicons.min.css"></noscript>
     <link rel="stylesheet" href="/styles/tailwind-dist.css">
     <style>
-        :root {
-            --mc-bg: #f8fafc;
-            --mc-bg-alt: #eef2ff;
-            --mc-surface: #ffffff;
-            --mc-surface-soft: rgba(255, 255, 255, 0.86);
-            --mc-border: #e2e8f0;
-            --mc-text: #0f172a;
-            --mc-muted: #475569;
-            --mc-accent: #22d3ee;
-            --mc-accent-strong: #0891b2;
-            --mc-glow: rgba(34, 211, 238, 0.3);
+        :root,
+        html.light,
+        html[data-theme="light"] {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #eef2ff;
+            --text-primary: #0f172a;
+            --text-muted: #475569;
+            --card-bg: #ffffff;
+            --card-bg-soft: rgba(255, 255, 255, 0.86);
+            --card-bg-muted: rgba(248, 250, 252, 0.96);
+            --border-color: rgba(0, 0, 0, 0.08);
+            --border-color-strong: rgba(15, 23, 42, 0.16);
+            --primary: #3b82f6;
+            --primary-strong: #2563eb;
+            --primary-glow: rgba(59, 130, 246, 0.5);
+            --button-done-from: #6b7280;
+            --button-done-to: #4b5563;
+            --on-primary: #ffffff;
+            --on-primary-muted: rgba(255, 255, 255, 0.86);
+            --on-primary-soft-bg: rgba(2, 6, 23, 0.24);
+            --on-primary-soft-border: rgba(255, 255, 255, 0.35);
+            --on-primary-panel-bg: rgba(2, 6, 23, 0.28);
+            --on-primary-panel-border: rgba(255, 255, 255, 0.3);
+            --day-muted-bg: rgba(100, 116, 139, 0.28);
+            --day-muted-border: rgba(100, 116, 139, 0.5);
+            --day-muted-text: #64748b;
+            --day-empty-bg: rgba(100, 116, 139, 0.25);
+            --day-today-bg: rgba(30, 64, 175, 0.36);
+            --day-today-border: #60a5fa;
+            --day-today-text: #1e3a8a;
+            --pulse-color: rgba(59, 130, 246, 0.6);
+            --pulse-fade: rgba(59, 130, 246, 0);
+            --reward-gold-bg: rgba(250, 204, 21, 0.18);
+            --reward-gold-border: rgba(234, 179, 8, 0.45);
+            --reward-gold-text: #854d0e;
+            --reward-iron-bg: rgba(148, 163, 184, 0.18);
+            --reward-iron-border: rgba(100, 116, 139, 0.4);
+            --reward-iron-text: #334155;
+
+            --mc-bg: var(--bg-primary);
+            --mc-bg-alt: var(--bg-secondary);
+            --mc-surface: var(--card-bg);
+            --mc-surface-soft: var(--card-bg-soft);
+            --mc-border: var(--border-color);
+            --mc-text: var(--text-primary);
+            --mc-muted: var(--text-muted);
+            --mc-accent: var(--primary);
+            --mc-accent-strong: var(--primary-strong);
+            --mc-glow: var(--primary-glow);
         }
 
-        html.dark {
-            --mc-bg: #020617;
-            --mc-bg-alt: #0b1120;
-            --mc-surface: rgba(15, 23, 42, 0.6);
-            --mc-surface-soft: rgba(15, 23, 42, 0.76);
-            --mc-border: rgba(255, 255, 255, 0.08);
-            --mc-text: #e2e8f0;
-            --mc-muted: #94a3b8;
-            --mc-glow: rgba(34, 211, 238, 0.4);
+        html.dark,
+        html[data-theme="dark"] {
+            --bg-primary: #020617;
+            --bg-secondary: #0b1120;
+            --text-primary: #e2e8f0;
+            --text-muted: #94a3b8;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-bg-soft: rgba(15, 23, 42, 0.76);
+            --card-bg-muted: rgba(15, 23, 42, 0.6);
+            --border-color: rgba(255, 255, 255, 0.06);
+            --border-color-strong: rgba(148, 163, 184, 0.3);
+            --primary: #3b82f6;
+            --primary-strong: #2563eb;
+            --primary-glow: rgba(59, 130, 246, 0.45);
+            --button-done-from: #64748b;
+            --button-done-to: #475569;
+            --on-primary: #ffffff;
+            --on-primary-muted: rgba(255, 255, 255, 0.86);
+            --on-primary-soft-bg: rgba(2, 6, 23, 0.24);
+            --on-primary-soft-border: rgba(255, 255, 255, 0.35);
+            --on-primary-panel-bg: rgba(2, 6, 23, 0.28);
+            --on-primary-panel-border: rgba(255, 255, 255, 0.3);
+            --day-muted-bg: rgba(100, 116, 139, 0.28);
+            --day-muted-border: rgba(100, 116, 139, 0.5);
+            --day-muted-text: #94a3b8;
+            --day-empty-bg: rgba(100, 116, 139, 0.25);
+            --day-today-bg: rgba(30, 64, 175, 0.36);
+            --day-today-border: #60a5fa;
+            --day-today-text: #dbeafe;
+            --pulse-color: rgba(59, 130, 246, 0.6);
+            --pulse-fade: rgba(59, 130, 246, 0);
+            --reward-gold-bg: rgba(250, 204, 21, 0.2);
+            --reward-gold-border: rgba(250, 204, 21, 0.45);
+            --reward-gold-text: #fef08a;
+            --reward-iron-bg: rgba(148, 163, 184, 0.2);
+            --reward-iron-border: rgba(148, 163, 184, 0.4);
+            --reward-iron-text: #e2e8f0;
+
+            --mc-bg: var(--bg-primary);
+            --mc-bg-alt: var(--bg-secondary);
+            --mc-surface: var(--card-bg-muted);
+            --mc-surface-soft: var(--card-bg-soft);
+            --mc-border: var(--border-color);
+            --mc-text: var(--text-primary);
+            --mc-muted: var(--text-muted);
+            --mc-accent: var(--primary);
+            --mc-accent-strong: var(--primary-strong);
+            --mc-glow: var(--primary-glow);
         }
 
         body {

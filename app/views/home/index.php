@@ -144,6 +144,70 @@ if (is_file($aboutConfigPath)) {
             </div>
         </section>
 
+        <section id="core-systems" class="mc-glass-card mc-card-tier-2 reveal-on-scroll rounded-2xl border border-white/10 border-opacity-10 p-6 shadow-xl backdrop-blur-xl md:p-8">
+            <div class="mb-5">
+                <h2 class="text-fusion-pixel text-xl text-slate-900 dark:text-white">📊 核心系统</h2>
+                <p class="mt-2 max-w-4xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">围绕生存、定居、交易与协作构建的长期循环，让这个世界不仅能开荒，也值得久住。</p>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <article class="mc-hover-lift h-full rounded-2xl border border-white/10 border-opacity-10 bg-white/80 p-6 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl dark:border-white/15 dark:bg-slate-900/72">
+                    <h3 class="text-base font-semibold text-slate-900 dark:text-white">💰 经济系统</h3>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">通过采集、建造、探索与交易获得收益，让资源与时间投入都具备长期价值。</p>
+                </article>
+                <article class="mc-hover-lift h-full rounded-2xl border border-white/10 border-opacity-10 bg-white/80 p-6 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl dark:border-white/15 dark:bg-slate-900/72">
+                    <h3 class="text-base font-semibold text-slate-900 dark:text-white">🏘️ 城镇系统</h3>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">从个人生存走向聚落协作，在建设、分工与定居中形成真正的社区归属感。</p>
+                </article>
+                <article class="mc-hover-lift h-full rounded-2xl border border-white/10 border-opacity-10 bg-white/80 p-6 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl dark:border-white/15 dark:bg-slate-900/72">
+                    <h3 class="text-base font-semibold text-slate-900 dark:text-white">⚖️ 生存秩序</h3>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">强调公平生态、稳定运营与长期保留，不做快餐式消耗服。</p>
+                </article>
+                <article class="mc-hover-lift h-full rounded-2xl border border-white/10 border-opacity-10 bg-white/80 p-6 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl dark:border-white/15 dark:bg-slate-900/72">
+                    <h3 class="text-base font-semibold text-slate-900 dark:text-white">📈 成长路径</h3>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">从开荒到发展，再到参与聚落与社区，每一阶段都有明确目标与空间。</p>
+                </article>
+            </div>
+        </section>
+
+        <section id="newbie-guide" class="mc-glass-card mc-card-tier-3 reveal-on-scroll rounded-2xl border border-white/10 border-opacity-10 p-6 shadow-xl backdrop-blur-xl md:p-8">
+            <div class="mb-5">
+                <h2 class="text-fusion-pixel text-xl text-slate-900 dark:text-white">📜 新手引导</h2>
+                <p class="mt-2 max-w-4xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">不需要一进服就懂完所有内容，你只需要按自己的节奏迈出第一步。</p>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <article class="h-full rounded-2xl border border-white/10 border-opacity-10 bg-white/80 p-6 shadow-xl backdrop-blur-xl dark:border-white/15 dark:bg-slate-900/72">
+                    <div class="flex items-center gap-3">
+                        <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-cyan-300/45 border-opacity-10 bg-cyan-500/10 text-base font-semibold text-cyan-700 shadow-xl backdrop-blur-xl dark:text-cyan-200">①</span>
+                        <h3 class="text-base font-semibold text-slate-900 dark:text-white">进入世界</h3>
+                    </div>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">从出生点开始认识服务器，快速了解规则、方向与主要玩法。</p>
+                </article>
+                <article class="h-full rounded-2xl border border-white/10 border-opacity-10 bg-white/80 p-6 shadow-xl backdrop-blur-xl dark:border-white/15 dark:bg-slate-900/72">
+                    <div class="flex items-center gap-3">
+                        <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-cyan-300/45 border-opacity-10 bg-cyan-500/10 text-base font-semibold text-cyan-700 shadow-xl backdrop-blur-xl dark:text-cyan-200">②</span>
+                        <h3 class="text-base font-semibold text-slate-900 dark:text-white">开始生存</h3>
+                    </div>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">收集资源、搭建庇护所，完成属于自己的第一段原版开荒。</p>
+                </article>
+                <article class="h-full rounded-2xl border border-white/10 border-opacity-10 bg-white/80 p-6 shadow-xl backdrop-blur-xl dark:border-white/15 dark:bg-slate-900/72">
+                    <div class="flex items-center gap-3">
+                        <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-cyan-300/45 border-opacity-10 bg-cyan-500/10 text-base font-semibold text-cyan-700 shadow-xl backdrop-blur-xl dark:text-cyan-200">③</span>
+                        <h3 class="text-base font-semibold text-slate-900 dark:text-white">融入社区</h3>
+                    </div>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">加入聚落、结识伙伴，或与朋友一起寻找适合长期发展的定居点。</p>
+                </article>
+                <article class="h-full rounded-2xl border border-white/10 border-opacity-10 bg-white/80 p-6 shadow-xl backdrop-blur-xl dark:border-white/15 dark:bg-slate-900/72">
+                    <div class="flex items-center gap-3">
+                        <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-cyan-300/45 border-opacity-10 bg-cyan-500/10 text-base font-semibold text-cyan-700 shadow-xl backdrop-blur-xl dark:text-cyan-200">④</span>
+                        <h3 class="text-base font-semibold text-slate-900 dark:text-white">长期发展</h3>
+                    </div>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">当你拥有稳定据点后，交易、建设、探索与社区活动才会真正展开。</p>
+                </article>
+            </div>
+        </section>
+
         <section class="mc-glass-card mc-card-tier-1 reveal-on-scroll rounded-2xl border border-cyan-300/30 border-opacity-10 p-6 shadow-xl backdrop-blur-xl md:p-8">
             <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>

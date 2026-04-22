@@ -79,6 +79,41 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 .profile-sidebar {
     border-bottom: 1px solid rgba(51, 65, 85, 0.8);
 }
+.duration-200 {
+    transition-duration: 200ms;
+}
+.ease-in-out {
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bg-gray-100 {
+    background-color: #f3f4f6 !important;
+}
+.text-gray-700 {
+    color: #374151 !important;
+}
+[data-theme="dark"] .dark\:bg-gray-800 {
+    background-color: #1f2937 !important;
+}
+[data-theme="dark"] .dark\:text-gray-300 {
+    color: #d1d5db !important;
+}
+@media (hover: hover) {
+    .hover\:bg-blue-600:hover {
+        background-color: #2563eb !important;
+    }
+    .hover\:bg-slate-700\/80:hover {
+        background-color: rgba(51, 65, 85, 0.8) !important;
+    }
+    [data-theme="light"] .hover\:bg-slate-700\/80:hover {
+        background-color: rgba(226, 232, 240, 0.9) !important;
+    }
+    .hover\:bg-gray-200:hover {
+        background-color: #e5e7eb !important;
+    }
+    [data-theme="dark"] .dark\:hover\:bg-gray-700:hover {
+        background-color: #374151 !important;
+    }
+}
 @media (min-width: 1024px) {
     .profile-shell {
         grid-template-columns: 280px minmax(0, 1fr);
@@ -112,10 +147,10 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                 </div>
 
                 <nav class="grid grid-cols-1 gap-2">
-                    <button type="button" data-profile-tab-btn data-target="panel-game" class="profile-nav-btn rounded-xl bg-blue-500 px-4 py-3 text-base font-medium text-white shadow transition-all hover:-translate-y-0.5 hover:shadow-md">游戏数据</button>
-                    <button type="button" data-profile-tab-btn data-target="panel-bind" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all hover:-translate-y-0.5 hover:shadow-md">账号绑定</button>
-                    <button type="button" data-profile-tab-btn data-target="panel-security" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all hover:-translate-y-0.5 hover:shadow-md">安全中心</button>
-                    <button type="button" data-profile-tab-btn data-target="panel-player" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all hover:-translate-y-0.5 hover:shadow-md">玩家功能</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-game" class="profile-nav-btn rounded-xl bg-blue-500 px-4 py-3 text-base font-medium text-white shadow transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-blue-600 hover:shadow-md">游戏数据</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-bind" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">账号绑定</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-security" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">安全中心</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-player" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">玩家功能</button>
                 </nav>
 
                 <div class="mt-auto rounded-xl border border-slate-700/80 bg-slate-800/60 p-3 text-xs text-slate-300">
@@ -207,7 +242,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                     >
                                     <button
                                         type="submit"
-                                        class="w-full rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                        class="w-full rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500 transition-all duration-200 ease-in-out hover:bg-blue-600 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
                                         <?= $canChangeMcName ? '' : 'disabled' ?>
                                     >
                                         保存角色绑定
@@ -226,7 +261,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                     <?php endif; ?>
                                 </p>
                                 <?php if (!$isMuaBound): ?>
-                                    <a href="/auth/mua" class="mt-4 inline-flex rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500">去绑定</a>
+                                    <a href="/auth/mua" class="mt-4 inline-flex rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500 transition-all duration-200 ease-in-out hover:bg-blue-600 hover:shadow-md">去绑定</a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -259,11 +294,11 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                     class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
                                 >
                             </div>
-                            <button type="submit" class="w-full rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500">更新密码</button>
+                            <button type="submit" class="w-full rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500 transition-all duration-200 ease-in-out hover:bg-blue-600 hover:shadow-md">更新密码</button>
                         </form>
 
                         <div class="mt-4 rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
-                            <button id="quick-reset-btn" type="button" class="w-full rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-slate-100 transition hover:bg-blue-500">
+                            <button id="quick-reset-btn" type="button" class="w-full rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 transition-all duration-200 ease-in-out hover:bg-blue-600 hover:shadow-md">
                                 忘记旧密码？向绑定邮箱 (<?= htmlspecialchars($emailMasked, ENT_QUOTES, 'UTF-8') ?>) 发送重置链接
                             </button>
                         </div>
@@ -276,7 +311,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                         <div class="mt-5 rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
                             <button
                                 type="button"
-                                class="rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500"
+                                class="rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition hover:bg-blue-500 transition-all duration-200 ease-in-out hover:bg-blue-600 hover:shadow-md"
                                 onclick="alert('签到系统正在开发中，敬请期待！')"
                             >
                                 立即签到

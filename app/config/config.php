@@ -25,8 +25,8 @@ define('SMTP_FROM_EMAIL', getenv('SMTP_FROM_EMAIL') ?: '18060524036@163.com');
 define('SMTP_FROM_NAME', getenv('SMTP_FROM_NAME') ?: 'Minecraft Server');
 
 // MUA Union OAuth2 (replace placeholders before production)
-define('MUA_CLIENT_ID', getenv('MUA_CLIENT_ID') ?: '33');
-define('MUA_CLIENT_SECRET', getenv('MUA_CLIENT_SECRET') ?: 'Mrj');
+define('MUA_CLIENT_ID', getenv('MUA_CLIENT_ID') ?: '5a26c32cec484ffea1f9f16b1ed9a1df');
+define('MUA_CLIENT_SECRET', getenv('MUA_CLIENT_SECRET') ?: 'MrjTfiChiTzVmPOm4aRrOB14mIGweuX9Dloqf2OCgLqQPToZqF6GWjBRYbvYg8k6');
 define('MUA_REDIRECT_URI', getenv('MUA_REDIRECT_URI') ?: 'https://www.stellarvan.cn/auth/mua/callback');
 
 // Mod API shared secret
@@ -42,7 +42,7 @@ define('RCON_TIMEOUT', (float)(getenv('RCON_TIMEOUT') ?: 3.0));
 $_realtimeEnabledEnv = strtolower((string)(getenv('REALTIME_ENABLE_PANEL') ?: '1'));
 define('REALTIME_ENABLE_PANEL', !in_array($_realtimeEnabledEnv, ['0', 'false', 'off', 'no'], true));
 unset($_realtimeEnabledEnv);
-define('REALTIME_WS_URL', getenv('REALTIME_WS_URL') ?: 'ws://127.0.0.1:8080');
+define('REALTIME_WS_URL', getenv('REALTIME_WS_URL') ?: 'wss://realtime.stellarvan.cn/ws/admin?token=mcheheyixiao1314');
 define('REALTIME_WS_AUTH_TOKEN', getenv('REALTIME_WS_AUTH_TOKEN') !== false ? (string)getenv('REALTIME_WS_AUTH_TOKEN') : '');
 define('REALTIME_RECONNECT_INTERVAL_MS', max(500, (int)(getenv('REALTIME_RECONNECT_INTERVAL_MS') ?: 3000)));
 

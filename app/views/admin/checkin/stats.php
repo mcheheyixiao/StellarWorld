@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $dailySignTrend = [42, 58, 47, 73, 64, 79, 82];
 $dailySignBars = [36, 49, 52, 67, 61, 74, 70];
 ?>

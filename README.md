@@ -372,7 +372,6 @@ JS 交互方式：
 
 性能隐患：
 - `lighthouse-report.json`（2026-04-21）显示：Performance 60，FCP 6.0s，LCP 47.3s，TTI 47.4s，总传输约 9.4MiB。
-- 首屏大图 `HeroSection.png` 体积非常高（约 6.6MiB）。
 - 字体资源总体偏重，存在重复请求。
 - Lighthouse 指出未使用 CSS 体积较大（约 362KiB）与明显渲染阻塞时延（约 2520ms）。
 

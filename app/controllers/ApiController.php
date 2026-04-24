@@ -16,6 +16,7 @@ class ApiController extends Controller
     private const AVATAR_REDIS_TTL_SECONDS = 1800;
 
     private static bool $avatarCacheTableReady = false;
+    private static bool $serverStatusHistoryTableReady = false;
 
     public function __construct()
     {
@@ -154,108 +155,48 @@ class ApiController extends Controller
             session_write_close();
         }
 
-        $file = CACHE_PATH . '/server_status.json';
-        $redis = Database::redis();
-        $cacheKey = 'mc_server_status';
-        $lockKey = 'mc_server_status_lock';
-        $lockToken = bin2hex(random_bytes(16));
-        $lockTtl = 10;
-
-        $readFileFallback = function () use ($file): ?array {
-            if (!is_file($file)) {
-                return null;
-            }
-            try {
-                $raw = (string)file_get_contents($file);
-            } catch (\Throwable $e) {
-                return null;
-            }
-            $data = json_decode($raw, true);
-            return is_array($data) ? $data : null;
-        };
-
-        if ($redis !== null) {
-            try {
-                $rawRedis = $redis->get($cacheKey);
-                if (is_string($rawRedis) && $rawRedis !== '') {
-                    $cachedData = json_decode($rawRedis, true);
-                    if (is_array($cachedData)) {
-                        $this->json($cachedData);
-                        return;
-                    }
-                }
-            } catch (\Throwable $e) {
-            }
-        }
-
-        $lockAcquired = false;
-        if ($redis !== null) {
-            try {
-                $lockAcquired = (bool)$redis->set($lockKey, $lockToken, ['nx', 'ex' => $lockTtl]);
-            } catch (\Throwable $e) {
-                $lockAcquired = false;
-            }
-        }
-
-        if (!$lockAcquired) {
-            $fallbackData = $readFileFallback();
-            if (is_array($fallbackData)) {
-                $this->json($fallbackData);
-                return;
-            }
-            $this->json([
-                'online' => false,
-                'players' => ['online' => 0, 'max' => 0, 'list' => []],
-            ]);
+        $status = $this->loadStatusFromWsApi();
+        if (is_array($status)) {
+            $this->persistStatusHistory($status, 'ws-api');
+            $this->json($status);
             return;
         }
 
-        try {
-            try {
-                $data = $this->fetchFromExternalApi();
-            } catch (\Throwable $e) {
-                $data = null;
-            }
-
-            if (is_array($data)) {
-                $normalizedJson = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                if (is_string($normalizedJson)) {
-                    if ($redis !== null) {
-                        try {
-                            $redis->setex($cacheKey, 60, $normalizedJson);
-                        } catch (\Throwable $e) {
-                        }
-                    }
-                    try {
-                        file_put_contents($file, $normalizedJson, LOCK_EX);
-                    } catch (\Throwable $e) {
-                    }
-                }
-                $this->json($data);
-                return;
-            }
-
-            $fallbackData = $readFileFallback();
-            if (is_array($fallbackData)) {
-                $this->json($fallbackData);
-                return;
-            }
-
-            $this->json([
-                'online' => false,
-                'players' => ['online' => 0, 'max' => 0, 'list' => []],
-            ]);
+        $fallback = $this->loadLatestStatusFromDatabase();
+        if (is_array($fallback)) {
+            $this->json($fallback);
             return;
-        } finally {
-            if ($redis !== null) {
-                try {
-                    if ($redis->get($lockKey) === $lockToken) {
-                        $redis->del($lockKey);
-                    }
-                } catch (\Throwable $e) {
-                }
-            }
         }
+
+        $this->json($this->defaultOfflineStatus());
+    }
+
+    public function getPlayers(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        $players = $this->loadPlayersFromWsApi();
+        if (is_array($players)) {
+            $this->json($players);
+            return;
+        }
+
+        $status = $this->loadStatusFromWsApi();
+        if (is_array($status)) {
+            $this->persistStatusHistory($status, 'ws-api');
+            $this->json($this->extractPlayersPayload($status));
+            return;
+        }
+
+        $fallback = $this->loadLatestStatusFromDatabase();
+        if (is_array($fallback)) {
+            $this->json($this->extractPlayersPayload($fallback));
+            return;
+        }
+
+        $this->json($this->extractPlayersPayload($this->defaultOfflineStatus()));
     }
 
     /**
@@ -282,16 +223,15 @@ class ApiController extends Controller
         }
 
         unset($data['token']);
-        $data = $this->normalizeRealtimePayload($data);
-        try {
-            $path = CACHE_PATH . '/mod_api_push.json';
-            file_put_contents(
-                $path,
-                json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                LOCK_EX
-            );
-        } catch (\Throwable $e) {
-            $this->json(['success' => false, 'code' => ApiCode::SERVER_ERROR, 'message' => 'Write failed'], 500);
+        $normalized = $this->normalizeRealtimePayload($data);
+        $status = $this->normalizeStatusPayload($normalized);
+        if (!is_array($status)) {
+            $this->json(['success' => false, 'code' => ApiCode::SERVER_ERROR, 'message' => 'Invalid status payload'], 400);
+            return;
+        }
+
+        if (!$this->persistStatusHistory($status, 'push-api')) {
+            $this->json(['success' => false, 'code' => ApiCode::SERVER_ERROR, 'message' => 'Persist failed'], 500);
             return;
         }
 
@@ -614,60 +554,411 @@ class ApiController extends Controller
         exit;
     }
 
-    private function fetchFromExternalApi(): ?array
+    private function loadStatusFromWsApi(): ?array
     {
-        $url = 'https://api.mcstatus.io/v2/status/java/mc.stellarvan.cn:11051';
-
-        $ch = curl_init($url);
-        if ($ch === false) {
+        $payload = $this->fetchWsApiJson('/api/status');
+        if (!is_array($payload)) {
             return null;
         }
 
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 5,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        ]);
+        return $this->normalizeStatusPayload($payload);
+    }
 
-        $response = curl_exec($ch);
-        if ($response === false) {
-            curl_close($ch);
+    private function loadPlayersFromWsApi(): ?array
+    {
+        $payload = $this->fetchWsApiJson('/api/players');
+        if (!is_array($payload)) {
             return null;
         }
 
-        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($httpCode !== 200) {
-            return null;
+        $candidate = $this->unwrapApiPayload($payload);
+        if (isset($candidate['players']) && is_array($candidate['players']) && $this->isAssocArray($candidate['players'])) {
+            return $this->sanitizePlayersPayload($candidate['players']);
         }
 
-        $data = json_decode($response, true);
-        if (!is_array($data)) {
-            return null;
+        if (!$this->isAssocArray($candidate)) {
+            return $this->sanitizePlayersPayload(['list' => $candidate]);
         }
 
-        if (($data['online'] ?? false) === true) {
-            $file = CACHE_PATH . '/server_status.json';
-            $normalizedJson = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            if (is_string($normalizedJson)) {
-                try {
-                    file_put_contents($file, $normalizedJson, LOCK_EX);
-                } catch (\Throwable $e) {
+        if (array_key_exists('list', $candidate) || array_key_exists('online', $candidate) || array_key_exists('max', $candidate)) {
+            return $this->sanitizePlayersPayload($candidate);
+        }
+
+        $status = $this->normalizeStatusPayload($payload);
+        return is_array($status) ? $this->extractPlayersPayload($status) : null;
+    }
+
+    private function wsStatusApiBaseUrl(): string
+    {
+        $baseUrl = defined('WS_STATUS_API_BASE') ? trim((string)WS_STATUS_API_BASE) : '';
+        if ($baseUrl === '') {
+            $baseUrl = 'http://localhost:3001';
+        }
+
+        return rtrim($baseUrl, '/');
+    }
+
+    private function wsStatusApiTimeoutSeconds(): int
+    {
+        $timeoutMs = defined('WS_STATUS_API_TIMEOUT_MS') ? (int)WS_STATUS_API_TIMEOUT_MS : 2500;
+        return max(1, (int)ceil(max(500, $timeoutMs) / 1000));
+    }
+
+    private function fetchWsApiJson(string $path): ?array
+    {
+        $url = $this->wsStatusApiBaseUrl() . '/' . ltrim($path, '/');
+        return $this->fetchJsonFromUrl($url, $this->wsStatusApiTimeoutSeconds());
+    }
+
+    private function fetchJsonFromUrl(string $url, int $timeoutSeconds): ?array
+    {
+        $responseBody = null;
+        $httpCode = 0;
+
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            if ($ch !== false) {
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_CONNECTTIMEOUT => min(3, max(1, $timeoutSeconds)),
+                    CURLOPT_TIMEOUT => $timeoutSeconds,
+                    CURLOPT_HTTPHEADER => ['Accept: application/json'],
+                    CURLOPT_USERAGENT => 'stellarvan-status-client/1.0',
+                ]);
+                $resp = curl_exec($ch);
+                $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+
+                if ($resp !== false && is_string($resp) && trim($resp) !== '') {
+                    $responseBody = $resp;
                 }
-
-                $redis = Database::redis();
-                if ($redis !== null) {
-                    try {
-                        $redis->setex('mc_server_status', 60, $normalizedJson);
-                    } catch (\Throwable $e) {
+            }
+        } else {
+            $context = stream_context_create([
+                'http' => [
+                    'method' => 'GET',
+                    'timeout' => $timeoutSeconds,
+                    'ignore_errors' => true,
+                    'header' => "Accept: application/json\r\n",
+                ],
+            ]);
+            $resp = @file_get_contents($url, false, $context);
+            if ($resp !== false && is_string($resp) && trim($resp) !== '') {
+                $responseBody = $resp;
+            }
+            if (isset($http_response_header) && is_array($http_response_header)) {
+                foreach ($http_response_header as $headerLine) {
+                    if (preg_match('#^HTTP/\S+\s+(\d{3})#i', (string)$headerLine, $m) === 1) {
+                        $httpCode = (int)$m[1];
+                        break;
                     }
                 }
             }
         }
 
-        return $data;
+        if (!is_string($responseBody) || $responseBody === '') {
+            return null;
+        }
+        if ($httpCode !== 0 && ($httpCode < 200 || $httpCode >= 300)) {
+            return null;
+        }
+
+        $decoded = json_decode($responseBody, true);
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    private function unwrapApiPayload(array $payload): array
+    {
+        $candidate = $payload;
+        if (isset($candidate['data']) && is_array($candidate['data'])) {
+            $candidate = $candidate['data'];
+        }
+        if (isset($candidate['payload']) && is_array($candidate['payload'])) {
+            $candidate = $candidate['payload'];
+        }
+
+        return $candidate;
+    }
+
+    private function normalizeStatusPayload(array $payload): ?array
+    {
+        $candidate = $this->unwrapApiPayload($payload);
+        if (isset($candidate['status']) && is_array($candidate['status'])) {
+            $candidate = $candidate['status'];
+        }
+
+        if (isset($candidate['server']) && is_array($candidate['server'])) {
+            return $this->mapRealtimeSnapshotToLegacyStatus($candidate);
+        }
+
+        if (array_key_exists('online', $candidate) || isset($candidate['players'])) {
+            return $this->sanitizeLegacyStatusPayload($candidate);
+        }
+
+        if (!$this->isAssocArray($candidate)) {
+            return $this->sanitizeLegacyStatusPayload(['players' => ['list' => $candidate]]);
+        }
+
+        if (array_key_exists('list', $candidate) || array_key_exists('online', $candidate) || array_key_exists('max', $candidate)) {
+            return $this->sanitizeLegacyStatusPayload(['players' => $candidate]);
+        }
+
+        return null;
+    }
+
+    private function mapRealtimeSnapshotToLegacyStatus(array $snapshot): array
+    {
+        $server = isset($snapshot['server']) && is_array($snapshot['server']) ? $snapshot['server'] : [];
+        $stats = isset($snapshot['stats']) && is_array($snapshot['stats']) ? $snapshot['stats'] : [];
+
+        $playersNode = $snapshot['players'] ?? [];
+        if (is_array($playersNode) && !$this->isAssocArray($playersNode)) {
+            $playersNode = ['list' => $playersNode];
+        }
+        if (!is_array($playersNode)) {
+            $playersNode = [];
+        }
+
+        $players = $this->sanitizePlayersPayload($playersNode);
+
+        if (isset($stats['onlinePlayers']) && is_numeric($stats['onlinePlayers'])) {
+            $players['online'] = max(0, (int)$stats['onlinePlayers']);
+        }
+        if (isset($stats['maxPlayers']) && is_numeric($stats['maxPlayers'])) {
+            $players['max'] = max(0, (int)$stats['maxPlayers']);
+        }
+        if ($players['online'] === 0 && count($players['list']) > 0) {
+            $players['online'] = count($players['list']);
+        }
+
+        $status = [
+            'online' => array_key_exists('online', $server) ? (bool)$server['online'] : ($players['online'] > 0),
+            'players' => $players,
+        ];
+
+        if (array_key_exists('motd', $server)) {
+            $status['motd'] = $server['motd'];
+        } elseif (array_key_exists('motd', $snapshot)) {
+            $status['motd'] = $snapshot['motd'];
+        }
+
+        if (array_key_exists('version', $server)) {
+            $status['version'] = $server['version'];
+        } elseif (array_key_exists('version', $snapshot)) {
+            $status['version'] = $snapshot['version'];
+        }
+
+        if (array_key_exists('icon', $server)) {
+            $status['icon'] = $server['icon'];
+        } elseif (array_key_exists('favicon', $snapshot)) {
+            $status['icon'] = $snapshot['favicon'];
+        }
+
+        return $this->sanitizeLegacyStatusPayload($status);
+    }
+
+    private function sanitizeLegacyStatusPayload(array $payload): array
+    {
+        $playersSource = [];
+        if (isset($payload['players']) && is_array($payload['players'])) {
+            $playersSource = $payload['players'];
+        }
+        if ($playersSource === [] && isset($payload['sample']) && is_array($payload['sample'])) {
+            $playersSource = ['list' => $payload['sample']];
+        }
+
+        $players = $this->sanitizePlayersPayload($playersSource);
+        $online = array_key_exists('online', $payload) ? (bool)$payload['online'] : ($players['online'] > 0);
+
+        $normalized = $payload;
+        $normalized['online'] = $online;
+        $normalized['players'] = $players;
+
+        return $normalized;
+    }
+
+    private function extractPlayersPayload(array $statusPayload): array
+    {
+        $normalized = $this->sanitizeLegacyStatusPayload($statusPayload);
+        if (isset($normalized['players']) && is_array($normalized['players'])) {
+            return $normalized['players'];
+        }
+
+        return ['online' => 0, 'max' => 0, 'list' => []];
+    }
+
+    private function sanitizePlayersPayload(array $payload): array
+    {
+        $playerNode = $payload;
+        if (isset($playerNode['players']) && is_array($playerNode['players']) && $this->isAssocArray($playerNode['players'])) {
+            $playerNode = $playerNode['players'];
+        }
+        if (!$this->isAssocArray($playerNode)) {
+            $playerNode = ['list' => $playerNode];
+        }
+
+        $listSource = [];
+        if (isset($playerNode['list']) && is_array($playerNode['list'])) {
+            $listSource = $playerNode['list'];
+        } elseif (isset($playerNode['sample']) && is_array($playerNode['sample'])) {
+            $listSource = $playerNode['sample'];
+        } elseif (isset($playerNode['players']) && is_array($playerNode['players']) && !$this->isAssocArray($playerNode['players'])) {
+            $listSource = $playerNode['players'];
+        }
+
+        $list = $this->normalizePlayersList($listSource);
+        $online = isset($playerNode['online']) && is_numeric($playerNode['online'])
+            ? max(0, (int)$playerNode['online'])
+            : count($list);
+
+        if ($online === 0 && count($list) > 0) {
+            $online = count($list);
+        }
+
+        $max = 0;
+        if (isset($playerNode['max']) && is_numeric($playerNode['max'])) {
+            $max = max(0, (int)$playerNode['max']);
+        } elseif (isset($playerNode['max']) && is_scalar($playerNode['max'])) {
+            $max = (string)$playerNode['max'];
+        }
+
+        return [
+            'online' => $online,
+            'max' => $max,
+            'list' => $list,
+        ];
+    }
+
+    private function normalizePlayersList(array $players): array
+    {
+        $normalized = [];
+        foreach ($players as $player) {
+            if (is_string($player)) {
+                $name = trim($player);
+                if ($name === '') {
+                    continue;
+                }
+                $normalized[] = ['name' => $name, 'name_clean' => $name];
+                continue;
+            }
+
+            if (!is_array($player)) {
+                continue;
+            }
+
+            $name = trim((string)($player['name_clean'] ?? $player['name'] ?? $player['username'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+
+            $entry = $player;
+            if (!isset($entry['name']) || !is_string($entry['name']) || trim($entry['name']) === '') {
+                $entry['name'] = $name;
+            }
+            if (!isset($entry['name_clean']) || !is_string($entry['name_clean']) || trim($entry['name_clean']) === '') {
+                $entry['name_clean'] = $name;
+            }
+            $normalized[] = $entry;
+        }
+
+        return $normalized;
+    }
+
+    private function isAssocArray(array $value): bool
+    {
+        if ($value === []) {
+            return false;
+        }
+
+        return array_keys($value) !== range(0, count($value) - 1);
+    }
+
+    private function defaultOfflineStatus(): array
+    {
+        return [
+            'online' => false,
+            'players' => ['online' => 0, 'max' => 0, 'list' => []],
+        ];
+    }
+
+    private function persistStatusHistory(array $statusPayload, string $source): bool
+    {
+        $normalized = $this->sanitizeLegacyStatusPayload($statusPayload);
+        $payloadJson = json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (!is_string($payloadJson) || $payloadJson === '') {
+            return false;
+        }
+
+        try {
+            $db = Database::connection();
+            $this->ensureServerStatusHistoryTable($db);
+
+            $stmt = $db->prepare('
+                INSERT INTO server_status_history (source, payload_json, created_at)
+                VALUES (:source, :payload_json, NOW())
+            ');
+            $stmt->execute([
+                ':source' => substr(trim($source), 0, 32),
+                ':payload_json' => $payloadJson,
+            ]);
+
+            $db->exec('
+                DELETE FROM server_status_history
+                WHERE created_at < (NOW() - INTERVAL 30 DAY)
+            ');
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    private function loadLatestStatusFromDatabase(): ?array
+    {
+        try {
+            $db = Database::connection();
+            $this->ensureServerStatusHistoryTable($db);
+
+            $stmt = $db->query('
+                SELECT payload_json
+                FROM server_status_history
+                ORDER BY id DESC
+                LIMIT 1
+            ');
+            $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+            if (!is_array($row)) {
+                return null;
+            }
+
+            $decoded = json_decode((string)($row['payload_json'] ?? ''), true);
+            if (!is_array($decoded)) {
+                return null;
+            }
+
+            return $this->normalizeStatusPayload($decoded);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function ensureServerStatusHistoryTable(\PDO $db): void
+    {
+        if (self::$serverStatusHistoryTableReady) {
+            return;
+        }
+
+        $db->exec('
+            CREATE TABLE IF NOT EXISTS server_status_history (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                source VARCHAR(32) NOT NULL DEFAULT \'ws-api\',
+                payload_json LONGTEXT NOT NULL,
+                created_at DATETIME NOT NULL,
+                INDEX idx_server_status_history_created_at (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ');
+
+        self::$serverStatusHistoryTableReady = true;
     }
 
     private function normalizeRealtimePayload(array $payload): array

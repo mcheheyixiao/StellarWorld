@@ -30,7 +30,9 @@ $router->post('/reset-password', [AuthController::class, 'updatePassword']);
 
 // API for Mod & cache
 $router->post('/api/server/status/update', [ApiController::class, 'updateServerStatus']);
+$router->get('/api/status', [ApiController::class, 'getServerStatus']);
 $router->get('/api/status/cache', [ApiController::class, 'getServerStatus']);
+$router->get('/api/players', [ApiController::class, 'getPlayers']);
 $router->get('/api/leaderboard/search', [ApiController::class, 'searchLeaderboard']);
 $router->get('/api/skin-proxy', [ApiController::class, 'proxySkin']);
 $router->get('/api/avatar', [ApiController::class, 'avatar']);

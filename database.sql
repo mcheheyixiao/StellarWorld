@@ -276,3 +276,12 @@ INSERT INTO site_settings (setting_key, setting_value, description) VALUES
     ('register_ip_limit', '2', '同一 IP 24 小时内允许注册的最大账号数（白名单 IP 不受此限制）'),
     ('whitelist_ignores_rate_limit', '0', '设为 1 时：白名单 IP 同时无视 checkRateLimit、登录失败锁定、会话冷却等限流')
 ON DUPLICATE KEY UPDATE setting_key = setting_key;
+
+-- Realtime status history snapshots (WS primary source, DB fallback)
+CREATE TABLE IF NOT EXISTS server_status_history (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    source VARCHAR(32) NOT NULL DEFAULT 'ws-api',
+    payload_json LONGTEXT NOT NULL,
+    created_at DATETIME NOT NULL,
+    INDEX idx_server_status_history_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -46,6 +46,11 @@ define('REALTIME_WS_URL', getenv('REALTIME_WS_URL') ?: 'wss://realtime.stellarva
 define('REALTIME_WS_AUTH_TOKEN', getenv('REALTIME_WS_AUTH_TOKEN') !== false ? (string)getenv('REALTIME_WS_AUTH_TOKEN') : '');
 define('REALTIME_RECONNECT_INTERVAL_MS', max(500, (int)(getenv('REALTIME_RECONNECT_INTERVAL_MS') ?: 3000)));
 
+// Website status data source (WebSocket service status center)
+define('WS_STATUS_API_BASE', getenv('WS_STATUS_API_BASE') ?: 'http://localhost:3001');
+define('WS_STATUS_API_TIMEOUT_MS', max(500, (int)(getenv('WS_STATUS_API_TIMEOUT_MS') ?: 2500)));
+define('PUBLIC_STATUS_WS_URL', getenv('PUBLIC_STATUS_WS_URL') !== false ? trim((string)getenv('PUBLIC_STATUS_WS_URL')) : '');
+
 // Redis（可选；扩展未加载或连接失败时全站自动降级）
 $_redisEnv = strtolower((string)(getenv('REDIS_ENABLED') ?: '1'));
 define('REDIS_ENABLED', !in_array($_redisEnv, ['0', 'false', 'off', 'no'], true));
@@ -76,4 +81,3 @@ define('QQ_BOT_API_URL', 'http://111.222.333.444:3000');
 define('QQ_BOT_API_TOKEN', 'UA2ue08UY30DyBSH');      
 // 填入你的玩家交流群群号
 define('QQ_GROUP_ID', 123456789);
-

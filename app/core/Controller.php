@@ -214,7 +214,7 @@ class Controller
 
     private function shouldNormalizeStatusPayload(string $path): bool
     {
-        return in_array($path, ['/api/server/status/update', '/api/status/cache', '/api/leaderboard/search'], true);
+        return in_array($path, ['/api/server/status/update', '/api/status', '/api/status/cache', '/api/leaderboard/search'], true);
     }
 
     private function ensureStatusPayloadShape(array $payload): array

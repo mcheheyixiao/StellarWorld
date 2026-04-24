@@ -31,8 +31,8 @@
 
 ### 数据流
 - 前端 → 后端 API：登录注册、资料修改、排行榜搜索、状态查询、头像/皮肤代理。
-- 后端 → 外部 API：`mcstatus`、MUA 节点、Cloudflare Turnstile、音乐接口等。
-- 插件/服务端 → 网站：`POST /api/server/status/update` 写入缓存数据。
+- 后端 → 外部 API：`WS status center API`、MUA 节点、Cloudflare Turnstile、音乐接口等。
+- 插件/服务端 → 网站：`POST /api/server/status/update` 写入 DB 历史快照（`server_status_history`）。
 - 管理端前端 → WebSocket：实时请求 `snapshot`，接收玩家/插件/聊天/状态更新事件。
 - 网站 → MC 服务端：通过 RCON 发送皮肤同步指令（MUA 绑定后）。
 
@@ -121,7 +121,7 @@
 ### 4. Minecraft 数据同步
 WebSocket / API：
 - HTTP 推送：`POST /api/server/status/update`（token 校验）。
-- 缓存读取：`GET /api/status/cache`。
+- 状态读取：`GET /api/status`（兼容别名：`GET /api/status/cache`）。
 - 管理端实时：`public/scripts/admin-realtime-panel.js` 通过 WS 接收 `snapshot` / `stats_update` / `players_update` / `plugins_update` / `chat_message` / `server_status`。
 - RCON 同步：MUA 皮肤绑定后可向服务器执行 `sr createcustom`、`sr set`。
 
@@ -149,9 +149,9 @@ WebSocket / API：
 
 ### 公共 API（`/api/*`）
 
-#### `GET /api/status/cache`
+#### `GET /api/status`（兼容：`GET /api/status/cache`）
 用途：
-- 读取服务器状态缓存；优先 Redis，其次本地缓存文件，必要时回源外部 `mcstatus`。
+- 读取 WebSocket 状态中心 API（`http://localhost:3001/api/status`，由 `WS_STATUS_API_BASE` 配置）；当 WS/API 异常时回退到 DB 历史快照 `server_status_history`。
 
 返回结构（推测）：
 ```json
@@ -167,7 +167,7 @@ WebSocket / API：
 
 #### `POST /api/server/status/update`
 用途：
-- 接收外部服务/插件推送的状态 JSON，写入缓存（`mod_api_push.json`）。
+- 接收外部服务/插件推送的状态 JSON，写入缓存（`server_status_history`）。
 
 请求结构（推测）：
 ```json
@@ -478,7 +478,7 @@ All unified API responses now use this envelope:
 }
 ```
 
-`GET /api/status/cache?ajax=1` response example:
+`GET /api/status?ajax=1` response example:
 
 ```json
 {
@@ -496,3 +496,40 @@ All unified API responses now use this envelope:
   }
 }
 ```
+
+## Realtime Data Source Update (2026-04-24)
+
+### Data source policy
+- Primary realtime source: WS status center API
+- Website status endpoint now reads from: http://localhost:3001/api/status (configurable by WS_STATUS_API_BASE)
+- Legacy local cache files are removed from status read path
+- Database is now the fallback historical source
+
+### API routes
+- GET /api/status -> WS status center (/api/status) with DB fallback
+- GET /api/status/cache -> compatibility alias to /api/status
+- GET /api/players -> WS status center (/api/players), fallback to status snapshot extraction, then DB fallback
+- POST /api/server/status/update -> writes status snapshot to DB history table (server_status_history)
+
+### Frontend
+- Home page polling source changed to GET /api/status
+- Optional WS live enhancement supported via PUBLIC_STATUS_WS_URL (if empty, polling-only mode stays active)
+
+### New config keys
+- WS_STATUS_API_BASE (default: http://localhost:3001)
+- WS_STATUS_API_TIMEOUT_MS (default: 2500)
+- PUBLIC_STATUS_WS_URL (default: empty)
+
+## API 调用路径（WS 主源）
+
+- `GET /api/status`  
+  网站前端 -> PHP 接口 -> `http://localhost:3001/api/status`（由 `WS_STATUS_API_BASE` 配置）-> 失败时回退 `server_status_history` 最新快照 -> 再失败返回离线默认结构。
+
+- `GET /api/players`  
+  网站前端/业务方 -> PHP 接口 -> `http://localhost:3001/api/players` -> 失败时从状态快照提取玩家列表 -> 再失败回退 DB 历史。
+
+- `GET /api/status/cache`  
+  兼容旧路径，内部等价于 `GET /api/status`。
+
+- `POST /api/server/status/update`  
+  插件/服务端推送 -> PHP 校验 token -> 写入 `server_status_history`（用于历史与降级）。

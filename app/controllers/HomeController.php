@@ -14,6 +14,7 @@ class HomeController extends Controller
             'description' => '欢迎来到我们的 Minecraft 公益服务器',
             'serverDisplayAddress' => 'mc.stellarvan.cn',
             'serverVersion' => '1.8+',
+            'publicStatusWsUrl' => defined('PUBLIC_STATUS_WS_URL') ? (string)PUBLIC_STATUS_WS_URL : '',
         ]);
     }
 

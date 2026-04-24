@@ -1,535 +1,202 @@
-# Project Internal README
+﻿# StellarVan Realtime Status Platform
+
+## 1. 系统架构
+
+本系统采用“网站消费层 + WebSocket 状态中心 + Minecraft 插件采集层”的三层架构。
+
+- 网站（PHP MVC）: 对外提供页面与统一 REST API。
+- WS 状态中心（Node/WebSocket Service）: 聚合服务器实时状态、玩家、聊天流。
+- 插件采集层（Minecraft Plugin Agent）: 从游戏服采集运行指标与事件并推送到状态中心。
+- MySQL: 作为历史快照与审计数据存储。
+
+数据流路径:
+
+1. 插件采集层 -> WS 状态中心
+2. 网站 API -> WS 状态中心
+3. 网站 API 在 WS 不可达时 -> MySQL 历史快照 -> 本地 snapshot
 
 ---
 
-## 🧠 项目定位
+## 2. 数据来源说明
 
-本项目是一个面向 Minecraft 服务器的站点与管理面板一体化系统，当前形态为「官网展示 + 玩家中心 + 管理后台 + 外部实时数据接入」。
+### 实时来源
 
-项目用途（按代码推断）：
-- MC 服务器官网（主页、公告、相册、关于页、排行榜）
-- 玩家账号系统（登录/注册/找回密码/MUA 绑定）
-- 玩家中心（账号绑定、安全中心、角色信息、皮肤展示）
-- 管理后台（玩家管理、公告、里程碑、图库、站点设置、IP 黑白名单）
-- 数据同步层（HTTP 推送 + WebSocket 实时面板 + RCON 指令联动）
+网站实时读路径全部指向 WS 状态中心:
 
-当前技术形态：
-- 原生 PHP MVC 单体应用
-- 服务端渲染（PHP View）+ 前端 `fetch` 增量交互
-- MySQL（PDO）+ 可选 Redis 缓存
-- 外部服务整合：Cloudflare Turnstile、MUA OAuth、MC 状态 API、WebSocket、RCON
+- GET /api/status -> {WS_STATUS_API_BASE}/api/status
+- GET /api/players -> {WS_STATUS_API_BASE}/api/players
+- GET /api/chat -> {WS_STATUS_API_BASE}/api/chat
 
----
+### 历史来源
 
-## 🧱 当前架构
+- MySQL server_status_history 保存状态历史快照。
+- 本地 storage/cache/*.json 保存短周期缓存与降级 snapshot。
 
-### 架构类型
-原生 PHP MVC（自研轻量 Router + Controller + Model + View）。
+说明:
 
-### 请求流程
-用户请求 → `public/index.php` → `Router` 路由匹配 → Controller 业务处理 → Model/DB 查询 → View 渲染（或 JSON 响应）→ 前端页面/脚本继续调用 API。
-
-### 数据流
-- 前端 → 后端 API：登录注册、资料修改、排行榜搜索、状态查询、头像/皮肤代理。
-- 后端 → 外部 API：`WS status center API`、MUA 节点、Cloudflare Turnstile、音乐接口等。
-- 插件/服务端 → 网站：`POST /api/server/status/update` 写入 DB 历史快照（`server_status_history`）。
-- 管理端前端 → WebSocket：实时请求 `snapshot`，接收玩家/插件/聊天/状态更新事件。
-- 网站 → MC 服务端：通过 RCON 发送皮肤同步指令（MUA 绑定后）。
+- 实时读优先级始终为 WS。
+- DB 用于历史与故障兜底。
 
 ---
 
-## 📁 项目结构（核心）
+## 3. API 说明
 
-```text
-/
-├─ app/
-│  ├─ config/                  # 运行配置、路由定义、关于页配置
-│  ├─ controllers/             # 业务控制器（Auth/API/Admin/Profile/Page/Home）
-│  ├─ core/                    # 核心基类与基础设施（Router/Controller/View/DB/RCON/MUA等）
-│  ├─ models/                  # 数据模型（User/Audit）
-│  └─ views/                   # 页面模板与后台子视图
-├─ public/
-│  ├─ assets/                  # 业务资源（如 memberlist/whitelist.json）
-│  ├─ fonts/                   # 自定义字体
-│  ├─ images/                  # 图片素材与背景资源
-│  ├─ scripts/                 # 前端脚本（主题、导航、加载、实时面板）
-│  ├─ styles/                  # Tailwind 编译产物与全局样式
-│  └─ index.php                # Web 入口
-├─ deploy/                     # Nginx 缓存策略等部署辅助配置
-├─ vendor/                     # Composer 依赖
-├─ database.sql                # 核心数据库结构与升级脚本
-├─ lighthouse-report.json      # 性能分析报告（本地采样）
-└─ tailwind.config.js          # Tailwind 扫描配置
-```
+### GET /api/status
 
-目录作用 + 当前完成度（按代码可运行程度推断）：
-- `app/config`：配置覆盖完整，完成度 85%（存在敏感默认值硬编码问题）。
-- `app/controllers`：功能最完整，完成度 88%。
-- `app/core`：基础能力较齐全，完成度 85%。
-- `app/models`：模型层较薄，完成度 70%（大量 SQL 仍在 Controller）。
-- `app/views`：页面覆盖广，完成度 82%（样式与脚本分散）。
-- `public/scripts`：基础交互 + 实时面板已落地，完成度 80%。
-- `public/styles`：Tailwind + 自定义并存，完成度 78%（重复样式与冗余明显）。
-- `deploy`：静态缓存规则存在，完成度 65%。
-- `database.sql`：主业务表完整，完成度 86%。
+上游调用:
 
----
+- {WS_STATUS_API_BASE}/api/status
 
-## 🔧 核心模块拆解
+返回结构（保持兼容）:
 
-### 1. 用户系统
-功能：
-- 登录、注册、邮箱验证、找回密码、重置密码、登出、Remember Me。
-- MUA OAuth 登录与绑定。
-
-实现方式：
-- `AuthController` + `User` Model + `AuditModel`。
-- CSRF 校验、Turnstile 校验、登录失败计数、IP 黑白名单联动、审计日志记录。
-- 密码哈希兼容 AuthMe 格式；Remember Me 采用 selector/validator + hash 存储。
-
-完成度：
-- 90%。
-
-### 2. 玩家仪表盘
-当前 UI 结构：
-- 用户资料页含游戏数据、账号绑定、安全中心、玩家功能区（含签到展示）。
-- 玩家公开页含 3D/2D 皮肤展示、统计与时间线。
-
-数据来源：
-- `users`、`player_stats`、`user_checkins`、`audit_logs`。
-- 皮肤数据由 MUA/Crafatar/Minotar + `skin-proxy` 组合获取。
-
-问题点：
-- 签到功能前端大量为静态演示逻辑，未形成完整后端写入链路。
-- 页面内联样式与内联脚本体量大，维护成本偏高。
-
-完成度：
-- 76%。
-
-### 3. 管理后台
-功能模块：
-- 仪表盘统计、玩家管理、公告管理、里程碑、图库、站点设置、团队成员、IP 黑白名单。
-- 实时面板入口与配置注入。
-
-权限逻辑：
-- 统一使用 `requireAdmin()` 判断 `$_SESSION['role'] === 'admin'`。
-- 各表单带 CSRF 校验。
-
-完成度：
-- 83%。
-
-### 4. Minecraft 数据同步
-WebSocket / API：
-- HTTP 推送：`POST /api/server/status/update`（token 校验）。
-- 状态读取：`GET /api/status`（兼容别名：`GET /api/status/cache`）。
-- 管理端实时：`public/scripts/admin-realtime-panel.js` 通过 WS 接收 `snapshot` / `stats_update` / `players_update` / `plugins_update` / `chat_message` / `server_status`。
-- RCON 同步：MUA 皮肤绑定后可向服务器执行 `sr createcustom`、`sr set`。
-
-插件通信方式：
-- 仓库内未见插件实现源码，网站侧通过约定 JSON + Token 接收推送，并依赖外部 WS 服务与 MC 服务端协作。
-
-完成度：
-- 68%。
-
-### 5. UI 系统
-组件结构：
-- 具备 PHP 层组件化（`layouts` + `partials` + admin 子布局）。
-- 但页面级内联样式和内联 JS 仍占比较高。
-
-样式体系：
-- Tailwind（`tailwind-input.css` + `tailwind-dist.css`）与自定义 CSS 并行。
-- 玻璃态、模糊、过渡动画使用频繁。
-
-完成度：
-- 74%。
-
----
-
-## 🔌 API 设计（必须重点分析）
-
-### 公共 API（`/api/*`）
-
-#### `GET /api/status`（兼容：`GET /api/status/cache`）
-用途：
-- 读取 WebSocket 状态中心 API（`http://localhost:3001/api/status`，由 `WS_STATUS_API_BASE` 配置）；当 WS/API 异常时回退到 DB 历史快照 `server_status_history`。
-
-返回结构（推测）：
-```json
+`json
 {
   "online": true,
   "players": {
     "online": 12,
     "max": 100,
-    "list": ["playerA", "playerB"]
+    "list": [
+      { "name": "Alice", "name_clean": "Alice" }
+    ]
+  },
+  "motd": {
+    "clean": "Welcome"
+  },
+  "version": {
+    "name_clean": "1.20.1"
   }
 }
-```
+`
 
-#### `POST /api/server/status/update`
-用途：
-- 接收外部服务/插件推送的状态 JSON，写入缓存（`server_status_history`）。
+### GET /api/players
 
-请求结构（推测）：
-```json
+上游调用:
+
+- {WS_STATUS_API_BASE}/api/players
+
+返回结构（保持兼容）:
+
+`json
 {
-  "token": "SERVER_TOKEN",
-  "server": {},
-  "stats": {},
-  "players": [],
-  "plugins": [],
-  "chat": []
-}
-```
-
-返回结构：
-```json
-{
-  "success": true,
-  "message": "Accepted"
-}
-```
-
-#### `GET /api/leaderboard/search?board=play_time&q=xxx`
-用途：
-- 排行榜模糊搜索与 TopN 返回。
-
-返回结构（代码可确认）：
-```json
-{
-  "success": true,
-  "board": "play_time",
-  "results": [
-    {
-      "mc_uuid": "xxxx",
-      "username": "playerA",
-      "value": 12.3,
-      "unit": "h",
-      "rank": 1
-    }
+  "online": 12,
+  "max": 100,
+  "list": [
+    { "name": "Alice", "name_clean": "Alice" }
   ]
 }
-```
+`
 
-#### `GET /api/avatar?username=xxx&size=32`
-用途：
-- 头像代理与缓存（Redis + DB `avatar_cache` + 文件缓存）。
-- 返回 PNG（二进制），非 JSON。
+### GET /api/chat
 
-#### `GET /api/skin-proxy?url=https://...`
-用途：
-- 图片跨域代理，供皮肤渲染使用。
-- 返回 PNG（二进制），失败时返回透明占位图。
+上游调用:
 
-### 业务 AJAX 接口（非 `/api`）
+- {WS_STATUS_API_BASE}/api/chat
 
-#### 认证相关
-- `POST /auth/login`
-- `POST /auth/register`
-- `POST /forgot-password`
-- `POST /reset-password`
+返回结构:
 
-通用响应形态：
-```json
-{
-  "success": true,
-  "message": "..."
-}
-```
-
-#### 个人中心
-- `POST /profile/password/update`
-- `POST /profile/password/quick-reset`
-- `POST /profile/mc-character/update`
-
-示例返回：
-```json
-{
-  "success": true,
-  "message": "游戏角色绑定更新成功",
-  "mc_uuid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-}
-```
-
-### 管理端接口（表单提交 + 重定向为主）
-- `POST /admin/players/update|delete|unbind`
-- `POST /admin/announcements/save|delete`
-- `POST /admin/milestones/save|delete`
-- `POST /admin/gallery/upload|delete`
-- `POST /admin/ip-blacklist/add|delete`
-- `POST /admin/ip-whitelist/add|delete`
-- `POST /admin/site-settings/save`
-- `POST /admin/team-members/save|delete`
-
-说明：
-- 多数管理接口返回重定向（`Location: /admin?...`），非标准 JSON API。
-
-### 数据结构（核心表）
-- `users`：账号、角色、状态、MC 绑定、MUA 绑定、邮箱验证状态。
-- `player_stats`：玩家统计（在线时长、方块挖掘/放置、击杀、死亡等）。
-- `user_checkins`：签到记录。
-- `audit_logs`：行为审计。
-- `auth_tokens`：Remember Me 持久令牌。
-- `site_settings`：站点配置中心。
-- `ip_whitelist` / `ip_blacklist`：IP 策略控制。
-
----
-
-## 📡 WebSocket 结构
-
-连接地址：
-- 来源于配置常量 `REALTIME_WS_URL`，默认值为 `wss://.../ws/admin?...`。
-- 前端可附加 `token` 参数，且连接建立后会再发送一次 `auth` 消息。
-
-触发逻辑：
-- 仅在后台 `realtime` 标签激活时连接。
-- 页面可见时维持连接，不可见时暂停/断开并重连。
-- 定时发送 `snapshot` 请求（含最小间隔节流）。
-
-前端发出消息（推测）：
-```json
-{ "type": "auth", "payload": { "token": "..." } }
-```
-```json
-{ "type": "snapshot", "payload": {} }
-```
-
-接收事件类型（代码可确认）：
-- `snapshot`
-- `stats_update`
-- `players_update`
-- `plugins_update`
-- `chat_message`
-- `server_status`
-
-数据用途：
-- 实时刷新在线人数、TPS/CPU/内存等指标、玩家列表、插件状态、聊天流、服务器状态文案。
-
----
-
-## 🎨 前端结构
-
-页面划分：
-- 公共页面：主页/相册/排行榜/公告/关于/玩家公开页。
-- 认证页面：登录/注册/找回/重置/验证结果。
-- 用户中心：资料页（多面板）。
-- 管理后台：统一布局 + Tab 子页面（含 realtime/checkin 子块）。
-
-UI 逻辑：
-- 服务端渲染首屏。
-- 前端 `fetch` 拉取 JSON 更新局部模块。
-- 管理实时页通过 WebSocket 增量更新。
-
-JS 交互方式：
-- 原生 JS 为主，未见 axios 依赖。
-- 皮肤展示依赖 `skinview3d` CDN。
-- 音乐播放器与第三方接口直接交互。
-
-是否组件化：
-- PHP 模板层具备组件化（`partials`、`layouts`）。
-- CSS/JS 组件化程度中等，页面内联逻辑较多。
-
-样式体系：
-- Tailwind + 自定义 CSS 并行。
-- 频繁使用 `transition`、`backdrop-filter`、hover 动效。
-- 存在重复样式片段与页面私有样式堆积。
-
-响应式策略：
-- 以 `@media` 与 Tailwind 断点混合实现。
-- 导航、卡片、后台布局均具备移动端适配分支。
-
----
-
-## 📊 当前开发进度（非常重要）
-
-已完成：
-- ✔ 登录系统（CSRF + Turnstile + 限流 + Remember Me）
-- ✔ 注册/邮箱验证/找回密码闭环
-- ✔ 管理后台主流程（玩家、公告、里程碑、图库、站点设置、IP 黑白名单）
-- ✔ 排行榜与玩家页的数据展示链路
-- ✔ 头像缓存代理与皮肤代理
-- ✔ WebSocket 实时面板前端接入
-- ✔ RCON 皮肤同步通道（MUA 绑定后）
-
-未完成 / 待完善：
-- ❌ 签到系统后端闭环（当前以静态演示为主）
-- ❌ API 规范统一（JSON API 与表单重定向混用）
-- ❌ 状态推送链路一致性（`status/update` 写入与 `status/cache` 回源策略存在分叉）
-- ❌ 配置安全化（敏感默认值仍硬编码）
-- ❌ 统一错误码与响应契约
-- ❌ 前端样式与脚本分层标准化
-
-整体完成度（工程视角）：
-- 约 78%（可运行、可用，但仍有中后期治理任务）。
-
----
-
-## ⚠️ 当前问题（仅分析）
-
-结构问题：
-- Controller 承担大量 SQL 与流程分支，Model 层偏薄。
-- 管理端接口大多重定向返回，不利于 API 化与前后端职责清晰化。
-- 实时链路依赖外部 WS 服务，仓库内缺少对应服务实现与契约文档。
-
-性能隐患：
-- `lighthouse-report.json`（2026-04-21）显示：Performance 60，FCP 6.0s，LCP 47.3s，TTI 47.4s，总传输约 9.4MiB。
-- 字体资源总体偏重，存在重复请求。
-- Lighthouse 指出未使用 CSS 体积较大（约 362KiB）与明显渲染阻塞时延（约 2520ms）。
-
-代码耦合点：
-- 认证、审计、IP 策略、MUA、RCON 在单控制器内交织。
-- 多处业务逻辑直接依赖全局常量与 `$_SESSION`，缺少抽象边界。
-- 配置项与业务逻辑强耦合，环境切换风险较高。
-
-UI 问题：
-- 页面内联样式/脚本多，复用与维护成本偏高。
-- 管理端与前台视觉体系存在风格分裂。
-- 部分模块（签到）UI 完整但数据闭环未落地，易造成“功能已完成”误判。
-
----
-
-## 🧩 技术债记录（重要）
-
-- 配置债务：敏感值在 `config.php` 以默认值形式存在，且部分 token 出现在 URL 级配置。
-- 安全债务：多处外部请求关闭 SSL 校验；`skin-proxy` 为开放 URL 代理，存在 SSRF 攻击面。
-- 会话债务：登录成功后未见显式 session ID 轮换流程（需关注会话固定风险）。
-- API 债务：同一系统内混合 JSON 接口与表单跳转，契约统一性不足。
-- 模块债务：签到模块前后端不对齐（前端演示先行，后端落地滞后）。
-- 依赖债务：存在 `BaiduSEO` 引用但仓库内无对应核心类实现迹象（潜在不可达或遗留路径）。
-- 性能债务：首屏资源重量高，前端资源分发策略与页面模块化颗粒度不均衡。
-
----
-
-## 🧭 后续开发建议（仅方向）
-
-架构层建议：
-- 将认证/账号安全、玩家域、内容域、后台管理域进行边界化拆分。
-- 建立统一 API 契约层（状态码、错误码、响应包装）并逐步替代重定向式后台写操作。
-- 将配置中心与密钥管理标准化，降低运行环境耦合。
-- 为外部 WS 服务与插件推送建立协议文档（消息 schema + 版本策略）。
-
-模块拆分建议：
-- 将签到系统独立为完整子模块（规则、发奖、日志、统计、审计）。
-- 将“实时状态聚合”从页面逻辑中抽离为独立服务契约层。
-- 将前端样式体系从“页面内联”迁移到“组件样式清单”治理模式。
-- 将审计与风控（限流、IP 策略、验证码）整理为可复用中间层能力。
-
----
-
-## 📝 总结
-
-架构成熟度：
-- 中等偏上。核心业务链路齐全，具备实际生产雏形。
-
-可维护性：
-- 中等。功能可用，但控制器臃肿、接口风格混杂、配置耦合降低了长期可维护性。
-
-扩展性：
-- 中等。已有 MVC 与缓存/实时基础，但需要在模块边界、协议契约与配置治理层面进一步工程化，才能支撑后续多人协作和持续演进。
-```
-
-## API Unified Response (2026-04-23)
-
-### Standard Envelope
-All unified API responses now use this envelope:
-
-```json
-{
-  "success": true,
-  "code": 0,
-  "message": "ok",
-  "requestId": "a1b2c3d4e5f6a7b8",
-  "timestamp": 1710000000,
-  "data": {}
-}
-```
-
-### Error Codes
-- `0`: success
-- `1001`: auth invalid / unauthorized
-- `2001`: user not found
-- `5000`: server error
-
-### Compatibility Layer
-- `/api/*` keeps legacy payload by default to avoid breaking old front-end callers.
-- Unified envelope for `/api/*` is enabled when request contains `ajax` flag (for example `?ajax=1`) or AJAX headers.
-- `/auth/*`, `/profile/*`, `/forgot-password`, `/reset-password` now return unified envelope through the shared controller JSON pipeline.
-
-### requestId
-- Every unified response includes `requestId`.
-- Response header is also set: `X-Request-Id: <requestId>`.
-- Legacy JSON responses under API-compatible paths also get `X-Request-Id` for tracing.
-
-### Admin AJAX (Compatible Upgrade)
-- Admin form endpoints still support redirect flow.
-- When called as AJAX (`X-Requested-With: XMLHttpRequest` or `ajax` flag), the same endpoints return JSON envelope instead of redirect.
-
-### Examples
-
-`POST /auth/login` response example:
-
-```json
-{
-  "success": false,
-  "code": 1001,
-  "message": "Access denied",
-  "requestId": "9f8e7d6c5b4a3210",
-  "timestamp": 1710000000,
-  "data": {}
-}
-```
-
-`GET /api/status?ajax=1` response example:
-
-```json
-{
-  "success": true,
-  "code": 0,
-  "message": "ok",
-  "requestId": "1a2b3c4d5e6f7890",
-  "timestamp": 1710000000,
-  "data": {
-    "server": {},
-    "stats": {},
-    "players": [],
-    "plugins": [],
-    "chat": []
+`json
+[
+  {
+    "player": "Alice",
+    "message": "hello",
+    "time": 1710000000
   }
-}
-```
+]
+`
 
-## Realtime Data Source Update (2026-04-24)
+---
 
-### Data source policy
-- Primary realtime source: WS status center API
-- Website status endpoint now reads from: http://localhost:3001/api/status (configurable by WS_STATUS_API_BASE)
-- Legacy local cache files are removed from status read path
-- Database is now the fallback historical source
+## 4. WebSocket 使用方式
 
-### API routes
-- GET /api/status -> WS status center (/api/status) with DB fallback
-- GET /api/status/cache -> compatibility alias to /api/status
-- GET /api/players -> WS status center (/api/players), fallback to status snapshot extraction, then DB fallback
-- POST /api/server/status/update -> writes status snapshot to DB history table (server_status_history)
+前端通过 PUBLIC_STATUS_WS_URL 连接状态中心，实时接收 snapshot / players_update / server_status / chat_message 等事件。
 
-### Frontend
-- Home page polling source changed to GET /api/status
-- Optional WS live enhancement supported via PUBLIC_STATUS_WS_URL (if empty, polling-only mode stays active)
+示例:
 
-### New config keys
-- WS_STATUS_API_BASE (default: http://localhost:3001)
-- WS_STATUS_API_TIMEOUT_MS (default: 2500)
-- PUBLIC_STATUS_WS_URL (default: empty)
+`js
+const ws = new WebSocket(window.PUBLIC_STATUS_WS_URL);
 
-## API 调用路径（WS 主源）
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  const type = msg.type || msg.event;
 
-- `GET /api/status`  
-  网站前端 -> PHP 接口 -> `http://localhost:3001/api/status`（由 `WS_STATUS_API_BASE` 配置）-> 失败时回退 `server_status_history` 最新快照 -> 再失败返回离线默认结构。
+  if (type === "snapshot") {
+    // 全量状态更新：在线状态、玩家列表、版本、MOTD
+  }
 
-- `GET /api/players`  
-  网站前端/业务方 -> PHP 接口 -> `http://localhost:3001/api/players` -> 失败时从状态快照提取玩家列表 -> 再失败回退 DB 历史。
+  if (type === "players_update") {
+    // 增量玩家列表更新
+  }
 
-- `GET /api/status/cache`  
-  兼容旧路径，内部等价于 `GET /api/status`。
+  if (type === "chat_message") {
+    // 实时聊天流
+  }
+};
+`
 
-- `POST /api/server/status/update`  
-  插件/服务端推送 -> PHP 校验 token -> 写入 `server_status_history`（用于历史与降级）。
+说明:
+
+- 首页保留轮询兜底。
+- WS 可用时页面会优先采用实时事件。
+
+---
+
+## 5. 降级策略
+
+当 WS 状态中心不可用时，网站 API 采用多级兜底:
+
+1. WS API 实时请求
+2. MySQL server_status_history 最新记录
+3. 本地 snapshot 缓存
+4. 离线默认响应
+
+对应接口:
+
+- /api/status: WS -> DB -> snapshot -> offline payload
+- /api/players: WS -> status/DB -> snapshot -> offline players
+- /api/chat: WS -> DB(status.chat) -> snapshot -> []
+
+---
+
+## 6. 配置说明
+
+配置项位于 pp/config/config.php，支持环境变量覆盖。
+
+| Key | 默认值 | 说明 |
+|---|---|---|
+| WS_STATUS_API_BASE | http://localhost:3001 | WS 状态中心 HTTP 基址 |
+| WS_STATUS_API_TIMEOUT_MS | 2500 | WS API 请求超时 |
+| PUBLIC_STATUS_WS_URL | "" | 前端实时 WS 地址 |
+
+建议:
+
+- 生产环境通过部署平台注入环境变量。
+- PUBLIC_STATUS_WS_URL 建议使用 wss://。
+
+---
+
+## 7. 性能策略
+
+### API 缓存
+
+- 状态接口: 2s 短缓存（目标区间 1-3s）
+- 玩家接口: 2s 短缓存
+- 聊天接口: 1s 极短缓存
+
+### Snapshot 策略
+
+- 最近可用快照落盘到 storage/cache。
+- 快照用于故障窗口内持续服务。
+
+### 数据层角色
+
+- WS: 实时状态中心
+- DB: 历史数据与故障兜底
+
+---
+
+## 8. 运维检查清单
+
+- 检查 WS 状态中心健康: {WS_STATUS_API_BASE}/api/status
+- 检查网站 API 健康: /api/status
+- 检查 WebSocket 连接: PUBLIC_STATUS_WS_URL
+- 检查降级链: 停止 WS 服务后验证 /api/status 与 /api/players 仍有可读结果

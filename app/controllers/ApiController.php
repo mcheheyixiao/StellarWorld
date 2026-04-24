@@ -14,6 +14,10 @@ class ApiController extends Controller
 {
     private const AVATAR_CACHE_TTL_SECONDS = 21600;
     private const AVATAR_REDIS_TTL_SECONDS = 1800;
+    private const STATUS_CACHE_TTL_SECONDS = 2;
+    private const PLAYERS_CACHE_TTL_SECONDS = 2;
+    private const CHAT_CACHE_TTL_SECONDS = 1;
+    private const SNAPSHOT_FALLBACK_MAX_AGE_SECONDS = 3600;
 
     private static bool $avatarCacheTableReady = false;
     private static bool $serverStatusHistoryTableReady = false;
@@ -155,9 +159,24 @@ class ApiController extends Controller
             session_write_close();
         }
 
+        header('Cache-Control: private, max-age=' . self::STATUS_CACHE_TTL_SECONDS);
+
+        $cached = $this->loadEndpointCache('status', self::STATUS_CACHE_TTL_SECONDS);
+        if (is_array($cached)) {
+            $normalizedCached = $this->normalizeStatusPayload($cached);
+            if (is_array($normalizedCached)) {
+                $this->json($normalizedCached);
+                return;
+            }
+        }
+
         $status = $this->loadStatusFromWsApi();
         if (is_array($status)) {
             $this->persistStatusHistory($status, 'ws-api');
+            $this->saveEndpointCache('status', $status);
+            $this->saveSnapshotCache('status', $status);
+            $this->saveSnapshotCache('players', $this->extractPlayersPayload($status));
+            $this->saveSnapshotCache('chat', $this->extractChatPayload($status));
             $this->json($status);
             return;
         }
@@ -166,6 +185,15 @@ class ApiController extends Controller
         if (is_array($fallback)) {
             $this->json($fallback);
             return;
+        }
+
+        $snapshot = $this->loadSnapshotCache('status', self::SNAPSHOT_FALLBACK_MAX_AGE_SECONDS);
+        if (is_array($snapshot)) {
+            $normalizedSnapshot = $this->normalizeStatusPayload($snapshot);
+            if (is_array($normalizedSnapshot)) {
+                $this->json($normalizedSnapshot);
+                return;
+            }
         }
 
         $this->json($this->defaultOfflineStatus());
@@ -177,16 +205,41 @@ class ApiController extends Controller
             session_write_close();
         }
 
+        header('Cache-Control: private, max-age=' . self::PLAYERS_CACHE_TTL_SECONDS);
+
+        $cached = $this->loadEndpointCache('players', self::PLAYERS_CACHE_TTL_SECONDS);
+        if (is_array($cached)) {
+            $this->json($this->sanitizePlayersPayload($cached));
+            return;
+        }
+
         $players = $this->loadPlayersFromWsApi();
         if (is_array($players)) {
+            $this->saveEndpointCache('players', $players);
+            $this->saveSnapshotCache('players', $players);
             $this->json($players);
             return;
+        }
+
+        $cachedStatus = $this->loadEndpointCache('status', self::STATUS_CACHE_TTL_SECONDS);
+        if (is_array($cachedStatus)) {
+            $normalizedCachedStatus = $this->normalizeStatusPayload($cachedStatus);
+            if (is_array($normalizedCachedStatus)) {
+                $this->json($this->extractPlayersPayload($normalizedCachedStatus));
+                return;
+            }
         }
 
         $status = $this->loadStatusFromWsApi();
         if (is_array($status)) {
             $this->persistStatusHistory($status, 'ws-api');
-            $this->json($this->extractPlayersPayload($status));
+            $playersPayload = $this->extractPlayersPayload($status);
+            $this->saveEndpointCache('status', $status);
+            $this->saveSnapshotCache('status', $status);
+            $this->saveEndpointCache('players', $playersPayload);
+            $this->saveSnapshotCache('players', $playersPayload);
+            $this->saveSnapshotCache('chat', $this->extractChatPayload($status));
+            $this->json($playersPayload);
             return;
         }
 
@@ -196,7 +249,68 @@ class ApiController extends Controller
             return;
         }
 
+        $playersSnapshot = $this->loadSnapshotCache('players', self::SNAPSHOT_FALLBACK_MAX_AGE_SECONDS);
+        if (is_array($playersSnapshot)) {
+            $this->json($this->sanitizePlayersPayload($playersSnapshot));
+            return;
+        }
+
+        $statusSnapshot = $this->loadSnapshotCache('status', self::SNAPSHOT_FALLBACK_MAX_AGE_SECONDS);
+        if (is_array($statusSnapshot)) {
+            $normalizedStatusSnapshot = $this->normalizeStatusPayload($statusSnapshot);
+            if (is_array($normalizedStatusSnapshot)) {
+                $this->json($this->extractPlayersPayload($normalizedStatusSnapshot));
+                return;
+            }
+        }
+
         $this->json($this->extractPlayersPayload($this->defaultOfflineStatus()));
+    }
+
+    public function getChat(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        header('Cache-Control: private, max-age=' . self::CHAT_CACHE_TTL_SECONDS);
+
+        $cached = $this->loadEndpointCache('chat', self::CHAT_CACHE_TTL_SECONDS);
+        if (is_array($cached)) {
+            $this->json($this->sanitizeChatPayload($cached));
+            return;
+        }
+
+        $chat = $this->loadChatFromWsApi();
+        if (is_array($chat)) {
+            $this->saveEndpointCache('chat', $chat);
+            $this->saveSnapshotCache('chat', $chat);
+            $this->json($chat);
+            return;
+        }
+
+        $fallbackStatus = $this->loadLatestStatusFromDatabase();
+        if (is_array($fallbackStatus)) {
+            $chatFromDb = $this->extractChatPayload($fallbackStatus);
+            if ($chatFromDb !== []) {
+                $this->json($chatFromDb);
+                return;
+            }
+        }
+
+        $chatSnapshot = $this->loadSnapshotCache('chat', self::SNAPSHOT_FALLBACK_MAX_AGE_SECONDS);
+        if (is_array($chatSnapshot)) {
+            $this->json($this->sanitizeChatPayload($chatSnapshot));
+            return;
+        }
+
+        $statusSnapshot = $this->loadSnapshotCache('status', self::SNAPSHOT_FALLBACK_MAX_AGE_SECONDS);
+        if (is_array($statusSnapshot)) {
+            $this->json($this->extractChatPayload($statusSnapshot));
+            return;
+        }
+
+        $this->json([]);
     }
 
     /**
@@ -234,6 +348,10 @@ class ApiController extends Controller
             $this->json(['success' => false, 'code' => ApiCode::SERVER_ERROR, 'message' => 'Persist failed'], 500);
             return;
         }
+
+        $this->saveSnapshotCache('status', $status);
+        $this->saveSnapshotCache('players', $this->extractPlayersPayload($status));
+        $this->saveSnapshotCache('chat', $this->extractChatPayload($normalized));
 
         $this->json(['success' => true, 'message' => 'Accepted']);
     }
@@ -588,6 +706,42 @@ class ApiController extends Controller
         return is_array($status) ? $this->extractPlayersPayload($status) : null;
     }
 
+    private function loadChatFromWsApi(): ?array
+    {
+        $payload = $this->fetchWsApiJson('/api/chat');
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        $candidate = $this->unwrapApiPayload($payload);
+        if (isset($candidate['chat']) && is_array($candidate['chat'])) {
+            return $this->sanitizeChatPayload($candidate['chat']);
+        }
+
+        if (isset($candidate['messages']) && is_array($candidate['messages'])) {
+            return $this->sanitizeChatPayload($candidate['messages']);
+        }
+
+        if (isset($candidate['list']) && is_array($candidate['list'])) {
+            return $this->sanitizeChatPayload($candidate['list']);
+        }
+
+        if (!$this->isAssocArray($candidate)) {
+            return $this->sanitizeChatPayload($candidate);
+        }
+
+        if (array_key_exists('message', $candidate) || array_key_exists('content', $candidate) || array_key_exists('text', $candidate)) {
+            return $this->sanitizeChatPayload([$candidate]);
+        }
+
+        $statusPayload = $this->normalizeStatusPayload($payload);
+        if (is_array($statusPayload)) {
+            return $this->extractChatPayload($statusPayload);
+        }
+
+        return null;
+    }
+
     private function wsStatusApiBaseUrl(): string
     {
         $baseUrl = defined('WS_STATUS_API_BASE') ? trim((string)WS_STATUS_API_BASE) : '';
@@ -788,6 +942,22 @@ class ApiController extends Controller
         return ['online' => 0, 'max' => 0, 'list' => []];
     }
 
+    private function extractChatPayload(array $statusPayload): array
+    {
+        $normalized = $this->sanitizeLegacyStatusPayload($statusPayload);
+        if (isset($normalized['chat']) && is_array($normalized['chat'])) {
+            return $this->sanitizeChatPayload($normalized['chat']);
+        }
+        if (isset($normalized['messages']) && is_array($normalized['messages'])) {
+            return $this->sanitizeChatPayload($normalized['messages']);
+        }
+        if (isset($normalized['data']['chat']) && is_array($normalized['data']['chat'])) {
+            return $this->sanitizeChatPayload($normalized['data']['chat']);
+        }
+
+        return [];
+    }
+
     private function sanitizePlayersPayload(array $payload): array
     {
         $playerNode = $payload;
@@ -860,6 +1030,56 @@ class ApiController extends Controller
                 $entry['name_clean'] = $name;
             }
             $normalized[] = $entry;
+        }
+
+        return $normalized;
+    }
+
+    private function sanitizeChatPayload(array $messages): array
+    {
+        $normalized = [];
+
+        foreach ($messages as $item) {
+            if (is_string($item)) {
+                $message = trim($item);
+                if ($message === '') {
+                    continue;
+                }
+
+                $normalized[] = [
+                    'player' => 'Server',
+                    'message' => $message,
+                    'time' => time(),
+                ];
+                continue;
+            }
+
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $message = trim((string)($item['message'] ?? $item['content'] ?? $item['text'] ?? ''));
+            if ($message === '') {
+                continue;
+            }
+
+            $player = trim((string)($item['player'] ?? $item['playerName'] ?? $item['username'] ?? $item['name'] ?? $item['sender'] ?? ''));
+            if ($player === '') {
+                $player = 'Server';
+            }
+
+            $normalizedItem = $item;
+            $normalizedItem['player'] = $player;
+            $normalizedItem['message'] = $message;
+
+            $time = $item['time'] ?? $item['timestamp'] ?? $item['created_at'] ?? $item['at'] ?? null;
+            if ($time !== null && $time !== '') {
+                $normalizedItem['time'] = $time;
+            } elseif (!array_key_exists('time', $normalizedItem)) {
+                $normalizedItem['time'] = time();
+            }
+
+            $normalized[] = $normalizedItem;
         }
 
         return $normalized;
@@ -940,6 +1160,98 @@ class ApiController extends Controller
         } catch (\Throwable $e) {
             return null;
         }
+    }
+
+    private function saveEndpointCache(string $name, array $payload): void
+    {
+        $this->writeJsonCacheFile('ws-api-' . $name, $payload);
+    }
+
+    private function loadEndpointCache(string $name, int $maxAgeSeconds): ?array
+    {
+        return $this->readJsonCacheFile('ws-api-' . $name, $maxAgeSeconds);
+    }
+
+    private function saveSnapshotCache(string $name, array $payload): void
+    {
+        $this->writeJsonCacheFile('ws-snapshot-' . $name, $payload);
+    }
+
+    private function loadSnapshotCache(string $name, int $maxAgeSeconds): ?array
+    {
+        return $this->readJsonCacheFile('ws-snapshot-' . $name, $maxAgeSeconds);
+    }
+
+    private function writeJsonCacheFile(string $name, array $payload): void
+    {
+        $filePath = $this->cacheFilePath($name);
+        if ($filePath === null) {
+            return;
+        }
+
+        $envelope = [
+            'captured_at' => time(),
+            'payload' => $payload,
+        ];
+        $json = json_encode($envelope, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (!is_string($json) || $json === '') {
+            return;
+        }
+
+        try {
+            @file_put_contents($filePath, $json, LOCK_EX);
+        } catch (\Throwable $e) {
+        }
+    }
+
+    private function readJsonCacheFile(string $name, int $maxAgeSeconds): ?array
+    {
+        $filePath = $this->cacheFilePath($name);
+        if ($filePath === null || !is_file($filePath)) {
+            return null;
+        }
+
+        $safeMaxAge = max(1, $maxAgeSeconds);
+        $mtime = @filemtime($filePath);
+        if ($mtime === false || (time() - (int)$mtime) > $safeMaxAge) {
+            return null;
+        }
+
+        try {
+            $raw = @file_get_contents($filePath);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        if (!is_string($raw) || trim($raw) === '') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return null;
+        }
+
+        if (isset($decoded['payload']) && is_array($decoded['payload'])) {
+            return $decoded['payload'];
+        }
+
+        return $decoded;
+    }
+
+    private function cacheFilePath(string $name): ?string
+    {
+        $safeName = preg_replace('/[^a-zA-Z0-9_-]/', '', strtolower(trim($name)));
+        if (!is_string($safeName) || $safeName === '') {
+            return null;
+        }
+
+        $cacheDir = CACHE_PATH;
+        if (!is_dir($cacheDir)) {
+            @mkdir($cacheDir, 0775, true);
+        }
+
+        return rtrim($cacheDir, '/\\') . DIRECTORY_SEPARATOR . $safeName . '.json';
     }
 
     private function ensureServerStatusHistoryTable(\PDO $db): void

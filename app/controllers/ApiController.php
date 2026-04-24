@@ -10,11 +10,16 @@ use Core\Database;
 use Core\LeaderboardSnapshot;
 use PDOException;
 
+/**
+ * NOTE: SQL executed via PDO; IDE SqlNoDataSourceInspection warnings can be ignored.
+ * @noinspection SqlNoDataSourceInspection
+ */
 class ApiController extends Controller
 {
     private const AVATAR_CACHE_TTL_SECONDS = 21600;
     private const AVATAR_REDIS_TTL_SECONDS = 1800;
-    private const STATUS_CACHE_TTL_SECONDS = 2;
+    private const STATUS_CACHE_TTL_SECONDS = 1;
+    private const HEALTH_CACHE_TTL_SECONDS = 1;
     private const PLAYERS_CACHE_TTL_SECONDS = 2;
     private const CHAT_CACHE_TTL_SECONDS = 1;
     private const SNAPSHOT_FALLBACK_MAX_AGE_SECONDS = 3600;
@@ -311,6 +316,40 @@ class ApiController extends Controller
         }
 
         $this->json([]);
+    }
+
+    public function getRealtimeHealth(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        header('Cache-Control: private, max-age=' . self::HEALTH_CACHE_TTL_SECONDS);
+
+        $cached = $this->loadEndpointCache('health', self::HEALTH_CACHE_TTL_SECONDS);
+        if (is_array($cached)) {
+            $this->json($this->normalizeRealtimeHealthPayload($cached, true));
+            return;
+        }
+
+        $health = $this->loadHealthFromWsApi();
+        if (is_array($health)) {
+            $this->saveEndpointCache('health', $health);
+            $this->json($health);
+            return;
+        }
+
+        $fallback = [
+            'realtime_api' => 'ERROR',
+            'plugin' => 'Offline',
+            'last_update_seconds' => $this->inferFallbackLastUpdateSeconds(),
+            'players_source' => 'Fallback',
+            'fallback_enabled' => true,
+            'fallback' => 'Enabled',
+            'checked_at' => time(),
+        ];
+        $this->saveEndpointCache('health', $fallback);
+        $this->json($fallback);
     }
 
     /**
@@ -740,6 +779,238 @@ class ApiController extends Controller
         }
 
         return null;
+    }
+
+    private function loadHealthFromWsApi(): ?array
+    {
+        $payload = $this->fetchWsApiJson('/health');
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        return $this->normalizeRealtimeHealthPayload($payload, true);
+    }
+
+    private function normalizeRealtimeHealthPayload(array $payload, bool $requestOk): array
+    {
+        $candidate = $this->unwrapApiPayload($payload);
+        $checkedAt = time();
+
+        $apiOk = $this->extractHealthApiOk($candidate, $requestOk);
+        $fallbackEnabled = $this->extractHealthFallbackEnabled($candidate, !$apiOk);
+        $pluginOnline = $this->extractHealthPluginOnline($candidate, $apiOk);
+        $playersSource = $this->normalizePlayersSource(
+            $this->firstAvailableValue($candidate, ['players_source', 'playersSource', 'source', 'source_type']),
+            $fallbackEnabled
+        );
+        $lastUpdateSeconds = $this->resolveLastUpdateSeconds($candidate, $checkedAt);
+
+        return [
+            'realtime_api' => $apiOk ? 'OK' : 'ERROR',
+            'plugin' => $pluginOnline ? 'Online' : 'Offline',
+            'last_update_seconds' => $lastUpdateSeconds,
+            'players_source' => $playersSource,
+            'fallback_enabled' => $fallbackEnabled,
+            'fallback' => $fallbackEnabled ? 'Enabled' : 'Disabled',
+            'checked_at' => $checkedAt,
+        ];
+    }
+
+    private function extractHealthApiOk(array $candidate, bool $default): bool
+    {
+        $apiState = $this->firstAvailableValue(
+            $candidate,
+            ['realtime_api', 'api', 'api_status', 'status', 'state', 'ok', 'healthy']
+        );
+        $resolved = $this->parseHealthBool($apiState);
+        if ($resolved !== null) {
+            return $resolved;
+        }
+
+        return $default;
+    }
+
+    private function extractHealthPluginOnline(array $candidate, bool $default): bool
+    {
+        $pluginValue = $this->firstAvailableValue(
+            $candidate,
+            ['plugin_online', 'pluginOnline', 'plugin_status', 'plugin', 'plugins']
+        );
+
+        if (is_array($pluginValue)) {
+            $nested = $this->firstAvailableValue($pluginValue, ['online', 'enabled', 'status', 'state', 'ok', 'healthy']);
+            $resolvedNested = $this->parseHealthBool($nested);
+            if ($resolvedNested !== null) {
+                return $resolvedNested;
+            }
+        }
+
+        $resolved = $this->parseHealthBool($pluginValue);
+        if ($resolved !== null) {
+            return $resolved;
+        }
+
+        return $default;
+    }
+
+    private function extractHealthFallbackEnabled(array $candidate, bool $default): bool
+    {
+        $fallbackValue = $this->firstAvailableValue(
+            $candidate,
+            ['fallback_enabled', 'fallbackEnabled', 'fallback', 'degraded', 'using_fallback']
+        );
+        $resolved = $this->parseHealthBool($fallbackValue);
+        if ($resolved !== null) {
+            return $resolved;
+        }
+
+        return $default;
+    }
+
+    private function normalizePlayersSource($rawSource, bool $fallbackEnabled): string
+    {
+        if (is_string($rawSource) && trim($rawSource) !== '') {
+            $normalized = strtolower(trim($rawSource));
+            if (str_contains($normalized, 'ws')) {
+                return 'WS';
+            }
+            if (str_contains($normalized, 'fallback') || str_contains($normalized, 'cache') || str_contains($normalized, 'db')) {
+                return 'Fallback';
+            }
+        }
+
+        return $fallbackEnabled ? 'Fallback' : 'WS';
+    }
+
+    private function resolveLastUpdateSeconds(array $candidate, int $nowTs): ?int
+    {
+        $secondsValue = $this->firstAvailableValue($candidate, ['last_update_seconds', 'lastUpdateSeconds', 'age_seconds', 'ageSeconds']);
+        if (is_numeric($secondsValue)) {
+            $seconds = max(0, (int)$secondsValue);
+            return $seconds;
+        }
+
+        $timestampValue = $this->firstAvailableValue(
+            $candidate,
+            ['updated_at', 'updatedAt', 'last_update_at', 'lastUpdateAt', 'timestamp', 'time', 'last_update', 'lastUpdate', 'checked_at']
+        );
+        $timestamp = $this->parseUnixTimestamp($timestampValue);
+        if ($timestamp !== null) {
+            return max(0, $nowTs - $timestamp);
+        }
+
+        return null;
+    }
+
+    private function parseUnixTimestamp($value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            $num = (int)$value;
+            if ($num > 1000000000000) {
+                return (int)floor($num / 1000);
+            }
+            return $num > 10000000000 ? (int)floor($num / 1000) : $num;
+        }
+
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $ts = strtotime($value);
+        return $ts === false ? null : (int)$ts;
+    }
+
+    private function parseHealthBool($value): ?bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return ((int)$value) > 0;
+        }
+
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $normalized = strtolower(trim($value));
+        if ($normalized === '') {
+            return null;
+        }
+
+        $stateFromWord = $this->parseHealthStateString($normalized);
+        if ($stateFromWord !== null) {
+            return $stateFromWord;
+        }
+
+        if (in_array($normalized, ['1', 'true', 'yes', 'y', 'on'], true)) {
+            return true;
+        }
+        if (in_array($normalized, ['0', 'false', 'no', 'n', 'off'], true)) {
+            return false;
+        }
+
+        return null;
+    }
+
+    private function parseHealthStateString(string $value): ?bool
+    {
+        if (in_array($value, ['ok', 'online', 'up', 'healthy', 'running', 'active', 'enabled', 'ws'], true)) {
+            return true;
+        }
+        if (in_array($value, ['error', 'offline', 'down', 'unhealthy', 'failed', 'fail', 'inactive', 'disabled'], true)) {
+            return false;
+        }
+
+        return null;
+    }
+
+    private function firstAvailableValue(array $source, array $keys)
+    {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $source) && $source[$key] !== null && $source[$key] !== '') {
+                return $source[$key];
+            }
+        }
+
+        return null;
+    }
+
+    private function cacheFileAgeSeconds(string $cacheName): ?int
+    {
+        $filePath = $this->cacheFilePath($cacheName);
+        if ($filePath === null || !is_file($filePath)) {
+            return null;
+        }
+
+        $mtime = @filemtime($filePath);
+        if ($mtime === false) {
+            return null;
+        }
+
+        return max(0, time() - (int)$mtime);
+    }
+
+    private function inferFallbackLastUpdateSeconds(): ?int
+    {
+        $ages = [];
+        foreach (['ws-api-status', 'ws-snapshot-status'] as $cacheName) {
+            $age = $this->cacheFileAgeSeconds($cacheName);
+            if ($age !== null) {
+                $ages[] = $age;
+            }
+        }
+
+        if ($ages === []) {
+            return null;
+        }
+
+        return min($ages);
     }
 
     private function wsStatusApiBaseUrl(): string

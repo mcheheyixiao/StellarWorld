@@ -13,9 +13,13 @@
     var socket = null;
     var reconnectTimer = null;
     var snapshotTimer = null;
+    var healthTimer = null;
+    var healthFetchInFlight = false;
     var reconnectAttempts = 0;
     var manualClose = false;
     var lastSnapshotRequestAt = 0;
+    var healthPollIntervalMs = 1000;
+    var healthEndpoint = '/api/status/health';
 
     var minSnapshotIntervalMs = Math.max(1500, Number(config.min_snapshot_interval_ms || 2000));
     var snapshotIntervalMs = Math.max(minSnapshotIntervalMs, Number(config.snapshot_interval_ms || 3000));
@@ -34,10 +38,16 @@
         playerTotal: document.getElementById('realtime-player-total'),
         playerList: document.getElementById('realtime-player-list'),
         pluginList: document.getElementById('realtime-plugin-list'),
-        chatStream: document.getElementById('realtime-chat-stream')
+        chatStream: document.getElementById('realtime-chat-stream'),
+        healthApi: document.getElementById('realtime-health-api'),
+        healthPlugin: document.getElementById('realtime-health-plugin'),
+        healthLastUpdate: document.getElementById('realtime-health-last-update'),
+        healthPlayersSource: document.getElementById('realtime-health-players-source'),
+        healthFallback: document.getElementById('realtime-health-fallback')
     };
 
     var metricToneClasses = ['ta-metric-good', 'ta-metric-warn', 'ta-metric-bad'];
+    var healthToneClasses = ['ta-health-good', 'ta-health-warn', 'ta-health-bad'];
 
     function connect(isReconnect) {
         if (document.hidden || !isRealtimeTabActive()) {
@@ -134,6 +144,7 @@
         manualClose = true;
         clearReconnectTimer();
         clearSnapshotTimer();
+        clearHealthTimer();
         if (socket) {
             socket.close();
             socket = null;
@@ -164,6 +175,25 @@
         }
     }
 
+    function startHealthTimer() {
+        if (healthTimer !== null) {
+            return;
+        }
+
+        fetchRealtimeHealth();
+        healthTimer = window.setInterval(function () {
+            fetchRealtimeHealth();
+        }, healthPollIntervalMs);
+    }
+
+    function clearHealthTimer() {
+        if (healthTimer !== null) {
+            clearInterval(healthTimer);
+            healthTimer = null;
+        }
+        healthFetchInFlight = false;
+    }
+
     function requestSnapshot(force) {
         if (!socket || socket.readyState !== WebSocket.OPEN) {
             return;
@@ -183,6 +213,90 @@
             lastSnapshotRequestAt = now;
         } catch (err) {
             // ignore
+        }
+    }
+
+    function fetchRealtimeHealth() {
+        if (healthFetchInFlight || document.hidden || !isRealtimeTabActive()) {
+            return;
+        }
+
+        healthFetchInFlight = true;
+
+        fetch(healthEndpoint + '?t=' + Date.now(), {
+            credentials: 'same-origin',
+            cache: 'no-store'
+        }).then(function (response) {
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+            return response.json();
+        }).then(function (payload) {
+            var data = payload;
+            if (payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object') {
+                data = payload.data;
+            }
+            applyHealthStatus(data);
+            healthFetchInFlight = false;
+        }).catch(function () {
+            applyHealthStatus({
+                realtime_api: 'ERROR',
+                plugin: 'Offline',
+                last_update_seconds: null,
+                players_source: 'Fallback',
+                fallback_enabled: true,
+                fallback: 'Enabled'
+            });
+            healthFetchInFlight = false;
+        });
+    }
+
+    function applyHealthStatus(data) {
+        if (!data || typeof data !== 'object') {
+            return;
+        }
+
+        var apiText = String(pickValue(data, ['realtime_api', 'api_status', 'status']) || '--');
+        var pluginText = String(pickValue(data, ['plugin', 'plugin_status']) || '--');
+        var sourceText = String(pickValue(data, ['players_source', 'playersSource', 'source']) || '--');
+        var fallbackText = String(pickValue(data, ['fallback']) || '--');
+
+        var fallbackEnabled = parseHealthBoolean(pickValue(data, ['fallback_enabled', 'fallbackEnabled', 'fallback']));
+        if (fallbackEnabled !== null) {
+            fallbackText = fallbackEnabled ? 'Enabled' : 'Disabled';
+        }
+
+        var lastUpdateSeconds = pickNumber(data, ['last_update_seconds', 'lastUpdateSeconds']);
+        var lastUpdateText = '--';
+        if (lastUpdateSeconds !== null) {
+            lastUpdateText = String(Math.max(0, Math.round(lastUpdateSeconds))) + 's ago';
+        }
+
+        var apiUpper = apiText.toUpperCase();
+        var pluginLower = pluginText.toLowerCase();
+        var sourceLower = sourceText.toLowerCase();
+
+        setHealthField(dom.healthApi, apiUpper, apiUpper === 'OK' ? 'good' : 'bad');
+        setHealthField(dom.healthPlugin, pluginText, pluginLower === 'online' ? 'good' : 'bad');
+        setHealthField(dom.healthLastUpdate, lastUpdateText, lastUpdateSeconds !== null && lastUpdateSeconds <= 10 ? 'good' : 'warn');
+        setHealthField(dom.healthPlayersSource, sourceText, sourceLower.indexOf('ws') !== -1 ? 'good' : 'warn');
+        var fallbackTone = fallbackEnabled === null ? 'warn' : (fallbackEnabled === true ? 'bad' : 'good');
+        setHealthField(dom.healthFallback, fallbackText, fallbackTone);
+    }
+
+    function setHealthField(element, text, tone) {
+        if (!element) {
+            return;
+        }
+
+        element.textContent = text;
+        element.classList.remove(healthToneClasses[0], healthToneClasses[1], healthToneClasses[2]);
+        if (tone === 'good') {
+            element.classList.add('ta-health-good');
+        } else if (tone === 'warn') {
+            element.classList.add('ta-health-warn');
+        } else if (tone === 'bad') {
+            element.classList.add('ta-health-bad');
         }
     }
 
@@ -635,6 +749,31 @@
         return Number.isFinite(num) ? num : null;
     }
 
+    function parseHealthBoolean(value) {
+        if (typeof value === 'boolean') {
+            return value;
+        }
+        if (typeof value === 'number') {
+            return value > 0;
+        }
+        if (typeof value !== 'string') {
+            return null;
+        }
+
+        var normalized = value.trim().toLowerCase();
+        if (!normalized) {
+            return null;
+        }
+        if (['enabled', 'online', 'ok', 'true', 'on', '1', 'yes'].indexOf(normalized) !== -1) {
+            return true;
+        }
+        if (['disabled', 'offline', 'error', 'false', 'off', '0', 'no'].indexOf(normalized) !== -1) {
+            return false;
+        }
+
+        return null;
+    }
+
     function formatDecimal(value, digits) {
         if (!Number.isFinite(value)) {
             return '--';
@@ -729,6 +868,7 @@
     function pauseRealtimePolling() {
         clearReconnectTimer();
         clearSnapshotTimer();
+        clearHealthTimer();
 
         if (socket) {
             manualClose = true;
@@ -752,6 +892,7 @@
             pauseRealtimePolling();
             return;
         }
+        startHealthTimer();
         connect(false);
     }
 
@@ -789,6 +930,7 @@
         }
 
         if (isRealtimeTabActive()) {
+            startHealthTimer();
             connect(false);
         }
     });
@@ -810,6 +952,7 @@
     watchTabVisibility();
 
     if (isRealtimeTabActive()) {
+        startHealthTimer();
         connect(false);
     } else {
         setConnectionState('disconnected', '等待打开面板');

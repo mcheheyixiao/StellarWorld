@@ -1,202 +1,185 @@
-﻿# StellarVan Realtime Status Platform
+﻿# StellarWorld Realtime Observability
 
 ## 1. 系统架构
 
-本系统采用“网站消费层 + WebSocket 状态中心 + Minecraft 插件采集层”的三层架构。
+StellarWorld 采用三层实时观测架构：
 
-- 网站（PHP MVC）: 对外提供页面与统一 REST API。
-- WS 状态中心（Node/WebSocket Service）: 聚合服务器实时状态、玩家、聊天流。
-- 插件采集层（Minecraft Plugin Agent）: 从游戏服采集运行指标与事件并推送到状态中心。
-- MySQL: 作为历史快照与审计数据存储。
+- 网站层（PHP MVC）：提供后台页面与统一 API。
+- 状态中心（WS + HTTP）：聚合游戏服实时指标、玩家、聊天与插件状态。
+- 数据兜底层（MySQL + 本地缓存）：在状态中心不可用时提供可读结果。
 
-数据流路径:
+链路如下：
 
-1. 插件采集层 -> WS 状态中心
-2. 网站 API -> WS 状态中心
-3. 网站 API 在 WS 不可达时 -> MySQL 历史快照 -> 本地 snapshot
+1. Minecraft 插件 -> 状态中心（WebSocket/HTTP 推送）
+2. 网站 API -> 状态中心（`{WS_STATUS_API_BASE}`）
+3. 状态中心异常时 -> DB 历史快照 -> 本地 snapshot 缓存 -> 离线默认值
 
----
+## 2. 数据来源（WS vs DB）
 
-## 2. 数据来源说明
+实时优先级：
 
-### 实时来源
+- `/api/status` 优先读取 WS 状态中心。
+- `/api/players` 优先读取 WS 玩家数据。
+- `/api/chat` 优先读取 WS 聊天流。
 
-网站实时读路径全部指向 WS 状态中心:
+兜底来源：
 
-- GET /api/status -> {WS_STATUS_API_BASE}/api/status
-- GET /api/players -> {WS_STATUS_API_BASE}/api/players
-- GET /api/chat -> {WS_STATUS_API_BASE}/api/chat
+- MySQL 表 `server_status_history`：历史状态快照。
+- `storage/cache/*.json`：短时缓存与 snapshot。
 
-### 历史来源
+结论：
 
-- MySQL server_status_history 保存状态历史快照。
-- 本地 storage/cache/*.json 保存短周期缓存与降级 snapshot。
-
-说明:
-
-- 实时读优先级始终为 WS。
-- DB 用于历史与故障兜底。
-
----
+- WS 是实时主来源。
+- DB 与 snapshot 仅用于故障窗口的连续服务。
 
 ## 3. API 说明
 
-### GET /api/status
+核心 API（保持现有接口不删除）：
 
-上游调用:
+- `GET /api/status`
+- `GET /api/status/cache`
+- `GET /api/status/health`
+- `GET /api/players`
+- `GET /api/chat`
 
-- {WS_STATUS_API_BASE}/api/status
+### `GET /api/status`
 
-返回结构（保持兼容）:
+上游：`{WS_STATUS_API_BASE}/api/status`
 
-`json
+返回（示例）：
+
+```json
 {
   "online": true,
   "players": {
     "online": 12,
     "max": 100,
-    "list": [
-      { "name": "Alice", "name_clean": "Alice" }
-    ]
+    "list": [{ "name": "Alice", "name_clean": "Alice" }]
   },
-  "motd": {
-    "clean": "Welcome"
-  },
-  "version": {
-    "name_clean": "1.20.1"
-  }
+  "motd": { "clean": "Welcome" },
+  "version": { "name_clean": "1.20.1" }
 }
-`
+```
 
-### GET /api/players
+### `GET /api/status/health`
 
-上游调用:
+上游：`{WS_STATUS_API_BASE}/health`
 
-- {WS_STATUS_API_BASE}/api/players
+返回（示例）：
 
-返回结构（保持兼容）:
-
-`json
+```json
 {
-  "online": 12,
-  "max": 100,
-  "list": [
-    { "name": "Alice", "name_clean": "Alice" }
-  ]
+  "realtime_api": "OK",
+  "plugin": "Online",
+  "last_update_seconds": 3,
+  "players_source": "WS",
+  "fallback_enabled": false,
+  "fallback": "Disabled",
+  "checked_at": 1710000000
 }
-`
+```
 
-### GET /api/chat
+失败时（示例）：
 
-上游调用:
+```json
+{
+  "realtime_api": "ERROR",
+  "plugin": "Offline",
+  "players_source": "Fallback",
+  "fallback_enabled": true,
+  "fallback": "Enabled"
+}
+```
 
-- {WS_STATUS_API_BASE}/api/chat
+### `GET /api/players`
 
-返回结构:
+上游：`{WS_STATUS_API_BASE}/api/players`
 
-`json
-[
-  {
-    "player": "Alice",
-    "message": "hello",
-    "time": 1710000000
-  }
-]
-`
+### `GET /api/chat`
 
----
+上游：`{WS_STATUS_API_BASE}/api/chat`
 
 ## 4. WebSocket 使用方式
 
-前端通过 PUBLIC_STATUS_WS_URL 连接状态中心，实时接收 snapshot / players_update / server_status / chat_message 等事件。
+前台页面通过 `PUBLIC_STATUS_WS_URL` 连接状态中心，实时接收：
 
-示例:
+- `snapshot`
+- `players_update`
+- `stats_update`
+- `server_status`
+- `chat_message`
 
-`js
+示例：
+
+```js
 const ws = new WebSocket(window.PUBLIC_STATUS_WS_URL);
 
 ws.onmessage = (event) => {
-  const msg = JSON.parse(event.data);
-  const type = msg.type || msg.event;
+  const payload = JSON.parse(event.data);
+  const type = payload.type || payload.event || payload.action;
 
   if (type === "snapshot") {
-    // 全量状态更新：在线状态、玩家列表、版本、MOTD
+    // 全量刷新状态卡（在线状态、玩家、版本、TPS、MOTD）
   }
 
   if (type === "players_update") {
-    // 增量玩家列表更新
-  }
-
-  if (type === "chat_message") {
-    // 实时聊天流
+    // 增量刷新玩家数与玩家列表
   }
 };
-`
+```
 
-说明:
+前台策略：
 
-- 首页保留轮询兜底。
-- WS 可用时页面会优先采用实时事件。
+- WS 可用时优先使用实时事件。
+- HTTP 轮询（`/api/status`）保留为兜底。
 
----
+## 5. 健康检测
 
-## 5. 降级策略
+后台实时链路健康卡片会展示：
 
-当 WS 状态中心不可用时，网站 API 采用多级兜底:
+- `Realtime API: OK / ERROR`
+- `Plugin: Online / Offline`
+- `Last update: Ns ago`
+- `Players source: WS / Fallback`
+- `Fallback: Enabled / Disabled`
 
-1. WS API 实时请求
-2. MySQL server_status_history 最新记录
-3. 本地 snapshot 缓存
-4. 离线默认响应
+检测方式：
 
-对应接口:
+- 网站后端请求 `{WS_STATUS_API_BASE}/health`。
+- 健康接口结果按 1s 短缓存提供给后台页面。
+- 后台前端轮询 `/api/status/health` 进行可视化刷新。
 
-- /api/status: WS -> DB -> snapshot -> offline payload
-- /api/players: WS -> status/DB -> snapshot -> offline players
-- /api/chat: WS -> DB(status.chat) -> snapshot -> []
+## 6. 降级策略
 
----
+当 WS 状态中心失败时，接口降级顺序：
 
-## 6. 配置说明
+1. 读取 WS 实时接口（主链路）
+2. 读取 MySQL 最新状态快照
+3. 读取本地 snapshot 缓存
+4. 返回离线默认 payload
 
-配置项位于 pp/config/config.php，支持环境变量覆盖。
+对应接口：
 
-| Key | 默认值 | 说明 |
-|---|---|---|
-| WS_STATUS_API_BASE | http://localhost:3001 | WS 状态中心 HTTP 基址 |
-| WS_STATUS_API_TIMEOUT_MS | 2500 | WS API 请求超时 |
-| PUBLIC_STATUS_WS_URL | "" | 前端实时 WS 地址 |
-
-建议:
-
-- 生产环境通过部署平台注入环境变量。
-- PUBLIC_STATUS_WS_URL 建议使用 wss://。
-
----
+- `/api/status`: WS -> DB -> snapshot -> offline
+- `/api/players`: WS -> status/DB -> snapshot -> offline players
+- `/api/chat`: WS -> DB(status.chat) -> snapshot -> `[]`
 
 ## 7. 性能策略
 
-### API 缓存
+缓存策略：
 
-- 状态接口: 2s 短缓存（目标区间 1-3s）
-- 玩家接口: 2s 短缓存
-- 聊天接口: 1s 极短缓存
+- `status API`: 1s 缓存
+- `players`: 短缓存（2s）
+- `chat`: 实时或极短缓存（1s）
 
-### Snapshot 策略
+性能目标：
 
-- 最近可用快照落盘到 storage/cache。
-- 快照用于故障窗口内持续服务。
+- 在实时性与稳定性之间平衡请求压力。
+- 状态中心短暂波动时，页面仍保持可读。
+- 优先保证后台观测卡片与前台状态卡连续更新。
 
-### 数据层角色
+## 环境变量
 
-- WS: 实时状态中心
-- DB: 历史数据与故障兜底
-
----
-
-## 8. 运维检查清单
-
-- 检查 WS 状态中心健康: {WS_STATUS_API_BASE}/api/status
-- 检查网站 API 健康: /api/status
-- 检查 WebSocket 连接: PUBLIC_STATUS_WS_URL
-- 检查降级链: 停止 WS 服务后验证 /api/status 与 /api/players 仍有可读结果
+- `WS_STATUS_API_BASE`：WS 状态中心 HTTP 基址，默认 `http://localhost:3001`
+- `WS_STATUS_API_TIMEOUT_MS`：状态中心请求超时（毫秒）
+- `PUBLIC_STATUS_WS_URL`：前台 WebSocket 地址

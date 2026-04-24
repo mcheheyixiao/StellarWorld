@@ -4,6 +4,7 @@ $csrfToken = htmlspecialchars(
     ENT_QUOTES,
     'UTF-8'
 );
+$adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
 ?>
 
 <style>
@@ -125,6 +126,7 @@ $csrfToken = htmlspecialchars(
 .ta-sidebar-item.active {
     background: rgba(255, 255, 255, 0.2);
 }
+/* unused (no markup or JS references as of 2026-04-24):
 .ta-sidebar-group {
     margin: 0.35rem 0 0.7rem;
     border: 1px solid rgba(255, 255, 255, 0.22);
@@ -139,6 +141,7 @@ $csrfToken = htmlspecialchars(
     letter-spacing: 0.04em;
     color: rgba(255, 255, 255, 0.72);
 }
+*/
 .ta-sidebar-subitem {
     font-size: 0.83rem;
     padding-left: 0.6rem;
@@ -265,6 +268,7 @@ $csrfToken = htmlspecialchars(
     background: var(--ta-accent-soft-bg);
     color: var(--ta-accent);
 }
+/* unused (no markup or JS references as of 2026-04-24):
 .ta-admin-user-link-btn {
     width: 100%;
     border: 0;
@@ -272,6 +276,7 @@ $csrfToken = htmlspecialchars(
     text-align: left;
     cursor: pointer;
 }
+*/
 @media (max-width: 1023px) {
     .ta-sidebar-modern {
         display: none;
@@ -886,6 +891,41 @@ $csrfToken = htmlspecialchars(
     text-align: center;
     padding: 0.9rem 0.65rem;
 }
+.ta-realtime-health-card {
+    padding: 1rem;
+}
+.ta-realtime-health-lines {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 0.65rem 1rem;
+}
+.ta-realtime-health-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    border: 1px solid var(--ta-border);
+    border-radius: 0.65rem;
+    padding: 0.5rem 0.65rem;
+    background: rgba(148, 163, 184, 0.08);
+}
+.ta-realtime-health-line span {
+    color: var(--ta-text-muted);
+    font-size: 0.82rem;
+}
+.ta-realtime-health-line strong {
+    color: var(--ta-text-strong);
+    font-size: 0.88rem;
+}
+.ta-health-good {
+    color: #22c55e !important;
+}
+.ta-health-warn {
+    color: #f59e0b !important;
+}
+.ta-health-bad {
+    color: #ef4444 !important;
+}
 #admin-main-content input[type="text"],
 #admin-main-content input[type="number"],
 #admin-main-content input[type="datetime-local"],
@@ -961,7 +1001,8 @@ window.adminRealtimePanelConfig = <?= json_encode(
     JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
 ) ?>;
 </script>
-<script src="/scripts/admin-realtime-panel.js"></script>
+<!--suppress HtmlUnknownTarget -->
+<script src="<?= htmlspecialchars($adminRealtimePanelScriptUrl, ENT_QUOTES, 'UTF-8') ?>"></script>
 
 <script>
 function toDatetimeLocalValue(mysqlDatetime) {

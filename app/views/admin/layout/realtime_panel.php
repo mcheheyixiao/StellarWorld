@@ -46,6 +46,35 @@
             </div>
         </div>
 
+        <section class="ta-card ta-realtime-section ta-realtime-health-card">
+            <div class="ta-realtime-section-head">
+                <h2>Realtime Link Health</h2>
+                <span class="ta-realtime-pill">1s cache</span>
+            </div>
+            <div class="ta-realtime-health-lines">
+                <div class="ta-realtime-health-line">
+                    <span>Realtime API:</span>
+                    <strong id="realtime-health-api">--</strong>
+                </div>
+                <div class="ta-realtime-health-line">
+                    <span>Plugin:</span>
+                    <strong id="realtime-health-plugin">--</strong>
+                </div>
+                <div class="ta-realtime-health-line">
+                    <span>Last update:</span>
+                    <strong id="realtime-health-last-update">--</strong>
+                </div>
+                <div class="ta-realtime-health-line">
+                    <span>Players source:</span>
+                    <strong id="realtime-health-players-source">--</strong>
+                </div>
+                <div class="ta-realtime-health-line">
+                    <span>Fallback:</span>
+                    <strong id="realtime-health-fallback">--</strong>
+                </div>
+            </div>
+        </section>
+
         <div class="ta-realtime-content-grid">
             <section class="ta-card ta-realtime-section">
                 <div class="ta-realtime-section-head">

@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Controller;
 
 use Core\Controller;
+use Core\ApiCode;
+use Core\ApiResponse;
 use Core\BaiduSEO;
 use Core\Database;
 use Core\ImageProcessor;
@@ -24,9 +26,37 @@ class AdminController extends Controller
     private function requireAdmin(): void
     {
         if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+            if ($this->isAjaxRequest() || array_key_exists('ajax', $_GET) || array_key_exists('ajax', $_POST)) {
+                http_response_code(403);
+                header('Content-Type: application/json; charset=utf-8');
+                echo ApiResponse::error(ApiCode::AUTH_INVALID, 'Unauthorized');
+                exit;
+            }
+
             header('Location: /auth/login');
             exit;
         }
+    }
+
+    private function completeAdminAction(string $redirectUrl, array $data = [], string $message = 'ok'): void
+    {
+        $isAjax = $this->isAjaxRequest() || array_key_exists('ajax', $_GET) || array_key_exists('ajax', $_POST);
+        if ($isAjax && str_contains($redirectUrl, 'err=')) {
+            $query = (string)(parse_url($redirectUrl, PHP_URL_QUERY) ?? '');
+            $params = [];
+            if ($query !== '') {
+                parse_str($query, $params);
+            }
+            $err = trim((string)($params['err'] ?? ''));
+            if ($err !== '') {
+                $data['error'] = $err;
+                $resolvedMessage = $message === 'ok' ? ('error: ' . $err) : $message;
+                $this->redirectOrJson($redirectUrl, $data, $resolvedMessage, 400);
+                return;
+            }
+        }
+
+        $this->redirectOrJson($redirectUrl, $data, $message);
     }
 
     /**
@@ -56,12 +86,10 @@ class AdminController extends Controller
     {
         $config = $this->getRealtimePanelConfig();
         if (($config['enable_realtime_panel'] ?? false) !== true) {
-            header('Location: /admin?tab=dashboard');
-            exit;
+            $this->completeAdminAction('/admin?tab=dashboard');
         }
 
-        header('Location: /admin?tab=realtime');
-        exit;
+        $this->completeAdminAction('/admin?tab=realtime');
     }
 
     public function dashboard(): string
@@ -308,8 +336,7 @@ class AdminController extends Controller
             $this->users->bindCharacter($id, $mcUsername, $mcUuid);
         }
 
-        header('Location: /admin?tab=players');
-        exit;
+        $this->completeAdminAction('/admin?tab=players');
     }
 
     public function playerDelete(): void
@@ -319,8 +346,7 @@ class AdminController extends Controller
         $db = Database::connection();
         $stmt = $db->prepare('DELETE FROM users WHERE id = :id');
         $stmt->execute([':id' => $id]);
-        header('Location: /admin?tab=players');
-        exit;
+        $this->completeAdminAction('/admin?tab=players');
     }
 
     public function playerUnbind(): void
@@ -330,8 +356,7 @@ class AdminController extends Controller
         if ($id > 0) {
             $this->users->unbindCharacter($id);
         }
-        header('Location: /admin?tab=players');
-        exit;
+        $this->completeAdminAction('/admin?tab=players');
     }
 
     public function announcementSave(): void
@@ -415,8 +440,7 @@ class AdminController extends Controller
             }
         }
 
-        header('Location: /admin?tab=announcements');
-        exit;
+        $this->completeAdminAction('/admin?tab=announcements');
     }
 
     public function announcementDelete(): void
@@ -426,8 +450,7 @@ class AdminController extends Controller
         $db = Database::connection();
         $stmt = $db->prepare('DELETE FROM announcements WHERE id = :id');
         $stmt->execute([':id' => $id]);
-        header('Location: /admin?tab=announcements');
-        exit;
+        $this->completeAdminAction('/admin?tab=announcements');
     }
 
     public function milestoneSave(): void
@@ -454,8 +477,7 @@ class AdminController extends Controller
             ]);
         }
 
-        header('Location: /admin?tab=milestones');
-        exit;
+        $this->completeAdminAction('/admin?tab=milestones');
     }
 
     public function milestoneDelete(): void
@@ -465,8 +487,7 @@ class AdminController extends Controller
         $db = Database::connection();
         $stmt = $db->prepare('DELETE FROM milestones WHERE id = :id');
         $stmt->execute([':id' => $id]);
-        header('Location: /admin?tab=milestones');
-        exit;
+        $this->completeAdminAction('/admin?tab=milestones');
     }
 
     public function galleryUpload(): void
@@ -476,8 +497,7 @@ class AdminController extends Controller
         $description = trim((string)($_POST['description'] ?? ''));
 
         if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
-            header('Location: /admin/gallery');
-            exit;
+            $this->completeAdminAction('/admin/gallery');
         }
 
         $tmp = $_FILES['image']['tmp_name'];
@@ -492,8 +512,7 @@ class AdminController extends Controller
         }
 
         if (!move_uploaded_file($tmp, $destAbs)) {
-            header('Location: /admin/gallery');
-            exit;
+            $this->completeAdminAction('/admin/gallery');
         }
 
         ImageProcessor::generateGalleryResponsiveSet($destAbs);
@@ -506,8 +525,7 @@ class AdminController extends Controller
             ':image_path' => $destRel,
         ]);
 
-        header('Location: /admin?tab=gallery');
-        exit;
+        $this->completeAdminAction('/admin?tab=gallery');
     }
 
     public function galleryDelete(): void
@@ -533,8 +551,7 @@ class AdminController extends Controller
         }
         $delStmt = $db->prepare('DELETE FROM gallery_images WHERE id = :id');
         $delStmt->execute([':id' => $id]);
-        header('Location: /admin?tab=gallery');
-        exit;
+        $this->completeAdminAction('/admin?tab=gallery');
     }
 
     public function ipBlacklistAdd(): void
@@ -544,16 +561,14 @@ class AdminController extends Controller
         $reason = trim((string)($_POST['reason'] ?? ''));
 
         if (!$this->isValidIpCidrEntry($ipCidr)) {
-            header('Location: /admin?tab=ip-blacklist&err=invalid');
-            exit;
+            $this->completeAdminAction('/admin?tab=ip-blacklist&err=invalid');
         }
 
         $db = Database::connection();
         $dup = $db->prepare('SELECT id FROM ip_blacklist WHERE ip_cidr = :r LIMIT 1');
         $dup->execute([':r' => $ipCidr]);
         if ($dup->fetch()) {
-            header('Location: /admin?tab=ip-blacklist&err=dup');
-            exit;
+            $this->completeAdminAction('/admin?tab=ip-blacklist&err=dup');
         }
 
         $stmt = $db->prepare('INSERT INTO ip_blacklist (ip_cidr, reason, created_at) VALUES (:ip_cidr, :reason, NOW())');
@@ -562,8 +577,7 @@ class AdminController extends Controller
             ':reason' => $reason,
         ]);
 
-        header('Location: /admin?tab=ip-blacklist');
-        exit;
+        $this->completeAdminAction('/admin?tab=ip-blacklist');
     }
 
     public function ipBlacklistDelete(): void
@@ -571,16 +585,14 @@ class AdminController extends Controller
         $this->validateCsrfForFormPost('/admin?tab=ip-blacklist');
         $id = (int)($_POST['id'] ?? 0);
         if ($id <= 0) {
-            header('Location: /admin?tab=ip-blacklist');
-            exit;
+            $this->completeAdminAction('/admin?tab=ip-blacklist');
         }
 
         $db = Database::connection();
         $stmt = $db->prepare('DELETE FROM ip_blacklist WHERE id = :id');
         $stmt->execute([':id' => $id]);
 
-        header('Location: /admin?tab=ip-blacklist');
-        exit;
+        $this->completeAdminAction('/admin?tab=ip-blacklist');
     }
 
     public function saveSettings(): void
@@ -597,14 +609,12 @@ class AdminController extends Controller
                 }
             }
         } catch (\Throwable $e) {
-            header('Location: /admin?tab=site-settings');
-            exit;
+            $this->completeAdminAction('/admin?tab=site-settings');
         }
 
         $settingsIn = $_POST['settings'] ?? [];
         if (!is_array($settingsIn)) {
-            header('Location: /admin?tab=site-settings');
-            exit;
+            $this->completeAdminAction('/admin?tab=site-settings');
         }
 
         $upd = $db->prepare('UPDATE site_settings SET setting_value = :v WHERE setting_key = :k');
@@ -629,8 +639,7 @@ class AdminController extends Controller
             $upd->execute([':v' => $val, ':k' => $key]);
         }
 
-        header('Location: /admin?tab=site-settings');
-        exit;
+        $this->completeAdminAction('/admin?tab=site-settings');
     }
 
     public function teamMemberSave(): void
@@ -641,8 +650,7 @@ class AdminController extends Controller
         $role = trim((string)($_POST['role'] ?? ''));
 
         if ($username === '' || !preg_match('/^[a-zA-Z0-9_]{1,32}$/', $username)) {
-            header('Location: /admin?tab=team&err=invalid_user');
-            exit;
+            $this->completeAdminAction('/admin?tab=team&err=invalid_user');
         }
         if ($role === '') {
             $role = '服务器成员';
@@ -661,12 +669,10 @@ class AdminController extends Controller
                 $stmt->execute([':u' => $username, ':r' => $role]);
             }
         } catch (\Throwable $e) {
-            header('Location: /admin?tab=team');
-            exit;
+            $this->completeAdminAction('/admin?tab=team');
         }
 
-        header('Location: /admin?tab=team');
-        exit;
+        $this->completeAdminAction('/admin?tab=team');
     }
 
     public function teamMemberDelete(): void
@@ -674,8 +680,7 @@ class AdminController extends Controller
         $this->validateCsrfForFormPost('/admin?tab=team');
         $id = (int)($_POST['id'] ?? 0);
         if ($id <= 0) {
-            header('Location: /admin?tab=team');
-            exit;
+            $this->completeAdminAction('/admin?tab=team');
         }
 
         try {
@@ -685,8 +690,7 @@ class AdminController extends Controller
         } catch (\Throwable $e) {
         }
 
-        header('Location: /admin?tab=team');
-        exit;
+        $this->completeAdminAction('/admin?tab=team');
     }
 
     public function ipWhitelistAdd(): void
@@ -696,8 +700,7 @@ class AdminController extends Controller
         $reason = trim((string)($_POST['reason'] ?? ''));
 
         if (!$this->isValidIpCidrEntry($ipCidr)) {
-            header('Location: /admin?tab=ip-whitelist&err=invalid');
-            exit;
+            $this->completeAdminAction('/admin?tab=ip-whitelist&err=invalid');
         }
 
         try {
@@ -705,8 +708,7 @@ class AdminController extends Controller
             $dup = $db->prepare('SELECT id FROM ip_whitelist WHERE ip_cidr = :r LIMIT 1');
             $dup->execute([':r' => $ipCidr]);
             if ($dup->fetch()) {
-                header('Location: /admin?tab=ip-whitelist&err=dup');
-                exit;
+                $this->completeAdminAction('/admin?tab=ip-whitelist&err=dup');
             }
 
             $stmt = $db->prepare('INSERT INTO ip_whitelist (ip_cidr, reason, created_at) VALUES (:ip_cidr, :reason, NOW())');
@@ -715,12 +717,10 @@ class AdminController extends Controller
                 ':reason' => $reason,
             ]);
         } catch (\Throwable $e) {
-            header('Location: /admin?tab=ip-whitelist&err=invalid');
-            exit;
+            $this->completeAdminAction('/admin?tab=ip-whitelist&err=invalid');
         }
 
-        header('Location: /admin?tab=ip-whitelist');
-        exit;
+        $this->completeAdminAction('/admin?tab=ip-whitelist');
     }
 
     public function ipWhitelistDelete(): void
@@ -728,8 +728,7 @@ class AdminController extends Controller
         $this->validateCsrfForFormPost('/admin?tab=ip-whitelist');
         $id = (int)($_POST['id'] ?? 0);
         if ($id <= 0) {
-            header('Location: /admin?tab=ip-whitelist');
-            exit;
+            $this->completeAdminAction('/admin?tab=ip-whitelist');
         }
 
         try {
@@ -739,8 +738,7 @@ class AdminController extends Controller
         } catch (\Throwable $e) {
         }
 
-        header('Location: /admin?tab=ip-whitelist');
-        exit;
+        $this->completeAdminAction('/admin?tab=ip-whitelist');
     }
 
     private function isValidIpCidrEntry(string $s): bool

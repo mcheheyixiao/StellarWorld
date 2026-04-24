@@ -126,12 +126,10 @@ class AuthController extends Controller
             exit;
         } catch (\Throwable $e) {
             error_log('MUA OAuth callback error: ' . $e->getMessage());
-            http_response_code(500);
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode([
+            $this->json([
                 'success' => false,
                 'message' => 'OAuth回调处理失败: ' . $e->getMessage(),
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            ], 500);
         }
     }
 
@@ -1320,4 +1318,3 @@ class AuthController extends Controller
         return false;
     }
 }
-

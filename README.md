@@ -426,3 +426,73 @@ UI 问题：
 扩展性：
 - 中等。已有 MVC 与缓存/实时基础，但需要在模块边界、协议契约与配置治理层面进一步工程化，才能支撑后续多人协作和持续演进。
 ```
+
+## API Unified Response (2026-04-23)
+
+### Standard Envelope
+All unified API responses now use this envelope:
+
+```json
+{
+  "success": true,
+  "code": 0,
+  "message": "ok",
+  "requestId": "a1b2c3d4e5f6a7b8",
+  "timestamp": 1710000000,
+  "data": {}
+}
+```
+
+### Error Codes
+- `0`: success
+- `1001`: auth invalid / unauthorized
+- `2001`: user not found
+- `5000`: server error
+
+### Compatibility Layer
+- `/api/*` keeps legacy payload by default to avoid breaking old front-end callers.
+- Unified envelope for `/api/*` is enabled when request contains `ajax` flag (for example `?ajax=1`) or AJAX headers.
+- `/auth/*`, `/profile/*`, `/forgot-password`, `/reset-password` now return unified envelope through the shared controller JSON pipeline.
+
+### requestId
+- Every unified response includes `requestId`.
+- Response header is also set: `X-Request-Id: <requestId>`.
+- Legacy JSON responses under API-compatible paths also get `X-Request-Id` for tracing.
+
+### Admin AJAX (Compatible Upgrade)
+- Admin form endpoints still support redirect flow.
+- When called as AJAX (`X-Requested-With: XMLHttpRequest` or `ajax` flag), the same endpoints return JSON envelope instead of redirect.
+
+### Examples
+
+`POST /auth/login` response example:
+
+```json
+{
+  "success": false,
+  "code": 1001,
+  "message": "Access denied",
+  "requestId": "9f8e7d6c5b4a3210",
+  "timestamp": 1710000000,
+  "data": {}
+}
+```
+
+`GET /api/status/cache?ajax=1` response example:
+
+```json
+{
+  "success": true,
+  "code": 0,
+  "message": "ok",
+  "requestId": "1a2b3c4d5e6f7890",
+  "timestamp": 1710000000,
+  "data": {
+    "server": {},
+    "stats": {},
+    "players": [],
+    "plugins": [],
+    "chat": []
+  }
+}
+```

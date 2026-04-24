@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Controller;
 
 use Core\Controller;
+use Core\ApiCode;
+use Core\ApiResponse;
 use Core\Database;
 use Core\LeaderboardSnapshot;
 use PDOException;
@@ -269,17 +271,18 @@ class ApiController extends Controller
         $raw = file_get_contents('php://input');
         $data = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
         if (!is_array($data)) {
-            $this->json(['success' => false, 'message' => 'Invalid JSON body'], 400);
+            $this->json(['success' => false, 'code' => ApiCode::SERVER_ERROR, 'message' => 'Invalid JSON body'], 400);
             return;
         }
 
         $token = (string)($data['token'] ?? '');
         if ($token === '' || !hash_equals((string)SERVER_TOKEN, $token)) {
-            $this->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            $this->json(['success' => false, 'code' => ApiCode::AUTH_INVALID, 'message' => 'Unauthorized'], 401);
             return;
         }
 
         unset($data['token']);
+        $data = $this->normalizeRealtimePayload($data);
         try {
             $path = CACHE_PATH . '/mod_api_push.json';
             file_put_contents(
@@ -288,7 +291,7 @@ class ApiController extends Controller
                 LOCK_EX
             );
         } catch (\Throwable $e) {
-            $this->json(['success' => false, 'message' => 'Write failed'], 500);
+            $this->json(['success' => false, 'code' => ApiCode::SERVER_ERROR, 'message' => 'Write failed'], 500);
             return;
         }
 
@@ -321,7 +324,7 @@ class ApiController extends Controller
         }
 
         if ($config === null) {
-            $this->json(['success' => false, 'message' => 'Unknown board'], 400);
+            $this->json(['success' => false, 'code' => ApiCode::SERVER_ERROR, 'message' => 'Unknown board'], 400);
             return;
         }
 
@@ -337,7 +340,7 @@ class ApiController extends Controller
             $stmt->execute();
             $rows = $stmt->fetchAll() ?: [];
         } catch (PDOException $e) {
-            $this->json(['success' => false, 'message' => 'Database error', 'results' => []], 500);
+            $this->json(['success' => false, 'code' => ApiCode::SERVER_ERROR, 'message' => 'Database error', 'results' => []], 500);
             return;
         }
 
@@ -598,6 +601,7 @@ class ApiController extends Controller
 
     private function outputAvatarPng(string $bytes, int $maxAge, string $source): void
     {
+        ApiResponse::ensureRequestIdHeader();
         header_remove('Pragma');
         header_remove('Expires');
         header('Content-Type: image/png');
@@ -666,12 +670,36 @@ class ApiController extends Controller
         return $data;
     }
 
+    private function normalizeRealtimePayload(array $payload): array
+    {
+        $normalized = $payload;
+
+        if (!isset($normalized['server']) || !is_array($normalized['server'])) {
+            $normalized['server'] = [];
+        }
+        if (!isset($normalized['stats']) || !is_array($normalized['stats'])) {
+            $normalized['stats'] = [];
+        }
+        if (!isset($normalized['players']) || !is_array($normalized['players'])) {
+            $normalized['players'] = [];
+        }
+        if (!isset($normalized['plugins']) || !is_array($normalized['plugins'])) {
+            $normalized['plugins'] = [];
+        }
+        if (!isset($normalized['chat']) || !is_array($normalized['chat'])) {
+            $normalized['chat'] = [];
+        }
+
+        return $normalized;
+    }
+
     /**
      * 图片跨域反向代理（CORS Image Proxy）
      * 用于第三方皮肤站点不返回 CORS 头时，保证 skinview3d 能读取纹理。
      */
     public function proxySkin(): void
     {
+        ApiResponse::ensureRequestIdHeader();
         $rawUrl = trim((string)($_GET['url'] ?? ''));
         if ($rawUrl === '' || preg_match('#^https?://#i', $rawUrl) !== 1) {
             http_response_code(400);

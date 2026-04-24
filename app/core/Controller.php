@@ -83,7 +83,219 @@ class Controller
     {
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $path = $this->getRequestPath();
+        if (!$this->isUnifiedApiCandidatePath($path)) {
+            echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+
+        ApiResponse::ensureRequestIdHeader();
+
+        if (!$this->shouldUseUnifiedApiResponse($path)) {
+            echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+
+        [$success, $message, $code, $payload] = $this->normalizeUnifiedResponsePayload($data, $status, $path);
+        if ($success) {
+            echo ApiResponse::success($payload, $message);
+            return;
+        }
+
+        echo ApiResponse::error($code, $message, $payload);
+    }
+
+    protected function isAjaxRequest(): bool
+    {
+        $requestedWith = strtolower(trim((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')));
+        if ($requestedWith === 'xmlhttprequest') {
+            return true;
+        }
+
+        $accept = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
+        if (str_contains($accept, 'application/json')) {
+            return true;
+        }
+
+        $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ($_SERVER['HTTP_CONTENT_TYPE'] ?? '')));
+        if (str_contains($contentType, 'application/json')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function redirectOrJson(string $redirectUrl, array $data = [], string $message = 'ok', int $status = 200): void
+    {
+        if ($this->isAjaxRequest() || $this->hasAjaxFlag()) {
+            http_response_code($status);
+            header('Content-Type: application/json; charset=utf-8');
+            ApiResponse::ensureRequestIdHeader();
+
+            if ($status >= 400) {
+                echo ApiResponse::error($this->inferApiCode(false, $status), $message, $data);
+            } else {
+                echo ApiResponse::success($data, $message);
+            }
+            exit;
+        }
+
+        header('Location: ' . $redirectUrl);
+        exit;
+    }
+
+    private function getRequestPath(): string
+    {
+        $rawUri = (string)($_SERVER['REQUEST_URI'] ?? '/');
+        $path = parse_url($rawUri, PHP_URL_PATH);
+        if (!is_string($path) || $path === '') {
+            return '/';
+        }
+
+        return $path;
+    }
+
+    private function isUnifiedApiCandidatePath(string $path): bool
+    {
+        if (preg_match('#^/(api|auth|profile)(/|$)#', $path) === 1) {
+            return true;
+        }
+
+        return in_array($path, ['/forgot-password', '/reset-password'], true);
+    }
+
+    private function shouldUseUnifiedApiResponse(string $path): bool
+    {
+        if (str_starts_with($path, '/api/')) {
+            return $this->isAjaxRequest() || $this->hasAjaxFlag();
+        }
+
+        return true;
+    }
+
+    private function hasAjaxFlag(): bool
+    {
+        return array_key_exists('ajax', $_GET) || array_key_exists('ajax', $_POST);
+    }
+
+    /**
+     * @return array{0:bool,1:string,2:int,3:array}
+     */
+    private function normalizeUnifiedResponsePayload(array $data, int $status, string $path): array
+    {
+        $success = array_key_exists('success', $data) ? (bool)$data['success'] : $status < 400;
+
+        $message = 'ok';
+        if (!$success) {
+            $message = 'error';
+        }
+        if (isset($data['message']) && is_scalar($data['message'])) {
+            $message = trim((string)$data['message']) !== '' ? (string)$data['message'] : $message;
+        }
+
+        $code = isset($data['code']) && is_numeric($data['code'])
+            ? (int)$data['code']
+            : $this->inferApiCode($success, $status);
+
+        $payload = $data;
+        unset($payload['success'], $payload['code'], $payload['message'], $payload['requestId'], $payload['timestamp']);
+
+        if (array_key_exists('data', $payload) && count($payload) === 1 && is_array($payload['data'])) {
+            $payload = $payload['data'];
+        }
+
+        if ($this->shouldNormalizeStatusPayload($path)) {
+            $payload = $this->ensureStatusPayloadShape($payload);
+        }
+
+        return [$success, $message, $code, $payload];
+    }
+
+    private function shouldNormalizeStatusPayload(string $path): bool
+    {
+        return in_array($path, ['/api/server/status/update', '/api/status/cache', '/api/leaderboard/search'], true);
+    }
+
+    private function ensureStatusPayloadShape(array $payload): array
+    {
+        $normalized = $payload;
+
+        if (!isset($normalized['server']) || !is_array($normalized['server'])) {
+            $normalized['server'] = [];
+        }
+        if (array_key_exists('online', $payload) && !array_key_exists('online', $normalized['server'])) {
+            $normalized['server']['online'] = (bool)$payload['online'];
+        }
+        if (isset($payload['motd']) && !array_key_exists('motd', $normalized['server'])) {
+            $normalized['server']['motd'] = is_array($payload['motd']) ? $payload['motd'] : [];
+        }
+        if (isset($payload['version']) && !array_key_exists('version', $normalized['server'])) {
+            $normalized['server']['version'] = is_array($payload['version']) ? $payload['version'] : [];
+        }
+
+        if (!isset($normalized['stats']) || !is_array($normalized['stats'])) {
+            $normalized['stats'] = [];
+        }
+
+        if (!isset($normalized['players']) || !is_array($normalized['players']) || $this->isAssocArray($normalized['players'])) {
+            $normalized['players'] = $this->extractPlayersList($payload);
+        }
+
+        if (!isset($normalized['plugins']) || !is_array($normalized['plugins'])) {
+            $normalized['plugins'] = [];
+        }
+
+        if (!isset($normalized['chat']) || !is_array($normalized['chat'])) {
+            $normalized['chat'] = [];
+        }
+
+        return $normalized;
+    }
+
+    private function extractPlayersList(array $payload): array
+    {
+        if (isset($payload['players']) && is_array($payload['players'])) {
+            $players = $payload['players'];
+            if (isset($players['list']) && is_array($players['list'])) {
+                return array_values($players['list']);
+            }
+            if (!$this->isAssocArray($players)) {
+                return array_values($players);
+            }
+        }
+
+        if (isset($payload['results']) && is_array($payload['results'])) {
+            return array_values($payload['results']);
+        }
+
+        return [];
+    }
+
+    private function isAssocArray(array $value): bool
+    {
+        if ($value === []) {
+            return false;
+        }
+
+        return array_keys($value) !== range(0, count($value) - 1);
+    }
+
+    private function inferApiCode(bool $success, int $status): int
+    {
+        if ($success) {
+            return ApiCode::SUCCESS;
+        }
+
+        if ($status === 401 || $status === 403) {
+            return ApiCode::AUTH_INVALID;
+        }
+
+        if ($status === 404) {
+            return ApiCode::USER_NOT_FOUND;
+        }
+
+        return ApiCode::SERVER_ERROR;
     }
 
     protected function generateCsrfToken(): void

@@ -20,6 +20,7 @@ class ApiController extends Controller
     private const AVATAR_REDIS_TTL_SECONDS = 1800;
     private const STATUS_CACHE_TTL_SECONDS = 1;
     private const HEALTH_CACHE_TTL_SECONDS = 1;
+    private const PLUGINS_CACHE_TTL_SECONDS = 1;
     private const PLAYERS_CACHE_TTL_SECONDS = 2;
     private const CHAT_CACHE_TTL_SECONDS = 1;
     private const SNAPSHOT_FALLBACK_MAX_AGE_SECONDS = 3600;
@@ -349,6 +350,40 @@ class ApiController extends Controller
             'checked_at' => time(),
         ];
         $this->saveEndpointCache('health', $fallback);
+        $this->json($fallback);
+    }
+
+    public function getPlugins(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        header('Cache-Control: private, max-age=' . self::PLUGINS_CACHE_TTL_SECONDS);
+
+        $cached = $this->loadEndpointCache('plugins', self::PLUGINS_CACHE_TTL_SECONDS);
+        if (is_array($cached)) {
+            $this->json($this->normalizePluginsResponse($cached));
+            return;
+        }
+
+        try {
+            $payload = $this->loadPluginsFromWsApi();
+            if (is_array($payload)) {
+                $this->saveEndpointCache('plugins', $payload);
+                $this->json($payload);
+                return;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $fallback = [
+            'source' => 'Fallback',
+            'plugins' => [],
+            'updated_at' => null,
+            'error' => 'Realtime unavailable or unauthorized',
+        ];
+        $this->saveEndpointCache('plugins', $fallback);
         $this->json($fallback);
     }
 
@@ -713,7 +748,7 @@ class ApiController extends Controller
 
     private function loadStatusFromWsApi(): ?array
     {
-        $payload = $this->fetchWsApiJson('/api/status');
+        $payload = $this->fetchWsApiJson('/api/status', true);
         if (!is_array($payload)) {
             return null;
         }
@@ -791,17 +826,39 @@ class ApiController extends Controller
         return $this->normalizeRealtimeHealthPayload($payload, true);
     }
 
+    private function loadPluginsFromWsApi(): ?array
+    {
+        $payload = $this->fetchWsApiJson('/api/status', true);
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        $plugins = $this->extractPluginsFromStatusPayload($payload);
+        $updatedAt = $this->extractPluginsUpdatedAt($payload);
+        if ($plugins !== [] && $updatedAt === null) {
+            $updatedAt = time();
+        }
+
+        return [
+            'source' => 'WS',
+            'plugins' => $plugins,
+            'updated_at' => $plugins === [] ? null : $updatedAt,
+        ];
+    }
+
     private function normalizeRealtimeHealthPayload(array $payload, bool $requestOk): array
     {
         $candidate = $this->unwrapApiPayload($payload);
         $checkedAt = time();
 
         $apiOk = $this->extractHealthApiOk($candidate, $requestOk);
-        $fallbackEnabled = $this->extractHealthFallbackEnabled($candidate, !$apiOk);
         $pluginOnline = $this->extractHealthPluginOnline($candidate, $apiOk);
+        $fallbackEnabled = $this->extractHealthFallbackEnabled($candidate, !($apiOk && $pluginOnline));
         $playersSource = $this->normalizePlayersSource(
             $this->firstAvailableValue($candidate, ['players_source', 'playersSource', 'source', 'source_type']),
-            $fallbackEnabled
+            $fallbackEnabled,
+            $apiOk,
+            $pluginOnline
         );
         $lastUpdateSeconds = $this->resolveLastUpdateSeconds($candidate, $checkedAt);
 
@@ -832,6 +889,16 @@ class ApiController extends Controller
 
     private function extractHealthPluginOnline(array $candidate, bool $default): bool
     {
+        $connections = isset($candidate['connections']) && is_array($candidate['connections']) ? $candidate['connections'] : [];
+        $pluginConnections = $this->firstAvailableValue($connections, ['plugin', 'plugins', 'plugin_count', 'pluginCount']);
+        if (is_numeric($pluginConnections)) {
+            return ((int)$pluginConnections) > 0;
+        }
+        $connectionState = $this->parseHealthBool($pluginConnections);
+        if ($connectionState !== null) {
+            return $connectionState;
+        }
+
         $pluginValue = $this->firstAvailableValue(
             $candidate,
             ['plugin_online', 'pluginOnline', 'plugin_status', 'plugin', 'plugins']
@@ -867,8 +934,12 @@ class ApiController extends Controller
         return $default;
     }
 
-    private function normalizePlayersSource($rawSource, bool $fallbackEnabled): string
+    private function normalizePlayersSource($rawSource, bool $fallbackEnabled, bool $apiOk, bool $pluginOnline): string
     {
+        if ($apiOk && $pluginOnline) {
+            return 'WS';
+        }
+
         if (is_string($rawSource) && trim($rawSource) !== '') {
             $normalized = strtolower(trim($rawSource));
             if (str_contains($normalized, 'ws')) {
@@ -892,7 +963,7 @@ class ApiController extends Controller
 
         $timestampValue = $this->firstAvailableValue(
             $candidate,
-            ['updated_at', 'updatedAt', 'last_update_at', 'lastUpdateAt', 'timestamp', 'time', 'last_update', 'lastUpdate', 'checked_at']
+            ['updated_at', 'updatedAt', 'last_update_at', 'lastUpdateAt', 'last_plugin_seen_at', 'lastPluginSeenAt', 'last_plugin_update_at', 'lastPluginUpdateAt', 'last_update', 'lastUpdate', 'checked_at']
         );
         $timestamp = $this->parseUnixTimestamp($timestampValue);
         if ($timestamp !== null) {
@@ -1017,10 +1088,33 @@ class ApiController extends Controller
     {
         $baseUrl = defined('WS_STATUS_API_BASE') ? trim((string)WS_STATUS_API_BASE) : '';
         if ($baseUrl === '') {
-            $baseUrl = 'http://localhost:3001';
+            $baseUrl = 'http://127.0.0.1:3002';
         }
 
         return rtrim($baseUrl, '/');
+    }
+
+    private function wsStatusApiToken(): string
+    {
+        return defined('WS_STATUS_API_TOKEN') ? trim((string)WS_STATUS_API_TOKEN) : '';
+    }
+
+    private function buildWsStatusRequestHeaders(bool $withToken): array
+    {
+        $headers = ['Accept: application/json'];
+        if (!$withToken) {
+            return $headers;
+        }
+
+        $token = $this->wsStatusApiToken();
+        if ($token === '') {
+            return $headers;
+        }
+
+        $headers[] = 'Authorization: Bearer ' . $token;
+        $headers[] = 'x-api-token: ' . $token;
+
+        return $headers;
     }
 
     private function wsStatusApiTimeoutSeconds(): int
@@ -1029,16 +1123,21 @@ class ApiController extends Controller
         return max(1, (int)ceil(max(500, $timeoutMs) / 1000));
     }
 
-    private function fetchWsApiJson(string $path): ?array
+    private function fetchWsApiJson(string $path, bool $withToken = false): ?array
     {
         $url = $this->wsStatusApiBaseUrl() . '/' . ltrim($path, '/');
-        return $this->fetchJsonFromUrl($url, $this->wsStatusApiTimeoutSeconds());
+        return $this->fetchJsonFromUrl(
+            $url,
+            $this->wsStatusApiTimeoutSeconds(),
+            $this->buildWsStatusRequestHeaders($withToken)
+        );
     }
 
-    private function fetchJsonFromUrl(string $url, int $timeoutSeconds): ?array
+    private function fetchJsonFromUrl(string $url, int $timeoutSeconds, array $headers = []): ?array
     {
         $responseBody = null;
         $httpCode = 0;
+        $requestHeaders = $headers === [] ? ['Accept: application/json'] : $headers;
 
         if (function_exists('curl_init')) {
             $ch = curl_init($url);
@@ -1048,7 +1147,7 @@ class ApiController extends Controller
                     CURLOPT_FOLLOWLOCATION => true,
                     CURLOPT_CONNECTTIMEOUT => min(3, max(1, $timeoutSeconds)),
                     CURLOPT_TIMEOUT => $timeoutSeconds,
-                    CURLOPT_HTTPHEADER => ['Accept: application/json'],
+                    CURLOPT_HTTPHEADER => $requestHeaders,
                     CURLOPT_USERAGENT => 'stellarvan-status-client/1.0',
                 ]);
                 $resp = curl_exec($ch);
@@ -1065,7 +1164,7 @@ class ApiController extends Controller
                     'method' => 'GET',
                     'timeout' => $timeoutSeconds,
                     'ignore_errors' => true,
-                    'header' => "Accept: application/json\r\n",
+                    'header' => implode("\r\n", $requestHeaders) . "\r\n",
                 ],
             ]);
             $resp = @file_get_contents($url, false, $context);
@@ -1227,6 +1326,205 @@ class ApiController extends Controller
         }
 
         return [];
+    }
+
+    private function normalizePluginsResponse(array $payload): array
+    {
+        $sourceRaw = is_scalar($payload['source'] ?? null) ? (string)$payload['source'] : '';
+        $source = strcasecmp(trim($sourceRaw), 'WS') === 0 ? 'WS' : 'Fallback';
+        $plugins = isset($payload['plugins']) && is_array($payload['plugins'])
+            ? $this->normalizePluginList($payload['plugins'])
+            : [];
+
+        $updatedAt = $this->parseUnixTimestamp(
+            $this->firstAvailableValue($payload, ['updated_at', 'updatedAt', 'timestamp', 'checked_at'])
+        );
+        if ($plugins === []) {
+            $updatedAt = null;
+        }
+
+        $normalized = [
+            'source' => $source,
+            'plugins' => $plugins,
+            'updated_at' => $updatedAt,
+        ];
+
+        if ($source === 'Fallback') {
+            $error = trim((string)($payload['error'] ?? 'Realtime unavailable or unauthorized'));
+            $normalized['error'] = $error === '' ? 'Realtime unavailable or unauthorized' : $error;
+        }
+
+        return $normalized;
+    }
+
+    private function extractPluginsFromStatusPayload(array $payload): array
+    {
+        $candidatePaths = [
+            ['plugins'],
+            ['data', 'plugins'],
+            ['state', 'plugins', 'data'],
+            ['snapshot', 'plugins'],
+            ['payload', 'plugins'],
+            ['payload', 'state', 'plugins', 'data'],
+        ];
+
+        foreach ($candidatePaths as $path) {
+            $candidate = $this->readNestedPath($payload, $path);
+            if (is_array($candidate)) {
+                return $this->normalizePluginList($candidate);
+            }
+        }
+
+        return [];
+    }
+
+    private function extractPluginsUpdatedAt(array $payload): ?int
+    {
+        $timestampKeys = [
+            'updated_at',
+            'updatedAt',
+            'timestamp',
+            'time',
+            'checked_at',
+            'last_update',
+            'lastUpdate',
+            'last_plugin_seen_at',
+            'lastPluginSeenAt',
+        ];
+
+        $candidateNodes = [
+            $payload,
+            $this->readNestedPath($payload, ['data']),
+            $this->readNestedPath($payload, ['state']),
+            $this->readNestedPath($payload, ['snapshot']),
+            $this->readNestedPath($payload, ['payload']),
+            $this->readNestedPath($payload, ['payload', 'state']),
+            $this->readNestedPath($payload, ['plugins']),
+            $this->readNestedPath($payload, ['state', 'plugins']),
+            $this->readNestedPath($payload, ['payload', 'plugins']),
+            $this->readNestedPath($payload, ['payload', 'state', 'plugins']),
+        ];
+
+        foreach ($candidateNodes as $node) {
+            if (!is_array($node)) {
+                continue;
+            }
+
+            $value = $this->firstAvailableValue($node, $timestampKeys);
+            $timestamp = $this->parseUnixTimestamp($value);
+            if ($timestamp !== null) {
+                return $timestamp;
+            }
+
+            if (isset($node['data']) && is_array($node['data'])) {
+                $nestedValue = $this->firstAvailableValue($node['data'], $timestampKeys);
+                $nestedTimestamp = $this->parseUnixTimestamp($nestedValue);
+                if ($nestedTimestamp !== null) {
+                    return $nestedTimestamp;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizePluginList(array $plugins): array
+    {
+        $rows = [];
+        if ($this->isAssocArray($plugins)) {
+            if ($this->looksLikePluginEntry($plugins)) {
+                $rows[] = $plugins;
+            } else {
+                foreach ($plugins as $key => $value) {
+                    if (is_array($value)) {
+                        if (is_string($key) && !array_key_exists('name', $value)) {
+                            $value['name'] = $key;
+                        }
+                        $rows[] = $value;
+                    } elseif (is_string($value)) {
+                        $rows[] = $value;
+                    }
+                }
+            }
+        } else {
+            $rows = $plugins;
+        }
+
+        $normalized = [];
+        foreach ($rows as $row) {
+            $plugin = $this->normalizePluginEntry($row);
+            if ($plugin !== null) {
+                $normalized[] = $plugin;
+            }
+        }
+
+        return $normalized;
+    }
+
+    private function looksLikePluginEntry(array $plugin): bool
+    {
+        foreach (['name', 'plugin', 'id', 'version', 'ver', 'enabled', 'status', 'online'] as $key) {
+            if (array_key_exists($key, $plugin)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function normalizePluginEntry($plugin): ?array
+    {
+        if (is_string($plugin)) {
+            $name = trim($plugin);
+            if ($name === '') {
+                return null;
+            }
+
+            return [
+                'name' => $name,
+                'version' => '--',
+                'enabled' => true,
+            ];
+        }
+
+        if (!is_array($plugin)) {
+            return null;
+        }
+
+        $nameRaw = $this->firstAvailableValue($plugin, ['name', 'plugin', 'id']);
+        $name = trim(is_scalar($nameRaw) ? (string)$nameRaw : '');
+        if ($name === '') {
+            return null;
+        }
+
+        $versionRaw = $this->firstAvailableValue($plugin, ['version', 'ver', 'plugin_version', 'pluginVersion']);
+        $version = trim(is_scalar($versionRaw) ? (string)$versionRaw : '');
+        if ($version === '') {
+            $version = '--';
+        }
+
+        $enabledRaw = $this->firstAvailableValue($plugin, ['enabled', 'is_enabled', 'active', 'status', 'online', 'plugin_status']);
+        $enabledParsed = $this->parseHealthBool($enabledRaw);
+        $enabled = $enabledParsed !== null ? $enabledParsed : true;
+
+        return [
+            'name' => $name,
+            'version' => $version,
+            'enabled' => $enabled,
+        ];
+    }
+
+    private function readNestedPath(array $payload, array $path)
+    {
+        $cursor = $payload;
+        foreach ($path as $segment) {
+            if (!is_array($cursor) || !array_key_exists($segment, $cursor)) {
+                return null;
+            }
+            $cursor = $cursor[$segment];
+        }
+
+        return $cursor;
     }
 
     private function sanitizePlayersPayload(array $payload): array

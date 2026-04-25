@@ -39,12 +39,19 @@ StellarWorld 采用三层实时观测架构：
 - `GET /api/status`
 - `GET /api/status/cache`
 - `GET /api/status/health`
+- `GET /api/plugins`
 - `GET /api/players`
 - `GET /api/chat`
 
 ### `GET /api/status`
 
 上游：`{WS_STATUS_API_BASE}/api/status`
+
+说明：
+
+- 如果配置了 `WS_STATUS_API_TOKEN`，网站请求会上送：
+  - `Authorization: Bearer {WS_STATUS_API_TOKEN}`
+  - `x-api-token: {WS_STATUS_API_TOKEN}`
 
 返回（示例）：
 
@@ -98,6 +105,37 @@ StellarWorld 采用三层实时观测架构：
 ### `GET /api/chat`
 
 上游：`{WS_STATUS_API_BASE}/api/chat`
+
+### `GET /api/plugins`
+
+上游：`{WS_STATUS_API_BASE}/api/status`
+
+返回（示例）：
+
+```json
+{
+  "source": "WS",
+  "plugins": [
+    {
+      "name": "LuckPerms",
+      "version": "5.4.0",
+      "enabled": true
+    }
+  ],
+  "updated_at": 1710000000
+}
+```
+
+兜底（示例）：
+
+```json
+{
+  "source": "Fallback",
+  "plugins": [],
+  "updated_at": null,
+  "error": "Realtime unavailable or unauthorized"
+}
+```
 
 ## 4. WebSocket 使用方式
 
@@ -180,6 +218,7 @@ ws.onmessage = (event) => {
 
 ## 环境变量
 
-- `WS_STATUS_API_BASE`：WS 状态中心 HTTP 基址，默认 `http://localhost:3001`
+- `WS_STATUS_API_BASE`：WS 状态中心 HTTP 基址，默认 `http://127.0.0.1:3002`
 - `WS_STATUS_API_TIMEOUT_MS`：状态中心请求超时（毫秒）
+- `WS_STATUS_API_TOKEN`：状态中心 API token（可留空；为空时仅依赖无需鉴权的接口如 `/health`）
 - `PUBLIC_STATUS_WS_URL`：前台 WebSocket 地址

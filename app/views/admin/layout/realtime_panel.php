@@ -96,12 +96,13 @@
                         <thead>
                         <tr>
                             <th>插件名称</th>
+                            <th>版本</th>
                             <th>状态</th>
                         </tr>
                         </thead>
                         <tbody id="realtime-plugin-list">
                         <tr>
-                            <td colspan="2" class="ta-realtime-empty">暂无插件状态数据</td>
+                            <td colspan="3" class="ta-realtime-empty">暂无插件状态数据，请确认 StellarStatsSync 是否已上报插件列表。</td>
                         </tr>
                         </tbody>
                     </table>

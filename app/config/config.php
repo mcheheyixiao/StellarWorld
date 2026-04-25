@@ -47,8 +47,9 @@ define('REALTIME_WS_AUTH_TOKEN', getenv('REALTIME_WS_AUTH_TOKEN') !== false ? (s
 define('REALTIME_RECONNECT_INTERVAL_MS', max(500, (int)(getenv('REALTIME_RECONNECT_INTERVAL_MS') ?: 3000)));
 
 // Website status data source (WebSocket service status center)
-define('WS_STATUS_API_BASE', getenv('WS_STATUS_API_BASE') ?: 'http://localhost:3001');
+define('WS_STATUS_API_BASE', getenv('WS_STATUS_API_BASE') ?: 'http://127.0.0.1:3002');
 define('WS_STATUS_API_TIMEOUT_MS', max(500, (int)(getenv('WS_STATUS_API_TIMEOUT_MS') ?: 2500)));
+define('WS_STATUS_API_TOKEN', getenv('WS_STATUS_API_TOKEN') !== false ? trim((string)getenv('WS_STATUS_API_TOKEN')) : '');
 define('PUBLIC_STATUS_WS_URL', getenv('PUBLIC_STATUS_WS_URL') !== false ? trim((string)getenv('PUBLIC_STATUS_WS_URL')) : '');
 
 // Redis（可选；扩展未加载或连接失败时全站自动降级）

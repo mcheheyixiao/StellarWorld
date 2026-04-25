@@ -15,11 +15,14 @@
     var snapshotTimer = null;
     var healthTimer = null;
     var healthFetchInFlight = false;
+    var pluginsFetchInFlight = false;
+    var hasWsPluginsUpdate = false;
     var reconnectAttempts = 0;
     var manualClose = false;
     var lastSnapshotRequestAt = 0;
     var healthPollIntervalMs = 1000;
     var healthEndpoint = '/api/status/health';
+    var pluginsEndpoint = '/api/plugins';
 
     var minSnapshotIntervalMs = Math.max(1500, Number(config.min_snapshot_interval_ms || 2000));
     var snapshotIntervalMs = Math.max(minSnapshotIntervalMs, Number(config.snapshot_interval_ms || 3000));
@@ -181,6 +184,7 @@
         }
 
         fetchRealtimeHealth();
+        fetchPluginsFallback();
         healthTimer = window.setInterval(function () {
             fetchRealtimeHealth();
         }, healthPollIntervalMs);
@@ -192,6 +196,7 @@
             healthTimer = null;
         }
         healthFetchInFlight = false;
+        pluginsFetchInFlight = false;
     }
 
     function requestSnapshot(force) {
@@ -248,6 +253,33 @@
                 fallback: 'Enabled'
             });
             healthFetchInFlight = false;
+        });
+    }
+
+    function fetchPluginsFallback() {
+        if (pluginsFetchInFlight || document.hidden || !isRealtimeTabActive()) {
+            return;
+        }
+
+        pluginsFetchInFlight = true;
+
+        fetch(pluginsEndpoint + '?t=' + Date.now(), {
+            credentials: 'same-origin',
+            cache: 'no-store'
+        }).then(function (response) {
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+            return response.json();
+        }).then(function (payload) {
+            var data = payload;
+            if (payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object') {
+                data = payload.data;
+            }
+            applyPluginsUpdate(data, 'api');
+            pluginsFetchInFlight = false;
+        }).catch(function () {
+            pluginsFetchInFlight = false;
         });
     }
 
@@ -360,7 +392,7 @@
                 applyPlayersUpdate(data);
                 break;
             case 'plugins_update':
-                applyPluginsUpdate(data);
+                applyPluginsUpdate(data, 'ws');
                 break;
             case 'chat_message':
                 applyChatMessage(data);
@@ -391,7 +423,7 @@
         }
 
         if (data.plugins) {
-            applyPluginsUpdate(data.plugins);
+            applyPluginsUpdate(data.plugins, 'ws');
         }
 
         if (data.chat || data.messages) {
@@ -478,12 +510,20 @@
         renderPlayers(players);
     }
 
-    function applyPluginsUpdate(data) {
+    function applyPluginsUpdate(data, source) {
+        if (source === 'ws') {
+            hasWsPluginsUpdate = true;
+        } else if (source === 'api' && hasWsPluginsUpdate) {
+            return;
+        }
+
         var plugins = [];
         if (Array.isArray(data)) {
             plugins = data;
         } else if (data && Array.isArray(data.plugins)) {
             plugins = data.plugins;
+        } else if (data && data.payload && Array.isArray(data.payload.plugins)) {
+            plugins = data.payload.plugins;
         }
         renderPlugins(plugins);
     }
@@ -563,31 +603,51 @@
         }
 
         if (!plugins.length) {
-            dom.pluginList.innerHTML = '<tr><td colspan="2" class="ta-realtime-empty">暂无插件状态数据</td></tr>';
+            dom.pluginList.innerHTML = '<tr><td colspan="3" class="ta-realtime-empty">暂无插件状态数据，请确认 StellarStatsSync 是否已上报插件列表。</td></tr>';
             return;
         }
 
-        var html = plugins.map(function (plugin) {
+        var html = plugins.map(function (plugin, index) {
             var name = '未命名插件';
-            var enabled = false;
+            var version = '--';
+            var enabledState = null;
 
             if (typeof plugin === 'string') {
-                name = plugin;
+                name = plugin.trim();
             } else if (plugin && typeof plugin === 'object') {
-                name = String(pickValue(plugin, ['name', 'plugin', 'id']) || name);
-                var raw = pickValue(plugin, ['enabled', 'is_enabled', 'active', 'status']);
-                if (typeof raw === 'boolean') {
-                    enabled = raw;
-                } else if (typeof raw === 'string') {
-                    enabled = ['enabled', 'active', 'online', 'on', 'true', '1'].indexOf(raw.toLowerCase()) !== -1;
-                } else if (typeof raw === 'number') {
-                    enabled = raw === 1;
+                var nameValue = pickValue(plugin, ['name', 'plugin', 'id']);
+                if (nameValue !== null && nameValue !== undefined) {
+                    name = String(nameValue).trim();
                 }
+
+                var versionValue = pickValue(plugin, ['version', 'ver']);
+                if (versionValue !== null && versionValue !== undefined) {
+                    var normalizedVersion = String(versionValue).trim();
+                    if (normalizedVersion !== '') {
+                        version = normalizedVersion;
+                    }
+                }
+
+                enabledState = parseHealthBoolean(
+                    pickValue(plugin, ['enabled', 'is_enabled', 'active', 'status', 'online'])
+                );
             }
 
-            var badgeClass = enabled ? 'ta-realtime-plugin-enabled' : 'ta-realtime-plugin-disabled';
-            var badgeText = enabled ? '已启用' : '已禁用';
-            return '<tr><td>' + escapeHtml(name) + '</td><td><span class="ta-realtime-plugin-badge ' + badgeClass + '">' + badgeText + '</span></td></tr>';
+            if (!name) {
+                name = '插件 #' + (index + 1);
+            }
+
+            var badgeClass = 'ta-realtime-plugin-disabled';
+            var badgeText = '未知';
+            if (enabledState === true) {
+                badgeClass = 'ta-realtime-plugin-enabled';
+                badgeText = '启用';
+            } else if (enabledState === false) {
+                badgeClass = 'ta-realtime-plugin-disabled';
+                badgeText = '禁用';
+            }
+
+            return '<tr><td>' + escapeHtml(name) + '</td><td>' + escapeHtml(version) + '</td><td><span class="ta-realtime-plugin-badge ' + badgeClass + '">' + badgeText + '</span></td></tr>';
         }).join('');
 
         dom.pluginList.innerHTML = html;

@@ -3,34 +3,34 @@ declare(strict_types=1);
 
 // Basic site configuration and environment constants
 
-define('APP_ENV', getenv('APP_ENV') ?: 'development');
+define('APP_ENV', getenv('APP_ENV') ?: 'production');
 
 // Database
 define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
 define('DB_PORT', (int) (getenv('DB_PORT') ?: 3306));
 define('DB_NAME', getenv('DB_NAME') ?: 'mc_web');
 define('DB_USER', getenv('DB_USER') ?: 'mc_web');
-define('DB_PASS', getenv('DB_PASS') ?: 'stellarvan1314');
+define('DB_PASS', getenv('DB_PASS') ?: '');
 
 //TurnStile
-define('TURNSTILE_SITE_KEY', getenv('TURNSTILE_SITE_KEY') ?: '0x4AAAAAACqnWvWf2swGTcJI');
-define('TURNSTILE_SECRET_KEY', getenv('TURNSTILE_SECRET_KEY') ?: '0x4AAAAAACqnWqghuOt6J1y7KnTV-8ykW50');
+define('TURNSTILE_SITE_KEY', getenv('TURNSTILE_SITE_KEY') ?: '');
+define('TURNSTILE_SECRET_KEY', getenv('TURNSTILE_SECRET_KEY') ?: '');
 
 // SMTP (placeholder, document in deploy_guide)
-define('SMTP_HOST', getenv('SMTP_HOST') ?: 'smtp.163.com');
+define('SMTP_HOST', getenv('SMTP_HOST') ?: 'smtp.example.com');
 define('SMTP_PORT', (int) (getenv('SMTP_PORT') ?: 465));
-define('SMTP_USER', getenv('SMTP_USER') ?: '18060524036@163.com');
-define('SMTP_PASS', getenv('SMTP_PASS') ?: 'XPUsR39n7J8c2DfT');
-define('SMTP_FROM_EMAIL', getenv('SMTP_FROM_EMAIL') ?: '18060524036@163.com');
+define('SMTP_USER', getenv('SMTP_USER') ?: '');
+define('SMTP_PASS', getenv('SMTP_PASS') ?: '');
+define('SMTP_FROM_EMAIL', getenv('SMTP_FROM_EMAIL') ?: 'noreply@example.com');
 define('SMTP_FROM_NAME', getenv('SMTP_FROM_NAME') ?: 'Minecraft Server');
 
 // MUA Union OAuth2 (replace placeholders before production)
-define('MUA_CLIENT_ID', getenv('MUA_CLIENT_ID') ?: '5a26c32cec484ffea1f9f16b1ed9a1df');
-define('MUA_CLIENT_SECRET', getenv('MUA_CLIENT_SECRET') ?: 'MrjTfiChiTzVmPOm4aRrOB14mIGweuX9Dloqf2OCgLqQPToZqF6GWjBRYbvYg8k6');
-define('MUA_REDIRECT_URI', getenv('MUA_REDIRECT_URI') ?: 'https://www.stellarvan.cn/auth/mua/callback');
+define('MUA_CLIENT_ID', getenv('MUA_CLIENT_ID') ?: '');
+define('MUA_CLIENT_SECRET', getenv('MUA_CLIENT_SECRET') ?: '');
+define('MUA_REDIRECT_URI', getenv('MUA_REDIRECT_URI') ?: '');
 
 // Mod API shared secret
-define('SERVER_TOKEN', getenv('SERVER_TOKEN') ?: '123456');
+define('SERVER_TOKEN', getenv('SERVER_TOKEN') ?: '');
 define('MC_SERVER_HOST', getenv('MC_SERVER_HOST') ?: '202.189.7.81');
 define('MC_SERVER_PORT', (int)(getenv('MC_SERVER_PORT') ?: 11052));
 define('RCON_HOST', getenv('RCON_HOST') ?: '127.0.0.1');
@@ -72,13 +72,13 @@ if (!is_dir(CACHE_PATH)) {
 define('PUBLIC_PATH', BASE_PATH . '/public');
 
 // Baidu push (optional): sitemap base URL and active push token
-define('SITE_BASE_URL', rtrim(getenv('SITE_BASE_URL') ?: 'https://www.stellarvan.cn', '/'));
-define('BAIDU_PUSH_TOKEN', getenv('BAIDU_PUSH_TOKEN') ?: 'f2cr3mSw2wn16St1');
+define('SITE_BASE_URL', rtrim(getenv('SITE_BASE_URL') ?: 'http://localhost', '/'));
+define('BAIDU_PUSH_TOKEN', getenv('BAIDU_PUSH_TOKEN') ?: '');
 
 // --- NapCatQQ 机器人配置 ---
 // 填入机器人所在服务器的公网IP和端口
-define('QQ_BOT_API_URL', 'http://111.222.333.444:3000'); 
+define('QQ_BOT_API_URL', getenv('QQ_BOT_API_URL') ?: '');
 // 填入你在 WebUI 里设置的密码 (如果没有设置就留空 '')
-define('QQ_BOT_API_TOKEN', 'UA2ue08UY30DyBSH');      
+define('QQ_BOT_API_TOKEN', getenv('QQ_BOT_API_TOKEN') !== false ? (string)getenv('QQ_BOT_API_TOKEN') : '');
 // 填入你的玩家交流群群号
-define('QQ_GROUP_ID', 123456789);
+define('QQ_GROUP_ID', (int)(getenv('QQ_GROUP_ID') ?: 0));

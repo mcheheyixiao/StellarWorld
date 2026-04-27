@@ -8,6 +8,7 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
 ?>
 
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
 :root {
     --ta-surface-shell: rgba(2, 6, 23, 0.82);
     --ta-surface-frame: rgba(15, 23, 42, 0.76);
@@ -597,14 +598,14 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
     border: 1px solid var(--ta-border-strong);
 }
 .ta-checkin-status-pill--done {
-    color: #22c55e;
-    border-color: rgba(34, 197, 94, 0.48);
-    background: rgba(34, 197, 94, 0.12);
+    color: var(--ta-state-success-text);
+    border-color: var(--ta-state-success-border);
+    background: var(--ta-state-success-bg);
 }
 .ta-checkin-status-pill--pending {
-    color: #f59e0b;
-    border-color: rgba(245, 158, 11, 0.45);
-    background: rgba(245, 158, 11, 0.12);
+    color: var(--ta-state-warning-text);
+    border-color: var(--ta-state-warning-border);
+    background: var(--ta-state-warning-bg);
 }
 .ta-checkin-stat-card {
     min-height: 115px;
@@ -733,33 +734,33 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
     box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
 }
 .ta-realtime-connection-pending {
-    color: #f59e0b !important;
+    color: var(--ta-state-warning-text) !important;
 }
 .ta-realtime-connection-connected {
-    color: #22c55e !important;
+    color: var(--ta-state-success-text) !important;
 }
 .ta-realtime-connection-reconnecting {
-    color: #f59e0b !important;
+    color: var(--ta-state-warning-text) !important;
 }
 .ta-realtime-connection-disconnected {
-    color: #ef4444 !important;
+    color: var(--ta-state-danger-text) !important;
 }
 .ta-realtime-connection-error {
-    color: #ef4444 !important;
+    color: var(--ta-state-danger-text) !important;
 }
 .ta-realtime-connection-connected .ta-realtime-connection-dot {
-    background: #22c55e;
-    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.22);
+    background: var(--ta-state-success-text);
+    box-shadow: 0 0 0 4px var(--ta-state-success-ring);
 }
 .ta-realtime-connection-pending .ta-realtime-connection-dot,
 .ta-realtime-connection-reconnecting .ta-realtime-connection-dot {
-    background: #f59e0b;
-    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.22);
+    background: var(--ta-state-warning-text);
+    box-shadow: 0 0 0 4px var(--ta-state-warning-ring);
 }
 .ta-realtime-connection-disconnected .ta-realtime-connection-dot,
 .ta-realtime-connection-error .ta-realtime-connection-dot {
-    background: #ef4444;
-    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.22);
+    background: var(--ta-state-danger-text);
+    box-shadow: 0 0 0 4px var(--ta-state-danger-ring);
 }
 .ta-realtime-metrics {
     display: grid;
@@ -781,13 +782,13 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
     color: var(--ta-text-strong);
 }
 .ta-realtime-metric p.ta-metric-good {
-    color: #22c55e !important;
+    color: var(--ta-state-success-text) !important;
 }
 .ta-realtime-metric p.ta-metric-warn {
-    color: #f59e0b !important;
+    color: var(--ta-state-warning-text) !important;
 }
 .ta-realtime-metric p.ta-metric-bad {
-    color: #ef4444 !important;
+    color: var(--ta-state-danger-text) !important;
 }
 .ta-realtime-content-grid {
     display: grid;
@@ -842,14 +843,14 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
     border: 1px solid var(--ta-border-strong);
 }
 .ta-realtime-plugin-enabled {
-    color: #22c55e;
-    border-color: rgba(34, 197, 94, 0.5);
-    background: rgba(34, 197, 94, 0.12);
+    color: var(--ta-state-success-text);
+    border-color: var(--ta-state-success-border);
+    background: var(--ta-state-success-bg);
 }
 .ta-realtime-plugin-disabled {
-    color: #94a3b8;
-    border-color: rgba(148, 163, 184, 0.46);
-    background: rgba(148, 163, 184, 0.14);
+    color: var(--ta-state-neutral-text);
+    border-color: var(--ta-state-neutral-border);
+    background: var(--ta-state-neutral-bg);
 }
 .ta-realtime-chat-stream {
     display: grid;
@@ -918,13 +919,13 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
     font-size: 0.88rem;
 }
 .ta-health-good {
-    color: #22c55e !important;
+    color: var(--ta-state-success-text) !important;
 }
 .ta-health-warn {
-    color: #f59e0b !important;
+    color: var(--ta-state-warning-text) !important;
 }
 .ta-health-bad {
-    color: #ef4444 !important;
+    color: var(--ta-state-danger-text) !important;
 }
 #admin-main-content input[type="text"],
 #admin-main-content input[type="number"],
@@ -974,6 +975,403 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
         align-items: flex-start;
     }
 }
+
+/* SaaS layout refresh */
+:root {
+    --ta-font-heading: 'Lexend', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+    --ta-font-body: 'Noto Sans SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+    --ta-surface-shell: rgba(8, 17, 34, 0.92);
+    --ta-surface-frame: rgba(12, 24, 45, 0.88);
+    --ta-surface-sidebar: rgba(9, 24, 45, 0.96);
+    --ta-surface-header: rgba(7, 18, 36, 0.78);
+    --ta-surface-card: rgba(14, 27, 52, 0.86);
+    --ta-surface-input: rgba(10, 23, 46, 0.95);
+    --ta-border: rgba(148, 163, 184, 0.23);
+    --ta-border-strong: rgba(148, 163, 184, 0.4);
+    --ta-shadow: 0 34px 68px -44px rgba(2, 6, 23, 0.92);
+    --ta-text-strong: #f8fafc;
+    --ta-text-body: #dbe7f8;
+    --ta-text-muted: #a9bdd8;
+    --ta-header-title: #f8fafc;
+    --ta-user-name: #e8efff;
+    --ta-toggle-bg: rgba(15, 30, 56, 0.8);
+    --ta-toggle-border: rgba(148, 163, 184, 0.36);
+    --ta-toggle-icon: #93c5fd;
+    --ta-accent: #60a5fa;
+    --ta-accent-bg: rgba(37, 99, 235, 0.22);
+    --ta-accent-border: rgba(96, 165, 250, 0.48);
+    --ta-accent-soft-bg: rgba(59, 130, 246, 0.14);
+    --ta-btn-primary-bg: linear-gradient(135deg, rgba(37, 99, 235, 0.92), rgba(14, 165, 233, 0.9));
+    --ta-btn-primary-border: rgba(125, 211, 252, 0.52);
+    --ta-btn-primary-text: #eff6ff;
+    --ta-state-success-text: #22c55e;
+    --ta-state-success-border: rgba(34, 197, 94, 0.5);
+    --ta-state-success-bg: rgba(34, 197, 94, 0.12);
+    --ta-state-success-ring: rgba(34, 197, 94, 0.22);
+    --ta-state-warning-text: #f59e0b;
+    --ta-state-warning-border: rgba(245, 158, 11, 0.45);
+    --ta-state-warning-bg: rgba(245, 158, 11, 0.12);
+    --ta-state-warning-ring: rgba(245, 158, 11, 0.22);
+    --ta-state-danger-text: #ef4444;
+    --ta-state-danger-border: rgba(239, 68, 68, 0.48);
+    --ta-state-danger-bg: rgba(239, 68, 68, 0.12);
+    --ta-state-danger-ring: rgba(239, 68, 68, 0.22);
+    --ta-state-neutral-text: #cbd5e1;
+    --ta-state-neutral-border: rgba(148, 163, 184, 0.46);
+    --ta-state-neutral-bg: rgba(148, 163, 184, 0.14);
+}
+[data-theme="light"] {
+    --ta-surface-shell: rgba(244, 248, 255, 0.98);
+    --ta-surface-frame: rgba(247, 250, 255, 0.96);
+    --ta-surface-sidebar: rgba(12, 37, 73, 0.97);
+    --ta-surface-header: rgba(255, 255, 255, 0.86);
+    --ta-surface-card: rgba(255, 255, 255, 0.97);
+    --ta-surface-input: rgba(255, 255, 255, 0.99);
+    --ta-border: rgba(148, 163, 184, 0.34);
+    --ta-border-strong: rgba(100, 116, 139, 0.42);
+    --ta-shadow: 0 24px 48px -30px rgba(15, 23, 42, 0.24);
+    --ta-text-strong: #0f172a;
+    --ta-text-body: #1e293b;
+    --ta-text-muted: #475569;
+    --ta-header-title: #0f172a;
+    --ta-user-name: #0f172a;
+    --ta-toggle-bg: rgba(248, 251, 255, 0.98);
+    --ta-toggle-border: rgba(100, 116, 139, 0.3);
+    --ta-toggle-icon: #1d4ed8;
+    --ta-accent: #1d4ed8;
+    --ta-accent-bg: rgba(59, 130, 246, 0.16);
+    --ta-accent-border: rgba(37, 99, 235, 0.42);
+    --ta-accent-soft-bg: rgba(59, 130, 246, 0.1);
+    --ta-btn-primary-bg: linear-gradient(135deg, #2563eb, #0284c7);
+    --ta-btn-primary-border: rgba(37, 99, 235, 0.5);
+    --ta-btn-primary-text: #ffffff;
+    --ta-state-success-text: #22c55e;
+    --ta-state-success-border: rgba(34, 197, 94, 0.48);
+    --ta-state-success-bg: rgba(34, 197, 94, 0.14);
+    --ta-state-success-ring: rgba(34, 197, 94, 0.24);
+    --ta-state-warning-text: #92400e;
+    --ta-state-warning-border: rgba(146, 64, 14, 0.34);
+    --ta-state-warning-bg: rgba(255, 237, 213, 0.94);
+    --ta-state-warning-ring: rgba(146, 64, 14, 0.18);
+    --ta-state-danger-text: #b91c1c;
+    --ta-state-danger-border: rgba(185, 28, 28, 0.35);
+    --ta-state-danger-bg: rgba(254, 226, 226, 0.95);
+    --ta-state-danger-ring: rgba(185, 28, 28, 0.18);
+    --ta-state-neutral-text: #334155;
+    --ta-state-neutral-border: rgba(71, 85, 105, 0.35);
+    --ta-state-neutral-bg: rgba(241, 245, 249, 0.92);
+}
+[data-theme="light"] .ta-admin-frame {
+    background: linear-gradient(180deg, rgba(250, 252, 255, 0.92), rgba(241, 245, 255, 0.86));
+}
+[data-theme="light"] .ta-realtime-connection {
+    background: rgba(241, 245, 249, 0.92);
+    border-color: rgba(71, 85, 105, 0.24);
+}
+[data-theme="light"] .ta-checkin-input-card,
+[data-theme="light"] .ta-checkin-scope-option,
+[data-theme="light"] .ta-checkin-player-card,
+[data-theme="light"] .ta-realtime-player-item,
+[data-theme="light"] .ta-realtime-chat-item,
+[data-theme="light"] .ta-realtime-health-line {
+    background: rgba(248, 250, 252, 0.94);
+}
+.ta-admin-layout {
+    min-height: calc(100vh - 1.5rem);
+    height: auto;
+    border: 1px solid var(--ta-border);
+    border-radius: 1.1rem;
+    position: relative;
+    isolation: isolate;
+    background: linear-gradient(180deg, var(--ta-surface-shell), var(--ta-surface-frame));
+}
+.ta-admin-layout::before,
+.ta-admin-layout::after {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+}
+.ta-admin-layout::before {
+    width: 26rem;
+    height: 26rem;
+    right: -8rem;
+    top: -11rem;
+    border-radius: 999px;
+    background: radial-gradient(circle at center, rgba(56, 189, 248, 0.24), rgba(56, 189, 248, 0));
+}
+.ta-admin-layout::after {
+    width: 22rem;
+    height: 22rem;
+    left: -9rem;
+    bottom: -10rem;
+    border-radius: 999px;
+    background: radial-gradient(circle at center, rgba(249, 115, 22, 0.14), rgba(249, 115, 22, 0));
+}
+.ta-admin-layout > * {
+    position: relative;
+    z-index: 1;
+}
+.ta-admin-frame {
+    background: linear-gradient(180deg, rgba(15, 28, 51, 0.62), rgba(10, 21, 42, 0.7));
+    backdrop-filter: blur(12px);
+}
+.ta-admin-main {
+    padding: 1.1rem;
+    color: var(--ta-text-body);
+    font-family: var(--ta-font-body);
+}
+@media (min-width: 768px) {
+    .ta-admin-main {
+        padding: 1.35rem;
+    }
+}
+@media (min-width: 1280px) {
+    .ta-admin-main {
+        padding: 1.6rem 1.75rem;
+    }
+}
+.ta-sidebar-modern {
+    width: 17.2rem;
+    padding: 1rem 0.85rem;
+    border-right: 1px solid rgba(148, 163, 184, 0.22);
+    box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.12);
+    background:
+        linear-gradient(180deg, rgba(13, 33, 64, 0.98) 0%, rgba(14, 44, 86, 0.98) 100%);
+}
+.ta-sidebar-modern .mb-6 h2 {
+    color: #f8fafc !important;
+    text-shadow: 0 1px 2px rgba(2, 6, 23, 0.45);
+}
+.ta-sidebar-modern .mb-6 p {
+    color: rgba(226, 232, 240, 0.82) !important;
+}
+.ta-sidebar-menu {
+    padding-right: 0.2rem;
+}
+.ta-sidebar-item {
+    border: 1px solid transparent;
+    border-radius: 0.82rem;
+    font-size: 0.89rem;
+    font-weight: 580;
+    letter-spacing: 0.01em;
+    transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+.ta-sidebar-item:hover {
+    border-color: rgba(148, 163, 184, 0.36);
+    background: rgba(148, 163, 184, 0.14);
+    transform: translateY(-1px);
+}
+.ta-sidebar-item.active {
+    border-color: rgba(125, 211, 252, 0.45);
+    background: linear-gradient(90deg, rgba(37, 99, 235, 0.42), rgba(14, 165, 233, 0.22));
+    box-shadow: 0 10px 20px -16px rgba(56, 189, 248, 0.7);
+}
+.ta-sidebar-subitem {
+    font-size: 0.82rem;
+    padding-left: 0.9rem;
+}
+.ta-admin-header-modern {
+    top: 0;
+    z-index: 50;
+    border-bottom: 1px solid var(--ta-border);
+    background: var(--ta-surface-header);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 16px 34px -30px rgba(2, 6, 23, 0.84);
+}
+.ta-admin-header-inner {
+    padding: 0.82rem 1rem;
+}
+@media (min-width: 768px) {
+    .ta-admin-header-inner {
+        padding: 0.82rem 1.35rem;
+    }
+}
+.ta-admin-header-title {
+    font-family: var(--ta-font-heading);
+    font-size: 1.02rem;
+    letter-spacing: 0.02em;
+    font-weight: 640;
+}
+.ta-admin-header-subtitle {
+    margin-top: 0.16rem;
+    font-size: 0.78rem;
+    line-height: 1.2;
+    color: var(--ta-text-muted);
+}
+.ta-admin-theme-toggle,
+.ta-admin-user-trigger {
+    min-height: 2.5rem;
+    border-radius: 0.82rem;
+}
+.ta-admin-theme-toggle {
+    font-family: var(--ta-font-body);
+    font-weight: 600;
+}
+.ta-admin-theme-toggle:focus-visible,
+.ta-admin-user-trigger:focus-visible,
+.ta-btn:focus-visible,
+#admin-main-content input:focus-visible,
+#admin-main-content textarea:focus-visible,
+#admin-main-content select:focus-visible {
+    outline: 0;
+    border-color: var(--ta-accent-border);
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+.ta-admin-user-trigger {
+    background: var(--ta-surface-input);
+    border-color: var(--ta-border-strong);
+}
+.ta-card {
+    border-radius: 1rem;
+    padding: 1.05rem;
+    background: var(--ta-surface-card);
+    border: 1px solid var(--ta-border);
+    box-shadow: var(--ta-shadow);
+}
+@media (min-width: 768px) {
+    .ta-card {
+        padding: 1.2rem;
+    }
+}
+.ta-card h1,
+.ta-card h2,
+.ta-card h3 {
+    font-family: var(--ta-font-heading);
+    letter-spacing: 0.01em;
+}
+.ta-card h1 {
+    margin-bottom: 0.42rem;
+    font-size: 1.15rem;
+}
+.ta-card h2 {
+    margin-top: 0.85rem;
+    margin-bottom: 0.38rem;
+    font-size: 0.96rem;
+}
+.ta-kpi-shell {
+    padding: 1.3rem !important;
+}
+.ta-kpi-card {
+    border-radius: 0.96rem;
+}
+.ta-kpi-value {
+    font-family: var(--ta-font-heading);
+}
+.ta-table-wrap {
+    border-radius: 0.85rem;
+}
+.ta-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 0.75rem;
+}
+.ta-table th,
+.ta-table td {
+    padding: 0.7rem 0.6rem;
+}
+.ta-table th {
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ta-text-muted);
+    background: rgba(148, 163, 184, 0.08);
+}
+.ta-table tbody tr:hover td {
+    background: rgba(59, 130, 246, 0.08);
+}
+.ta-btn {
+    min-height: 2.3rem;
+    padding: 0.4rem 0.86rem;
+    border-radius: 0.72rem;
+    font-family: var(--ta-font-body);
+    font-weight: 600;
+    line-height: 1;
+}
+.ta-btn-primary {
+    background: var(--ta-btn-primary-bg);
+    border-color: var(--ta-btn-primary-border);
+    color: var(--ta-btn-primary-text);
+}
+.ta-btn-primary:hover {
+    filter: brightness(1.05);
+    color: #ffffff;
+}
+.ta-btn-secondary:hover {
+    color: var(--ta-text-strong);
+}
+#admin-main-content input[type="text"],
+#admin-main-content input[type="number"],
+#admin-main-content input[type="datetime-local"],
+#admin-main-content input[type="file"],
+#admin-main-content input[type="search"],
+#admin-main-content input[type="email"],
+#admin-main-content input[type="password"],
+#admin-main-content textarea,
+#admin-main-content select {
+    min-height: 2.5rem;
+    border-radius: 0.72rem;
+    border: 1px solid var(--ta-border-strong);
+    background: var(--ta-surface-input);
+    color: var(--ta-text-body);
+    font-family: var(--ta-font-body);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+#admin-main-content textarea {
+    min-height: 7.25rem;
+}
+.ta-realtime-connection,
+.ta-realtime-plugin-badge,
+.ta-realtime-pill {
+    font-weight: 600;
+}
+.ta-checkin-day:hover {
+    transform: translateY(-1px);
+}
+#admin-mobile-tabs {
+    display: none;
+    gap: 0.5rem;
+    margin: 0 0 0.95rem;
+    padding: 0 0.05rem 0.3rem;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+.ta-mobile-tab-btn {
+    white-space: nowrap;
+    border: 1px solid var(--ta-border-strong);
+    border-radius: 999px;
+    background: var(--ta-surface-input);
+    color: var(--ta-text-body);
+    font-family: var(--ta-font-body);
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.58rem 0.82rem;
+    transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+}
+.ta-mobile-tab-btn.active {
+    color: #ffffff;
+    border-color: rgba(125, 211, 252, 0.52);
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.9), rgba(14, 165, 233, 0.86));
+}
+@media (max-width: 1023px) {
+    #admin-mobile-tabs {
+        display: flex;
+    }
+    .ta-admin-header-subtitle {
+        display: none;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ta-sidebar-item,
+    .ta-btn,
+    .ta-mobile-tab-btn,
+    #admin-main-content input,
+    #admin-main-content textarea,
+    #admin-main-content select {
+        transition: none !important;
+    }
+}
 </style>
 
 <!-- MOD: TailAdmin Layout Start -->
@@ -984,6 +1382,7 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
         <?php include BASE_PATH . '/app/views/admin/layout/header.php'; ?>
 
         <main class="ta-admin-main">
+            <div id="admin-mobile-tabs" aria-label="Admin Tab Navigation"></div>
             <?php include BASE_PATH . '/app/views/admin/layout/layout.php'; ?>
         </main>
     </div>
@@ -1105,6 +1504,38 @@ function editTeamMember(id, username, role) {
     // Tabs 闁告帒娲﹀畷鏌ユ焻閺勫繒甯?
     var tabButtons = document.querySelectorAll('.admin-tab-btn');
     var tabContents = document.querySelectorAll('.ta-tab-content');
+    var headerTitle = document.querySelector('.ta-admin-header-title');
+    var headerSubtitle = document.querySelector('.ta-admin-header-subtitle');
+    var mobileTabsRoot = document.getElementById('admin-mobile-tabs');
+
+    function resolveTabLabel(targetId) {
+        var matchedBtn = document.querySelector('#admin-sidebar .admin-tab-btn[data-tab-target="' + targetId + '"]');
+        if (!matchedBtn) return '';
+        var matchedLabel = matchedBtn.querySelector('span');
+        return matchedLabel ? matchedLabel.textContent.trim() : '';
+    }
+
+    function updateHeaderTabTitle(targetId) {
+        if (!headerTitle) return;
+        var tabLabel = resolveTabLabel(targetId);
+        if (tabLabel !== '') {
+            headerTitle.textContent = tabLabel;
+        }
+        if (headerSubtitle) {
+            headerSubtitle.textContent = 'SaaS Operations Console';
+        }
+    }
+
+    function syncMobileTabState(targetId) {
+        if (!mobileTabsRoot) return;
+        mobileTabsRoot.querySelectorAll('.ta-mobile-tab-btn').forEach(function (btn) {
+            if (btn.getAttribute('data-mobile-tab-target') === targetId) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    }
 
     function activateTab(targetId) {
         tabContents.forEach(function (content) {
@@ -1123,6 +1554,9 @@ function editTeamMember(id, username, role) {
                 btn.classList.remove('active');
             }
         });
+
+        updateHeaderTabTitle(targetId);
+        syncMobileTabState(targetId);
     }
 
 
@@ -1157,6 +1591,46 @@ function editTeamMember(id, username, role) {
             reverseMap[id] = key;
         }
     });
+
+    function buildMobileTabNav(activeTargetId) {
+        if (!mobileTabsRoot) return;
+        var sourceButtons = document.querySelectorAll('#admin-sidebar .admin-tab-btn[data-tab-target]');
+        if (!sourceButtons.length) return;
+
+        var seenTargets = {};
+        mobileTabsRoot.innerHTML = '';
+
+        sourceButtons.forEach(function (btn) {
+            var target = btn.getAttribute('data-tab-target');
+            if (!target || seenTargets[target]) return;
+            seenTargets[target] = true;
+
+            var tabKey = reverseMap[target] || target.replace(/^tab-/, '');
+            var tabLabel = resolveTabLabel(target);
+            if (tabLabel === '') {
+                tabLabel = tabKey;
+            }
+
+            var mobileBtn = document.createElement('button');
+            mobileBtn.type = 'button';
+            mobileBtn.className = 'ta-mobile-tab-btn';
+            mobileBtn.setAttribute('data-mobile-tab-target', target);
+            mobileBtn.textContent = tabLabel;
+            if (target === activeTargetId) {
+                mobileBtn.classList.add('active');
+            }
+
+            mobileBtn.addEventListener('click', function () {
+                var nextParams = new URLSearchParams(window.location.search);
+                nextParams.set('tab', tabKey);
+                window.location.search = nextParams.toString();
+            });
+
+            mobileTabsRoot.appendChild(mobileBtn);
+        });
+    }
+
+    buildMobileTabNav(initialId);
 
     tabButtons.forEach(function (btn) {
         btn.addEventListener('click', function () {

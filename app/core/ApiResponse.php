@@ -24,14 +24,26 @@ final class ApiResponse
 
     private static function build(bool $success, int $code, string $message, array $data): string
     {
+        $requestId = self::requestId();
         $payload = [
             'success' => $success,
             'code' => $code,
             'message' => $message,
-            'requestId' => self::requestId(),
+            'requestId' => $requestId,
+            'request_id' => $requestId,
             'timestamp' => time(),
             'data' => $data,
         ];
+
+        foreach ($data as $key => $value) {
+            if (!is_string($key) || $key === '') {
+                continue;
+            }
+            if (array_key_exists($key, $payload)) {
+                continue;
+            }
+            $payload[$key] = $value;
+        }
 
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if (is_string($json)) {

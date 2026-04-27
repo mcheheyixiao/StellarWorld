@@ -3,13 +3,36 @@ declare(strict_types=1);
 
 // Front controller
 
-// Enable strict error reporting in development
-ini_set('display_errors', '1');
+// Enable strict error reporting, but only display in development.
+$bootAppEnv = getenv('APP_ENV') ?: 'production';
+ini_set('display_errors', $bootAppEnv === 'development' ? '1' : '0');
 error_reporting(E_ALL);
 
 // Define base paths
 define('BASE_PATH', dirname(__DIR__));
 define('APP_PATH', BASE_PATH . DIRECTORY_SEPARATOR . 'app');
+
+$sessionSameSite = getenv('SESSION_COOKIE_SAMESITE') ?: 'Lax';
+$sessionSameSite = in_array($sessionSameSite, ['Lax', 'Strict', 'None'], true) ? $sessionSameSite : 'Lax';
+
+$isHttpsRequest = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
+    || (($_SERVER['SERVER_PORT'] ?? '') === '443');
+if ($sessionSameSite === 'None' && !$isHttpsRequest) {
+    $sessionSameSite = 'Lax';
+}
+
+ini_set('session.use_strict_mode', '1');
+ini_set('session.use_only_cookies', '1');
+ini_set('session.cookie_httponly', '1');
+ini_set('session.cookie_secure', $isHttpsRequest ? '1' : '0');
+ini_set('session.cookie_samesite', $sessionSameSite);
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'secure' => $isHttpsRequest,
+    'httponly' => true,
+    'samesite' => $sessionSameSite,
+]);
 
 // Simple autoloader for core, controllers, models
 spl_autoload_register(function (string $class): void {

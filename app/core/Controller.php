@@ -46,6 +46,7 @@ class Controller
                             // Strict comparison to prevent timing attacks.
                             $computedHash = hash('sha256', $validator);
                             if (!empty($dbRow['validator_hash']) && hash_equals($dbRow['validator_hash'], $computedHash)) {
+                                $this->regenerateSessionIdSafely();
                                 $_SESSION['user_id'] = (int)$dbRow['user_id'];
                                 $_SESSION['username'] = (string)$dbRow['username'];
                                 $_SESSION['role'] = (string)$dbRow['role'];
@@ -168,7 +169,7 @@ class Controller
     private function shouldUseUnifiedApiResponse(string $path): bool
     {
         if (str_starts_with($path, '/api/')) {
-            return $this->isAjaxRequest() || $this->hasAjaxFlag();
+            return true;
         }
 
         return true;
@@ -296,6 +297,18 @@ class Controller
         }
 
         return ApiCode::SERVER_ERROR;
+    }
+
+    protected function regenerateSessionIdSafely(): void
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return;
+        }
+
+        try {
+            @session_regenerate_id(true);
+        } catch (\Throwable $e) {
+        }
     }
 
     protected function generateCsrfToken(): void

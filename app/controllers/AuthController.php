@@ -384,6 +384,17 @@ class AuthController extends Controller
         $del = $db->prepare('DELETE FROM password_resets WHERE token = :token');
         $del->execute([':token' => $token]);
 
+        try {
+            $user = $this->users->findByEmail($email);
+            if (is_array($user) && isset($user['id'])) {
+                $this->users->deleteRememberTokensByUserId((int)$user['id']);
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $this->clearRememberMeCookie();
+        $this->regenerateSessionIdSafely();
+
         $this->json(['success' => true, 'message' => '密码已更新，请使用新密码登录']);
     }
 
@@ -454,6 +465,7 @@ class AuthController extends Controller
 
         $this->recordLoginAttempt($ip, $username, true);
 
+        $this->regenerateSessionIdSafely();
         $_SESSION['user_id'] = (int)$user['id'];
         $_SESSION['username'] = $user['username'];
         $_SESSION['role'] = $user['role'];
@@ -657,9 +669,6 @@ class AuthController extends Controller
 
     public function logout(): void
     {
-        $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
-            || (($_SERVER['SERVER_PORT'] ?? '') === '443');
-
         if (!empty($_COOKIE['remember_me'])) {
             $cookieVal = (string)$_COOKIE['remember_me'];
             $parts = explode(':', $cookieVal, 2);
@@ -672,17 +681,28 @@ class AuthController extends Controller
                     // ignore
                 }
             }
-
-            setcookie('remember_me', '', [
-                'expires' => time() - 3600,
-                'path' => '/',
-                'secure' => $isHttps,
-                'httponly' => true,
-                'samesite' => 'Strict',
-            ]);
         }
 
-        session_destroy();
+        $this->clearRememberMeCookie();
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION = [];
+
+            if (ini_get('session.use_cookies')) {
+                $params = session_get_cookie_params();
+                setcookie(session_name(), '', [
+                    'expires' => time() - 42000,
+                    'path' => $params['path'] ?? '/',
+                    'domain' => $params['domain'] ?? '',
+                    'secure' => (bool)($params['secure'] ?? false),
+                    'httponly' => (bool)($params['httponly'] ?? true),
+                    'samesite' => (string)($params['samesite'] ?? 'Lax'),
+                ]);
+            }
+
+            session_destroy();
+        }
+
         header('Location: /');
         exit;
     }
@@ -990,8 +1010,8 @@ class AuthController extends Controller
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT => 10,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
         ]);
 
@@ -1031,8 +1051,8 @@ class AuthController extends Controller
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT => 10,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => [
                 'Accept: application/json',
                 'Authorization: Bearer ' . $accessToken,
@@ -1070,9 +1090,24 @@ class AuthController extends Controller
             throw new \RuntimeException('账号状态异常，无法登录');
         }
 
+        $this->regenerateSessionIdSafely();
         $_SESSION['user_id'] = (int)$user['id'];
         $_SESSION['username'] = (string)$user['username'];
         $_SESSION['role'] = (string)$user['role'];
+    }
+
+    private function clearRememberMeCookie(): void
+    {
+        $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
+            || (($_SERVER['SERVER_PORT'] ?? '') === '443');
+
+        setcookie('remember_me', '', [
+            'expires' => time() - 3600,
+            'path' => '/',
+            'secure' => $isHttps,
+            'httponly' => true,
+            'samesite' => 'Strict',
+        ]);
     }
 
     private function syncMuaSkinToGameByUser(int $userId): void

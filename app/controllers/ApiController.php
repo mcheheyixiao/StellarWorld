@@ -662,13 +662,20 @@ class ApiController extends Controller
             if ($ch !== false) {
                 curl_setopt_array($ch, [
                     CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_FOLLOWLOCATION => false,
+                    CURLOPT_MAXREDIRS => 0,
                     CURLOPT_CONNECTTIMEOUT => 4,
                     CURLOPT_TIMEOUT => 8,
-                    CURLOPT_SSL_VERIFYPEER => false,
-                    CURLOPT_SSL_VERIFYHOST => 0,
+                    CURLOPT_SSL_VERIFYPEER => true,
+                    CURLOPT_SSL_VERIFYHOST => 2,
                     CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; avatar-proxy/1.0)',
                 ]);
+                if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
+                    curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+                }
+                if (defined('CURLOPT_REDIR_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
+                    curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+                }
                 $resp = curl_exec($ch);
                 $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 curl_close($ch);
@@ -681,10 +688,12 @@ class ApiController extends Controller
                 'http' => [
                     'timeout' => 8,
                     'ignore_errors' => true,
+                    'follow_location' => 0,
+                    'max_redirects' => 0,
                 ],
                 'ssl' => [
-                    'verify_peer' => false,
-                    'verify_peer_name' => false,
+                    'verify_peer' => true,
+                    'verify_peer_name' => true,
                 ],
             ]);
             $resp = @file_get_contents($url, false, $context);
@@ -1209,6 +1218,11 @@ class ApiController extends Controller
 
     private function fetchJsonFromUrl(string $url, int $timeoutSeconds, array $headers = []): ?array
     {
+        $scheme = strtolower((string)(parse_url($url, PHP_URL_SCHEME) ?? ''));
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return null;
+        }
+
         $responseBody = null;
         $httpCode = 0;
         $requestHeaders = $headers === [] ? ['Accept: application/json'] : $headers;
@@ -1218,12 +1232,21 @@ class ApiController extends Controller
             if ($ch !== false) {
                 curl_setopt_array($ch, [
                     CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_FOLLOWLOCATION => false,
+                    CURLOPT_MAXREDIRS => 0,
                     CURLOPT_CONNECTTIMEOUT => min(3, max(1, $timeoutSeconds)),
                     CURLOPT_TIMEOUT => $timeoutSeconds,
+                    CURLOPT_SSL_VERIFYPEER => true,
+                    CURLOPT_SSL_VERIFYHOST => 2,
                     CURLOPT_HTTPHEADER => $requestHeaders,
                     CURLOPT_USERAGENT => 'stellarvan-status-client/1.0',
                 ]);
+                if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
+                    curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+                }
+                if (defined('CURLOPT_REDIR_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
+                    curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+                }
                 $resp = curl_exec($ch);
                 $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 curl_close($ch);
@@ -1238,7 +1261,13 @@ class ApiController extends Controller
                     'method' => 'GET',
                     'timeout' => $timeoutSeconds,
                     'ignore_errors' => true,
+                    'follow_location' => 0,
+                    'max_redirects' => 0,
                     'header' => implode("\r\n", $requestHeaders) . "\r\n",
+                ],
+                'ssl' => [
+                    'verify_peer' => true,
+                    'verify_peer_name' => true,
                 ],
             ]);
             $resp = @file_get_contents($url, false, $context);
@@ -1939,6 +1968,77 @@ class ApiController extends Controller
         return $normalized;
     }
 
+    private function isSafeProxyUrl(string $url): bool
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts)) {
+            return false;
+        }
+
+        $scheme = strtolower((string)($parts['scheme'] ?? ''));
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return false;
+        }
+
+        if (isset($parts['user']) || isset($parts['pass'])) {
+            return false;
+        }
+
+        $host = strtolower(trim((string)($parts['host'] ?? '')));
+        if ($host === '' || $host === 'localhost' || str_ends_with($host, '.localhost')) {
+            return false;
+        }
+
+        $port = isset($parts['port']) ? (int)$parts['port'] : null;
+        if ($port !== null && ($port <= 0 || $port > 65535)) {
+            return false;
+        }
+
+        if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_IPV6) !== false) {
+            return $this->isPublicIp($host);
+        }
+
+        return $this->hostnameResolvesToPublicIp($host);
+    }
+
+    private function hostnameResolvesToPublicIp(string $host): bool
+    {
+        $hasPublicAddress = false;
+
+        $ipv4Records = @gethostbynamel($host);
+        if (is_array($ipv4Records)) {
+            foreach ($ipv4Records as $ipv4) {
+                if (!$this->isPublicIp((string)$ipv4)) {
+                    return false;
+                }
+                $hasPublicAddress = true;
+            }
+        }
+
+        if (function_exists('dns_get_record')) {
+            $ipv6Records = @dns_get_record($host, DNS_AAAA);
+            if (is_array($ipv6Records)) {
+                foreach ($ipv6Records as $record) {
+                    $ipv6 = (string)($record['ipv6'] ?? '');
+                    if ($ipv6 === '') {
+                        continue;
+                    }
+                    if (!$this->isPublicIp($ipv6)) {
+                        return false;
+                    }
+                    $hasPublicAddress = true;
+                }
+            }
+        }
+
+        return $hasPublicAddress;
+    }
+
+    private function isPublicIp(string $ip): bool
+    {
+        return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+    }
+
     /**
      * 图片跨域反向代理（CORS Image Proxy）
      * 用于第三方皮肤站点不返回 CORS 头时，保证 skinview3d 能读取纹理。
@@ -1947,7 +2047,7 @@ class ApiController extends Controller
     {
         ApiResponse::ensureRequestIdHeader();
         $rawUrl = trim((string)($_GET['url'] ?? ''));
-        if ($rawUrl === '' || preg_match('#^https?://#i', $rawUrl) !== 1) {
+        if ($rawUrl === '' || preg_match('#^https?://#i', $rawUrl) !== 1 || !$this->isSafeProxyUrl($rawUrl)) {
             http_response_code(400);
             header('Content-Type: text/plain; charset=utf-8');
             echo 'Bad Request';
@@ -1966,13 +2066,20 @@ class ApiController extends Controller
             if ($ch !== false) {
                 curl_setopt_array($ch, [
                     CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_FOLLOWLOCATION => false,
+                    CURLOPT_MAXREDIRS => 0,
                     CURLOPT_CONNECTTIMEOUT => 5,
                     CURLOPT_TIMEOUT => 10,
-                    CURLOPT_SSL_VERIFYPEER => false,
-                    CURLOPT_SSL_VERIFYHOST => 0,
+                    CURLOPT_SSL_VERIFYPEER => true,
+                    CURLOPT_SSL_VERIFYHOST => 2,
                     CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; skin-proxy/1.0)',
                 ]);
+                if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
+                    curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+                }
+                if (defined('CURLOPT_REDIR_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
+                    curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+                }
                 $resp = curl_exec($ch);
                 $imgBytes = ($resp !== false && is_string($resp) && $resp !== '') ? $resp : null;
                 $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -1983,10 +2090,12 @@ class ApiController extends Controller
                 'http' => [
                     'timeout' => 10,
                     'ignore_errors' => true,
+                    'follow_location' => 0,
+                    'max_redirects' => 0,
                 ],
                 'ssl' => [
-                    'verify_peer' => false,
-                    'verify_peer_name' => false,
+                    'verify_peer' => true,
+                    'verify_peer_name' => true,
                 ],
             ]);
             $resp = @file_get_contents($rawUrl, false, $context);

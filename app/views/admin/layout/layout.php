@@ -48,7 +48,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                     </svg>
                 </div>
                 <div>
-                    <h2 class="ta-kpi-label text-sm text-slate-500">玩家总数</h2>
+                    <h2 class="ta-kpi-label text-sm text-slate-700">玩家总数</h2>
                     <div class="ta-kpi-value text-2xl font-bold text-slate-900"><?= (int)$userCount ?></div>
                 </div>
             </div>
@@ -59,7 +59,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                     </svg>
                 </div>
                 <div>
-                    <h2 class="ta-kpi-label text-sm text-slate-500">公告数量</h2>
+                    <h2 class="ta-kpi-label text-sm text-slate-700">公告数量</h2>
                     <div class="ta-kpi-value text-2xl font-bold text-slate-900"><?= (int)$announcementCount ?></div>
                 </div>
             </div>
@@ -72,7 +72,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                     </svg>
                 </div>
                 <div>
-                    <h2 class="ta-kpi-label text-sm text-slate-500">相册图片</h2>
+                    <h2 class="ta-kpi-label text-sm text-slate-700">相册图片</h2>
                     <div class="ta-kpi-value text-2xl font-bold text-slate-900"><?= (int)$galleryCount ?></div>
                 </div>
             </div>

@@ -6,8 +6,9 @@ $adminHeaderAvatarFallback = '/images/owner_avatar.png';
 <!-- MOD: TailAdmin Header Start -->
 <header class="ta-admin-header-modern">
     <div class="ta-admin-header-inner">
-        <div class="min-w-0">
-            <h1 class="ta-admin-header-title truncate text-lg font-semibold">后台总览</h1>
+        <div class="ta-admin-header-heading min-w-0">
+            <h1 id="admin-header-title" class="ta-admin-header-title truncate text-lg font-semibold">后台总览</h1>
+            <p class="ta-admin-header-subtitle">SaaS Operations Console</p>
         </div>
 
         <div class="ta-admin-header-spacer"></div>

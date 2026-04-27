@@ -224,5 +224,17 @@ class User extends Model
         ');
         $stmt->execute([':selector' => $selector]);
     }
+
+    /**
+     * Delete all Remember Me token records for one user.
+     */
+    public function deleteRememberTokensByUserId(int $userId): void
+    {
+        $stmt = $this->db->prepare('
+            DELETE FROM auth_tokens
+            WHERE user_id = :user_id
+        ');
+        $stmt->execute([':user_id' => $userId]);
+    }
 }
 

@@ -104,6 +104,14 @@ class ProfileController extends Controller
 
         $newHash = $this->generateAuthMeHash($newPassword);
         $this->users->updatePassword($userId, $newHash);
+
+        try {
+            $this->users->deleteRememberTokensByUserId($userId);
+        } catch (\Throwable $e) {
+        }
+
+        $this->clearRememberMeCookie();
+        $this->regenerateSessionIdSafely();
         $this->json(['success' => true, 'message' => '密码修改成功']);
     }
 
@@ -252,6 +260,20 @@ class ProfileController extends Controller
                 $this->json(['success' => false, 'message' => '系统服务异常，请联系管理员'], 500);
             }
         }
+    }
+
+    private function clearRememberMeCookie(): void
+    {
+        $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
+            || (($_SERVER['SERVER_PORT'] ?? '') === '443');
+
+        setcookie('remember_me', '', [
+            'expires' => time() - 3600,
+            'path' => '/',
+            'secure' => $isHttps,
+            'httponly' => true,
+            'samesite' => 'Strict',
+        ]);
     }
 
     private function generateAuthMeHash(string $password): string

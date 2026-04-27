@@ -343,9 +343,12 @@ class ApiController extends Controller
         $fallback = [
             'realtime_api' => 'ERROR',
             'plugin' => 'Offline',
+            'plugin_online' => false,
             'last_update_seconds' => $this->inferFallbackLastUpdateSeconds(),
             'players_source' => 'Fallback',
             'fallback_enabled' => true,
+            'fallback_active' => true,
+            'fallback_available' => true,
             'fallback' => 'Enabled',
             'checked_at' => time(),
         ];
@@ -758,7 +761,7 @@ class ApiController extends Controller
 
     private function loadPlayersFromWsApi(): ?array
     {
-        $payload = $this->fetchWsApiJson('/api/players');
+        $payload = $this->fetchWsApiJson('/api/players', true);
         if (!is_array($payload)) {
             return null;
         }
@@ -782,7 +785,7 @@ class ApiController extends Controller
 
     private function loadChatFromWsApi(): ?array
     {
-        $payload = $this->fetchWsApiJson('/api/chat');
+        $payload = $this->fetchWsApiJson('/api/chat', true);
         if (!is_array($payload)) {
             return null;
         }
@@ -849,26 +852,43 @@ class ApiController extends Controller
     private function normalizeRealtimeHealthPayload(array $payload, bool $requestOk): array
     {
         $candidate = $this->unwrapApiPayload($payload);
-        $checkedAt = time();
+        $checkedAt = $this->resolveCheckedAt($candidate);
 
         $apiOk = $this->extractHealthApiOk($candidate, $requestOk);
         $pluginOnline = $this->extractHealthPluginOnline($candidate, $apiOk);
-        $fallbackEnabled = $this->extractHealthFallbackEnabled($candidate, !($apiOk && $pluginOnline));
+        $fallbackActive = $this->extractHealthFallbackActive($candidate, !($apiOk && $pluginOnline));
+        $fallbackEnabled = $this->extractHealthFallbackEnabled($candidate, $fallbackActive);
+        $fallbackAvailable = $this->extractHealthFallbackAvailable($candidate, true);
+
+        if ($apiOk && $pluginOnline) {
+            $fallbackActive = false;
+        }
+        if ($fallbackActive) {
+            $fallbackEnabled = true;
+            $fallbackAvailable = true;
+        } elseif ($fallbackEnabled) {
+            $fallbackAvailable = true;
+        }
+
         $playersSource = $this->normalizePlayersSource(
             $this->firstAvailableValue($candidate, ['players_source', 'playersSource', 'source', 'source_type']),
-            $fallbackEnabled,
+            $fallbackActive,
             $apiOk,
             $pluginOnline
         );
         $lastUpdateSeconds = $this->resolveLastUpdateSeconds($candidate, $checkedAt);
+        $fallbackText = $fallbackActive ? 'Enabled' : 'Disabled';
 
         return [
             'realtime_api' => $apiOk ? 'OK' : 'ERROR',
             'plugin' => $pluginOnline ? 'Online' : 'Offline',
+            'plugin_online' => $pluginOnline,
             'last_update_seconds' => $lastUpdateSeconds,
             'players_source' => $playersSource,
             'fallback_enabled' => $fallbackEnabled,
-            'fallback' => $fallbackEnabled ? 'Enabled' : 'Disabled',
+            'fallback_active' => $fallbackActive,
+            'fallback_available' => $fallbackAvailable,
+            'fallback' => $fallbackText,
             'checked_at' => $checkedAt,
         ];
     }
@@ -877,7 +897,7 @@ class ApiController extends Controller
     {
         $apiState = $this->firstAvailableValue(
             $candidate,
-            ['realtime_api', 'api', 'api_status', 'status', 'state', 'ok', 'healthy']
+            ['realtime_api', 'realtimeApi', 'api', 'api_status', 'apiStatus', 'status', 'state', 'ok', 'healthy']
         );
         $resolved = $this->parseHealthBool($apiState);
         if ($resolved !== null) {
@@ -924,7 +944,7 @@ class ApiController extends Controller
     {
         $fallbackValue = $this->firstAvailableValue(
             $candidate,
-            ['fallback_enabled', 'fallbackEnabled', 'fallback', 'degraded', 'using_fallback']
+            ['fallback_enabled', 'fallbackEnabled', 'fallback', 'degraded']
         );
         $resolved = $this->parseHealthBool($fallbackValue);
         if ($resolved !== null) {
@@ -934,7 +954,35 @@ class ApiController extends Controller
         return $default;
     }
 
-    private function normalizePlayersSource($rawSource, bool $fallbackEnabled, bool $apiOk, bool $pluginOnline): string
+    private function extractHealthFallbackActive(array $candidate, bool $default): bool
+    {
+        $fallbackValue = $this->firstAvailableValue(
+            $candidate,
+            ['fallback_active', 'fallbackActive', 'using_fallback', 'usingFallback']
+        );
+        $resolved = $this->parseHealthBool($fallbackValue);
+        if ($resolved !== null) {
+            return $resolved;
+        }
+
+        return $default;
+    }
+
+    private function extractHealthFallbackAvailable(array $candidate, bool $default): bool
+    {
+        $fallbackValue = $this->firstAvailableValue(
+            $candidate,
+            ['fallback_available', 'fallbackAvailable']
+        );
+        $resolved = $this->parseHealthBool($fallbackValue);
+        if ($resolved !== null) {
+            return $resolved;
+        }
+
+        return $default;
+    }
+
+    private function normalizePlayersSource($rawSource, bool $fallbackActive, bool $apiOk, bool $pluginOnline): string
     {
         if ($apiOk && $pluginOnline) {
             return 'WS';
@@ -942,15 +990,15 @@ class ApiController extends Controller
 
         if (is_string($rawSource) && trim($rawSource) !== '') {
             $normalized = strtolower(trim($rawSource));
-            if (str_contains($normalized, 'ws')) {
-                return 'WS';
-            }
             if (str_contains($normalized, 'fallback') || str_contains($normalized, 'cache') || str_contains($normalized, 'db')) {
                 return 'Fallback';
             }
+            if (str_contains($normalized, 'ws')) {
+                return $pluginOnline ? 'WS' : 'Fallback';
+            }
         }
 
-        return $fallbackEnabled ? 'Fallback' : 'WS';
+        return 'Fallback';
     }
 
     private function resolveLastUpdateSeconds(array $candidate, int $nowTs): ?int
@@ -961,16 +1009,42 @@ class ApiController extends Controller
             return $seconds;
         }
 
+        $ambiguousLastUpdate = $this->firstAvailableValue($candidate, ['last_update', 'lastUpdate']);
+        if (is_numeric($ambiguousLastUpdate)) {
+            $ambiguousNumber = (float)$ambiguousLastUpdate;
+            if ($ambiguousNumber >= 0 && $ambiguousNumber < 1000000000) {
+                return max(0, (int)round($ambiguousNumber));
+            }
+        }
+
         $timestampValue = $this->firstAvailableValue(
             $candidate,
-            ['updated_at', 'updatedAt', 'last_update_at', 'lastUpdateAt', 'last_plugin_seen_at', 'lastPluginSeenAt', 'last_plugin_update_at', 'lastPluginUpdateAt', 'last_update', 'lastUpdate', 'checked_at']
+            ['updated_at', 'updatedAt', 'last_update_at', 'lastUpdateAt', 'last_plugin_seen_at', 'lastPluginSeenAt', 'last_plugin_update_at', 'lastPluginUpdateAt', 'checked_at', 'checkedAt']
         );
         $timestamp = $this->parseUnixTimestamp($timestampValue);
         if ($timestamp !== null) {
             return max(0, $nowTs - $timestamp);
         }
 
+        if (is_string($ambiguousLastUpdate) && trim($ambiguousLastUpdate) !== '') {
+            $ambiguousTimestamp = $this->parseUnixTimestamp($ambiguousLastUpdate);
+            if ($ambiguousTimestamp !== null) {
+                return max(0, $nowTs - $ambiguousTimestamp);
+            }
+        }
+
         return null;
+    }
+
+    private function resolveCheckedAt(array $candidate): int
+    {
+        $checkedAtValue = $this->firstAvailableValue($candidate, ['checked_at', 'checkedAt']);
+        $checkedAt = $this->parseUnixTimestamp($checkedAtValue);
+        if ($checkedAt === null || $checkedAt <= 0) {
+            return time();
+        }
+
+        return $checkedAt;
     }
 
     private function parseUnixTimestamp($value): ?int
@@ -1088,7 +1162,7 @@ class ApiController extends Controller
     {
         $baseUrl = defined('WS_STATUS_API_BASE') ? trim((string)WS_STATUS_API_BASE) : '';
         if ($baseUrl === '') {
-            $baseUrl = 'http://127.0.0.1:3002';
+            $baseUrl = 'http://127.0.0.1:3001';
         }
 
         return rtrim($baseUrl, '/');

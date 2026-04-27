@@ -14,6 +14,13 @@ StellarWorld 采用三层实时观测架构：
 2. 网站 API -> 状态中心（`{WS_STATUS_API_BASE}`）
 3. 状态中心异常时 -> DB 历史快照 -> 本地 snapshot 缓存 -> 离线默认值
 
+StellarRealtime 默认链路（建议）：
+
+- Realtime HTTP health：`http://host:3001/health`
+- Realtime API：`http://host:3001/api/status`
+- WebSocket 后台：`ws://host:3001/ws/admin`
+- 插件上报：`ws://host:3001/ws/plugin`
+
 ## 2. 数据来源（WS vs DB）
 
 实时优先级：
@@ -78,9 +85,12 @@ StellarWorld 采用三层实时观测架构：
 {
   "realtime_api": "OK",
   "plugin": "Online",
+  "plugin_online": true,
   "last_update_seconds": 3,
   "players_source": "WS",
   "fallback_enabled": false,
+  "fallback_active": false,
+  "fallback_available": true,
   "fallback": "Disabled",
   "checked_at": 1710000000
 }
@@ -92,8 +102,11 @@ StellarWorld 采用三层实时观测架构：
 {
   "realtime_api": "ERROR",
   "plugin": "Offline",
+  "plugin_online": false,
   "players_source": "Fallback",
   "fallback_enabled": true,
+  "fallback_active": true,
+  "fallback_available": true,
   "fallback": "Enabled"
 }
 ```
@@ -187,6 +200,12 @@ ws.onmessage = (event) => {
 - 健康接口结果按 1s 短缓存提供给后台页面。
 - 后台前端轮询 `/api/status/health` 进行可视化刷新。
 
+Token 兼容与安全约束：
+
+- `WS_STATUS_API_TOKEN` 仅用于网站后端请求 Realtime `/api/*`。
+- `/health` 默认无需 token，网站侧不会强制附带 token。
+- 不在浏览器端暴露 `WS_STATUS_API_TOKEN`。
+
 ## 6. 降级策略
 
 当 WS 状态中心失败时，接口降级顺序：
@@ -201,6 +220,14 @@ ws.onmessage = (event) => {
 - `/api/status`: WS -> DB -> snapshot -> offline
 - `/api/players`: WS -> status/DB -> snapshot -> offline players
 - `/api/chat`: WS -> DB(status.chat) -> snapshot -> `[]`
+
+Plugin 显示 `Offline` 的常见原因：
+
+1. `StellarStatsSync` 配置 `websocket.enabled=false`
+2. 插件 `auth_token` 与 Realtime `PLUGIN_TOKENS` 不一致
+3. 插件连接路径不是 `/ws/plugin`
+4. Realtime 服务未启动或端口不通
+5. 网站 `WS_STATUS_API_BASE` 指向错误端口
 
 ## 7. 性能策略
 
@@ -218,7 +245,7 @@ ws.onmessage = (event) => {
 
 ## 环境变量
 
-- `WS_STATUS_API_BASE`：WS 状态中心 HTTP 基址，默认 `http://127.0.0.1:3002`
+- `WS_STATUS_API_BASE`：WS 状态中心 HTTP 基址，默认 `http://127.0.0.1:3001`
 - `WS_STATUS_API_TIMEOUT_MS`：状态中心请求超时（毫秒）
 - `WS_STATUS_API_TOKEN`：状态中心 API token（可留空；为空时仅依赖无需鉴权的接口如 `/health`）
 - `PUBLIC_STATUS_WS_URL`：前台 WebSocket 地址

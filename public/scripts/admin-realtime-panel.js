@@ -247,9 +247,12 @@
             applyHealthStatus({
                 realtime_api: 'ERROR',
                 plugin: 'Offline',
+                plugin_online: false,
                 last_update_seconds: null,
                 players_source: 'Fallback',
                 fallback_enabled: true,
+                fallback_active: true,
+                fallback_available: true,
                 fallback: 'Enabled'
             });
             healthFetchInFlight = false;
@@ -288,31 +291,89 @@
             return;
         }
 
-        var apiText = String(pickValue(data, ['realtime_api', 'api_status', 'status']) || '--');
-        var pluginText = String(pickValue(data, ['plugin', 'plugin_status']) || '--');
+        var apiValue = pickValue(data, ['realtime_api', 'realtimeApi', 'api_status', 'apiStatus', 'status', 'api']);
+        var apiState = parseHealthBoolean(pickValue(data, ['ok', 'healthy', 'api_ok', 'apiOk', 'realtime_ok', 'realtimeOk']));
+        var apiText = String(apiValue || '--');
+        if (apiValue === null || apiValue === undefined || String(apiValue).trim() === '') {
+            if (apiState !== null) {
+                apiText = apiState ? 'OK' : 'ERROR';
+            }
+        }
+
+        var pluginValue = pickValue(data, ['plugin', 'plugin_status', 'pluginStatus']);
+        var pluginOnline = parseHealthBoolean(pickValue(data, ['plugin_online', 'pluginOnline']));
+        if (pluginOnline === null) {
+            var connections = pickValue(data, ['connections']);
+            if (connections && typeof connections === 'object') {
+                var pluginConnectionCount = pickNumber(connections, ['plugin', 'plugins', 'plugin_count', 'pluginCount']);
+                if (pluginConnectionCount !== null) {
+                    pluginOnline = pluginConnectionCount > 0;
+                }
+            }
+        }
+        if (pluginOnline === null) {
+            pluginOnline = parseHealthBoolean(pluginValue);
+        }
+        var pluginText = String(pluginValue || '--');
+        if (pluginOnline === true) {
+            pluginText = 'Online';
+        } else if (pluginOnline === false && pluginText === '--') {
+            pluginText = 'Offline';
+        }
+
         var sourceText = String(pickValue(data, ['players_source', 'playersSource', 'source']) || '--');
         var fallbackText = String(pickValue(data, ['fallback']) || '--');
 
-        var fallbackEnabled = parseHealthBoolean(pickValue(data, ['fallback_enabled', 'fallbackEnabled', 'fallback']));
-        if (fallbackEnabled !== null) {
-            fallbackText = fallbackEnabled ? 'Enabled' : 'Disabled';
+        var fallbackActive = parseHealthBoolean(pickValue(data, ['fallback_active', 'fallbackActive']));
+        var fallbackEnabled = parseHealthBoolean(pickValue(data, ['fallback_enabled', 'fallbackEnabled']));
+        var fallbackAvailable = parseHealthBoolean(pickValue(data, ['fallback_available', 'fallbackAvailable']));
+        if (fallbackActive === null && fallbackEnabled !== null) {
+            fallbackActive = fallbackEnabled;
+        }
+        if (fallbackAvailable === null && fallbackEnabled !== null) {
+            fallbackAvailable = fallbackEnabled;
         }
 
-        var lastUpdateSeconds = pickNumber(data, ['last_update_seconds', 'lastUpdateSeconds']);
+        var apiUpper = apiText.toUpperCase();
+        if (apiUpper === 'TRUE') {
+            apiUpper = 'OK';
+        } else if (apiUpper === 'FALSE') {
+            apiUpper = 'ERROR';
+        }
+        if (fallbackActive === null) {
+            fallbackActive = !(apiUpper === 'OK' && pluginOnline === true);
+        }
+        if (fallbackActive === true && fallbackAvailable === null) {
+            fallbackAvailable = true;
+        }
+        fallbackText = fallbackActive ? 'Enabled' : 'Disabled';
+
+        var lastUpdateSeconds = pickNumber(data, ['last_update_seconds', 'lastUpdateSeconds', 'age_seconds', 'ageSeconds']);
+        if (lastUpdateSeconds === null) {
+            lastUpdateSeconds = resolveLastUpdateSecondsFromHealth(data);
+        }
         var lastUpdateText = '--';
         if (lastUpdateSeconds !== null) {
             lastUpdateText = String(Math.max(0, Math.round(lastUpdateSeconds))) + 's ago';
         }
 
-        var apiUpper = apiText.toUpperCase();
         var pluginLower = pluginText.toLowerCase();
         var sourceLower = sourceText.toLowerCase();
+        if (sourceText === '--' || sourceText.trim() === '') {
+            sourceText = apiUpper === 'OK' && pluginOnline === true ? 'WS' : 'Fallback';
+            sourceLower = sourceText.toLowerCase();
+        } else if (apiUpper !== 'OK' || pluginOnline === false) {
+            if (sourceLower.indexOf('ws') !== -1) {
+                sourceText = 'Fallback';
+                sourceLower = 'fallback';
+            }
+        }
 
         setHealthField(dom.healthApi, apiUpper, apiUpper === 'OK' ? 'good' : 'bad');
-        setHealthField(dom.healthPlugin, pluginText, pluginLower === 'online' ? 'good' : 'bad');
+        setHealthField(dom.healthPlugin, pluginText, pluginOnline === true || pluginLower === 'online' ? 'good' : 'bad');
         setHealthField(dom.healthLastUpdate, lastUpdateText, lastUpdateSeconds !== null && lastUpdateSeconds <= 10 ? 'good' : 'warn');
         setHealthField(dom.healthPlayersSource, sourceText, sourceLower.indexOf('ws') !== -1 ? 'good' : 'warn');
-        var fallbackTone = fallbackEnabled === null ? 'warn' : (fallbackEnabled === true ? 'bad' : 'good');
+        var fallbackTone = fallbackActive === null ? 'warn' : (fallbackActive === true ? 'bad' : 'good');
         setHealthField(dom.healthFallback, fallbackText, fallbackTone);
     }
 
@@ -807,6 +868,58 @@
         }
         var num = Number(value);
         return Number.isFinite(num) ? num : null;
+    }
+
+    function resolveLastUpdateSecondsFromHealth(data) {
+        if (!data || typeof data !== 'object') {
+            return null;
+        }
+
+        var ambiguousValue = pickValue(data, ['last_update', 'lastUpdate']);
+        if (ambiguousValue !== null && ambiguousValue !== undefined && ambiguousValue !== '') {
+            var ambiguousNumber = Number(ambiguousValue);
+            if (Number.isFinite(ambiguousNumber) && ambiguousNumber >= 0 && ambiguousNumber < 1000000000) {
+                return Math.max(0, Math.round(ambiguousNumber));
+            }
+        }
+
+        var timestampValue = pickValue(data, [
+            'last_plugin_seen_at',
+            'lastPluginSeenAt',
+            'last_plugin_update_at',
+            'lastPluginUpdateAt',
+            'last_update_at',
+            'lastUpdateAt',
+            'updated_at',
+            'updatedAt',
+            'checked_at',
+            'checkedAt'
+        ]);
+        var fromTimestamp = toAgeSecondsFromTimestamp(timestampValue);
+        if (fromTimestamp !== null) {
+            return fromTimestamp;
+        }
+
+        return toAgeSecondsFromTimestamp(ambiguousValue);
+    }
+
+    function toAgeSecondsFromTimestamp(value) {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+
+        var numeric = Number(value);
+        if (Number.isFinite(numeric)) {
+            var timestampSeconds = numeric > 10000000000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+            var nowSeconds = Math.floor(Date.now() / 1000);
+            return Math.max(0, nowSeconds - timestampSeconds);
+        }
+
+        var dateObj = normalizeDate(value);
+        if (!dateObj) {
+            return null;
+        }
+        return Math.max(0, Math.floor((Date.now() - dateObj.getTime()) / 1000));
     }
 
     function parseHealthBoolean(value) {

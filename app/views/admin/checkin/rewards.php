@@ -103,15 +103,15 @@
 
     <template data-checkin-item-template>
         <div class="ta-checkin-input-card">
-            <input type="text" placeholder="物品 ID / 名称" data-checkin-item-name>
-            <input type="number" min="1" step="1" value="1" data-checkin-item-amount>
+            <input type="text" placeholder="物品 ID / 名称" data-checkin-item-name aria-label="Reward item name">
+            <input type="number" min="1" step="1" value="1" data-checkin-item-amount aria-label="Reward item amount">
             <button type="button" class="ta-btn ta-btn-secondary transition-all hover:scale-[1.02]" data-checkin-remove-row>移除</button>
         </div>
     </template>
 
     <template data-checkin-command-template>
         <div class="ta-checkin-input-card">
-            <input type="text" placeholder="输入命令（例如：give @p diamond 1）" data-checkin-command-text>
+            <input type="text" placeholder="输入命令（例如：give @p diamond 1）" data-checkin-command-text aria-label="Reward command">
             <button type="button" class="ta-btn ta-btn-secondary transition-all hover:scale-[1.02]" data-checkin-remove-row>移除</button>
         </div>
     </template>

@@ -95,18 +95,7 @@ final class BaiduSEO
             . '?site=' . rawurlencode($baseUrl)
             . '&token=' . rawurlencode($token);
 
-        $response = SafeHttpClient::request('POST', $endpoint, [
-            'headers' => [
-                'Content-Type: text/plain; charset=utf-8',
-                'Accept: application/json',
-            ],
-            'body' => $payload,
-            'timeout' => 4,
-            'connect_timeout' => 2,
-            'max_redirects' => 0,
-            'allowed_hosts' => [self::BAIDU_PUSH_HOST],
-            'max_body_bytes' => 128 * 1024,
-        ]);
+        $response = $this->requestBaiduPush($endpoint, $payload);
 
         if (($response['success'] ?? false) !== true) {
             $error = trim((string)($response['error'] ?? 'Request failed'));
@@ -152,6 +141,138 @@ final class BaiduSEO
             'not_same_site' => $notSameSite,
             'not_valid' => $notValid,
             'message' => $message,
+        ];
+    }
+
+    /**
+     * @return array{success:bool,body?:string,error?:string}
+     */
+    private function requestBaiduPush(string $endpoint, string $payload): array
+    {
+        $parts = parse_url($endpoint);
+        $scheme = strtolower((string)($parts['scheme'] ?? ''));
+        $host = strtolower((string)($parts['host'] ?? ''));
+        if ($scheme !== 'https' || $host !== self::BAIDU_PUSH_HOST) {
+            return [
+                'success' => false,
+                'error' => 'Invalid Baidu push endpoint',
+            ];
+        }
+
+        $headers = [
+            'Content-Type: text/plain; charset=utf-8',
+            'Accept: application/json',
+        ];
+        $maxBodyBytes = 128 * 1024;
+
+        if (function_exists('curl_init')) {
+            $ch = curl_init($endpoint);
+            if ($ch === false) {
+                return [
+                    'success' => false,
+                    'error' => 'Unable to initialize cURL',
+                ];
+            }
+
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => $payload,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_MAXREDIRS => 0,
+                CURLOPT_CONNECTTIMEOUT => 2,
+                CURLOPT_TIMEOUT => 4,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_HTTPHEADER => $headers,
+            ]);
+            if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTPS')) {
+                curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+            }
+            if (defined('CURLOPT_REDIR_PROTOCOLS') && defined('CURLPROTO_HTTPS')) {
+                curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);
+            }
+
+            $body = curl_exec($ch);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            if (!is_string($body) || $body === '') {
+                return [
+                    'success' => false,
+                    'error' => $curlError !== '' ? $curlError : 'Empty response from Baidu API',
+                ];
+            }
+            if (strlen($body) > $maxBodyBytes) {
+                return [
+                    'success' => false,
+                    'error' => 'Baidu API response exceeded size limit',
+                ];
+            }
+            if ($httpCode < 200 || $httpCode >= 300) {
+                return [
+                    'success' => false,
+                    'error' => 'Baidu API HTTP ' . $httpCode,
+                ];
+            }
+
+            return [
+                'success' => true,
+                'body' => $body,
+            ];
+        }
+
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'POST',
+                'header' => implode("\r\n", $headers) . "\r\n",
+                'content' => $payload,
+                'timeout' => 4,
+                'ignore_errors' => true,
+                'follow_location' => 0,
+                'max_redirects' => 0,
+            ],
+            'ssl' => [
+                'verify_peer' => true,
+                'verify_peer_name' => true,
+            ],
+        ]);
+
+        $body = @file_get_contents($endpoint, false, $context);
+        if (!is_string($body) || $body === '') {
+            return [
+                'success' => false,
+                'error' => 'Empty response from Baidu API',
+            ];
+        }
+        if (strlen($body) > $maxBodyBytes) {
+            return [
+                'success' => false,
+                'error' => 'Baidu API response exceeded size limit',
+            ];
+        }
+
+        $httpCode = 0;
+        $responseHeaders = $http_response_header ?? [];
+        if (is_array($responseHeaders)) {
+            foreach ($responseHeaders as $headerLine) {
+                if (preg_match('#^HTTP/\S+\s+(\d{3})#i', (string)$headerLine, $matches) === 1) {
+                    $httpCode = (int)$matches[1];
+                    break;
+                }
+            }
+        }
+        if ($httpCode !== 0 && ($httpCode < 200 || $httpCode >= 300)) {
+            return [
+                'success' => false,
+                'error' => 'Baidu API HTTP ' . $httpCode,
+            ];
+        }
+
+        return [
+            'success' => true,
+            'body' => $body,
         ];
     }
 }

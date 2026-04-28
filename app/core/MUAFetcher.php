@@ -176,7 +176,7 @@ final class MUAFetcher
         $hdrs = $http_response_header ?? [];
         if (!empty($hdrs[0]) && preg_match('#HTTP/\S+\s+(\d+)#', $hdrs[0], $m)) {
             $code = (int)$m[1];
-            if ($code === 404 || $code < 200 || $code >= 300) {
+            if ($code < 200 || $code >= 300) {
                 return null;
             }
         }

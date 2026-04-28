@@ -53,10 +53,11 @@ $dailySignBars = [36, 49, 52, 67, 61, 74, 70];
     <div class="ta-card">
         <h3 class="text-base font-semibold">玩家详情查询</h3>
         <div class="mt-3 space-y-2">
-            <label class="block text-sm font-medium">玩家ID / 用户名</label>
+            <label class="block text-sm font-medium" for="checkin-player-query">玩家ID / 用户名</label>
             <div class="flex gap-2">
                 <div class="flex-[5]">
                     <input
+                        id="checkin-player-query"
                         type="text"
                         class="h-10"
                         style="margin-top: 0;"

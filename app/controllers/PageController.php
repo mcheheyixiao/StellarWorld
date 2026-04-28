@@ -252,7 +252,7 @@ class PageController extends Controller
 
         $rawDesc = strip_tags((string)($item['content'] ?? ''));
         $description = $rawDesc === '' ? '' : mb_substr($rawDesc, 0, 100, 'UTF-8') . (mb_strlen($rawDesc, 'UTF-8') > 100 ? '...' : '');
-        $keywords = (isset($item['tags']) && $item['tags'] !== '' && $item['tags'] !== null) ? (string)$item['tags'] : '';
+        $keywords = (isset($item['tags']) && $item['tags'] !== '') ? (string)$item['tags'] : '';
 
         return $this->render('pages/announcement_view', [
             'title' => ((string)$item['title']) . ' - 公告详情',

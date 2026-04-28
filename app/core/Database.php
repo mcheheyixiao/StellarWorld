@@ -24,7 +24,7 @@ class Database
             return null;
         }
 
-        if (self::$redis !== null) {
+        if (self::$redis instanceof \Redis) {
             return self::$redis;
         }
 
@@ -41,7 +41,7 @@ class Database
                 $client->select(REDIS_DB);
             }
             self::$redis = $client;
-            return self::$redis;
+            return $client;
         } catch (\Throwable $e) {
             return null;
         }

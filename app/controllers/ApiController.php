@@ -1327,7 +1327,7 @@ class ApiController extends Controller
             return $this->sanitizeLegacyStatusPayload(['players' => ['list' => $candidate]]);
         }
 
-        if (array_key_exists('list', $candidate) || array_key_exists('online', $candidate) || array_key_exists('max', $candidate)) {
+        if (array_key_exists('list', $candidate) || array_key_exists('max', $candidate)) {
             return $this->sanitizeLegacyStatusPayload(['players' => $candidate]);
         }
 

@@ -183,18 +183,18 @@ $csrfTokenEscaped = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                                 
                                 <td>
                                     <div class="ta-stack ta-stack-sm ta-stack-limit">
-                                        <input type="text" name="mc_username" form="<?= $formId ?>" value="<?= htmlspecialchars($mcName, ENT_QUOTES, 'UTF-8') ?>" placeholder="游戏名 (留空解绑)">
-                                        <input type="text" name="mc_uuid" form="<?= $formId ?>" value="<?= htmlspecialchars($mcUuid, ENT_QUOTES, 'UTF-8') ?>" placeholder="UUID (留空解绑)">
+                                        <input type="text" name="mc_username" form="<?= $formId ?>" value="<?= htmlspecialchars($mcName, ENT_QUOTES, 'UTF-8') ?>" placeholder="游戏名 (留空解绑)" aria-label="Minecraft username">
+                                        <input type="text" name="mc_uuid" form="<?= $formId ?>" value="<?= htmlspecialchars($mcUuid, ENT_QUOTES, 'UTF-8') ?>" placeholder="UUID (留空解绑)" aria-label="Minecraft UUID">
                                     </div>
                                 </td>
                                 
                                 <td>
                                     <div class="ta-stack ta-stack-sm">
-                                        <select name="role" form="<?= $formId ?>">
+                                        <select name="role" form="<?= $formId ?>" aria-label="User role">
                                             <option value="player" <?= $p['role']==='player'?'selected':''; ?>>👤 玩家</option>
                                             <option value="admin" <?= $p['role']==='admin'?'selected':''; ?>>🛡️ 管理员</option>
                                         </select>
-                                        <select name="status" form="<?= $formId ?>">
+                                        <select name="status" form="<?= $formId ?>" aria-label="User status">
                                             <option value="active" <?= $p['status']==='active'?'selected':''; ?>>🟢 正常</option>
                                             <option value="frozen" <?= $p['status']==='frozen'?'selected':''; ?>>❄️ 冻结</option>
                                             <option value="banned" <?= $p['status']==='banned'?'selected':''; ?>>⛔ 封禁</option>
@@ -299,14 +299,14 @@ $csrfTokenEscaped = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                     <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                     <input type="hidden" name="id" value="">
                     <div>
-                        <label>标题</label>
-                        <input name="title" type="text" required
-                              >
+                        <label for="announcement-title">标题</label>
+                        <input id="announcement-title" name="title" type="text" required
+                               >
                     </div>
                     <div>
-                        <label>内容</label>
-                        <textarea name="content" rows="6" required
-                                 ></textarea>
+                        <label for="announcement-content">内容</label>
+                        <textarea id="announcement-content" name="content" rows="6" required
+                                  ></textarea>
                     </div>
                     <div>
                         <label class="cntr">
@@ -506,12 +506,12 @@ $csrfTokenEscaped = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                                     <option value="1" <?= $sv === '1' ? 'selected' : ''; ?>>开启（1）</option>
                                 </select>
                             <?php elseif ($sk === 'register_ip_limit'): ?>
-                                <input type="number" name="settings[<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>]" min="0" max="9999" step="1" value="<?= htmlspecialchars($sv, ENT_QUOTES, 'UTF-8') ?>"
-                                      >
+                                <input type="number" name="settings[<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>]" min="0" max="9999" step="1" value="<?= htmlspecialchars($sv, ENT_QUOTES, 'UTF-8') ?>" aria-label="<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>"
+                                       >
                                 <span>0 表示不限制（非白名单 IP）</span>
                             <?php else: ?>
-                                <input type="text" name="settings[<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>]" value="<?= htmlspecialchars($sv, ENT_QUOTES, 'UTF-8') ?>"
-                                      >
+                                <input type="text" name="settings[<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>]" value="<?= htmlspecialchars($sv, ENT_QUOTES, 'UTF-8') ?>" aria-label="<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>"
+                                       >
                             <?php endif; ?>
                         </div>
                     <?php endforeach; ?>
@@ -574,14 +574,14 @@ $csrfTokenEscaped = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                     <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                     <input type="hidden" name="id" value="">
                     <div>
-                        <label>游戏名（Minecraft）</label>
-                        <input name="username" type="text" required maxlength="32" pattern="[a-zA-Z0-9_]{1,32}"
-                              >
+                        <label for="team-member-username">游戏名（Minecraft）</label>
+                        <input id="team-member-username" name="username" type="text" required maxlength="32" pattern="[a-zA-Z0-9_]{1,32}"
+                               >
                     </div>
                     <div>
-                        <label>角色 / 职位</label>
-                        <input name="role" type="text" maxlength="128" placeholder="服务器成员"
-                              >
+                        <label for="team-member-role">角色 / 职位</label>
+                        <input id="team-member-role" name="role" type="text" maxlength="128" placeholder="服务器成员"
+                               >
                     </div>
                     <button type="submit" class="ta-btn ta-btn-primary" id="team-member-submit-btn">添加成员</button>
                 </form>
@@ -638,14 +638,14 @@ $csrfTokenEscaped = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                 <form method="post" action="/admin/ip-whitelist/add">
                     <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                     <div>
-                        <label>IP 或 CIDR</label>
-                        <input name="ip_cidr" type="text" required placeholder="例如 203.0.113.1 或 2001:db8::/32"
-                              >
+                        <label for="ip-whitelist-cidr">IP 或 CIDR</label>
+                        <input id="ip-whitelist-cidr" name="ip_cidr" type="text" required placeholder="例如 203.0.113.1 或 2001:db8::/32"
+                               >
                     </div>
                     <div>
-                        <label>备注（可选）</label>
-                        <input name="reason" type="text" maxlength="255"
-                              >
+                        <label for="ip-whitelist-reason">备注（可选）</label>
+                        <input id="ip-whitelist-reason" name="reason" type="text" maxlength="255"
+                               >
                     </div>
                     <button type="submit" class="ta-btn ta-btn-primary">添加</button>
                 </form>
@@ -702,14 +702,14 @@ $csrfTokenEscaped = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                 <form method="post" action="/admin/ip-blacklist/add">
                     <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                     <div>
-                        <label>IP 或 CIDR</label>
-                        <input name="ip_cidr" type="text" required placeholder="例如 203.0.113.0/24 或 2001:db8::/32"
-                              >
+                        <label for="ip-blacklist-cidr">IP 或 CIDR</label>
+                        <input id="ip-blacklist-cidr" name="ip_cidr" type="text" required placeholder="例如 203.0.113.0/24 或 2001:db8::/32"
+                               >
                     </div>
                     <div>
-                        <label>原因（可选）</label>
-                        <input name="reason" type="text" maxlength="255"
-                              >
+                        <label for="ip-blacklist-reason">原因（可选）</label>
+                        <input id="ip-blacklist-reason" name="reason" type="text" maxlength="255"
+                               >
                     </div>
                     <button type="submit" class="ta-btn ta-btn-primary">添加</button>
                 </form>

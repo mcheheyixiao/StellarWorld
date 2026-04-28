@@ -16,6 +16,9 @@ define('DB_PASS', getenv('DB_PASS') ?: '');
 define('TURNSTILE_SITE_KEY', getenv('TURNSTILE_SITE_KEY') ?: '');
 define('TURNSTILE_SECRET_KEY', getenv('TURNSTILE_SECRET_KEY') ?: '');
 
+// Auth rate-limit cooldown in seconds
+define('AUTH_ACTION_COOLDOWN', max(1, (int)(getenv('AUTH_ACTION_COOLDOWN') ?: 60)));
+
 // SMTP (placeholder, document in deploy_guide)
 define('SMTP_HOST', getenv('SMTP_HOST') ?: 'smtp.example.com');
 define('SMTP_PORT', (int) (getenv('SMTP_PORT') ?: 465));

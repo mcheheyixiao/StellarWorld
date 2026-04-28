@@ -423,7 +423,7 @@ class AdminController extends Controller
             if ($shouldPing) {
                 try {
                     $newUrl = SITE_BASE_URL . '/announcements/view?id=' . $newInsertId;
-                    $baiduApiUrl = 'http://data.zz.baidu.com/urls?site=' . urlencode(SITE_BASE_URL) . '&token=' . urlencode(BAIDU_PUSH_TOKEN);
+                    $baiduApiUrl = 'https://data.zz.baidu.com/urls?site=' . urlencode(SITE_BASE_URL) . '&token=' . urlencode(BAIDU_PUSH_TOKEN);
                     $ch = curl_init($baiduApiUrl);
                     if ($ch !== false) {
                         curl_setopt($ch, CURLOPT_POST, true);
@@ -497,12 +497,34 @@ class AdminController extends Controller
         $description = trim((string)($_POST['description'] ?? ''));
 
         if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
-            $this->completeAdminAction('/admin/gallery');
+            $this->completeAdminAction('/admin?tab=gallery');
         }
 
-        $tmp = $_FILES['image']['tmp_name'];
-        $name = basename((string)$_FILES['image']['name']);
-        $ext = pathinfo($name, PATHINFO_EXTENSION);
+        $tmp = (string)($_FILES['image']['tmp_name'] ?? '');
+        $name = basename((string)($_FILES['image']['name'] ?? ''));
+        if ($tmp === '' || !is_uploaded_file($tmp)) {
+            $this->completeAdminAction('/admin?tab=gallery');
+        }
+
+        $ext = strtolower((string)pathinfo($name, PATHINFO_EXTENSION));
+        $allowedExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+        if (!in_array($ext, $allowedExt, true)) {
+            $this->completeAdminAction('/admin?tab=gallery');
+        }
+
+        $imageMeta = @getimagesize($tmp);
+        $mime = is_array($imageMeta) ? strtolower((string)($imageMeta['mime'] ?? '')) : '';
+        $mimeExtMap = [
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            'image/gif' => 'gif',
+        ];
+        if (!isset($mimeExtMap[$mime])) {
+            $this->completeAdminAction('/admin?tab=gallery');
+        }
+
+        $ext = $mimeExtMap[$mime];
         $safeName = date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
         $destRel = '/uploads/gallery/' . $safeName;
         $destAbs = PUBLIC_PATH . $destRel;
@@ -512,7 +534,7 @@ class AdminController extends Controller
         }
 
         if (!move_uploaded_file($tmp, $destAbs)) {
-            $this->completeAdminAction('/admin/gallery');
+            $this->completeAdminAction('/admin?tab=gallery');
         }
 
         ImageProcessor::generateGalleryResponsiveSet($destAbs);

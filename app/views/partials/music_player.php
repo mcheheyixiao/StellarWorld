@@ -76,7 +76,7 @@ $hasDefaultBgm = is_file($defaultBgmFile);
     </div>
 
     <!-- 物理音频标签，保持与原项目兼容 -->
-    <audio id="bgm-audio" loop data-default-src="<?= $hasDefaultBgm ? $defaultBgmUrl : '' ?>">
+    <audio id="bgm-audio" loop data-default-src="<?= htmlspecialchars($hasDefaultBgm ? $defaultBgmUrl : '', ENT_QUOTES, 'UTF-8') ?>">
         <?php if ($hasDefaultBgm): ?>
         <source src="<?= htmlspecialchars($defaultBgmUrl, ENT_QUOTES, 'UTF-8') ?>" type="audio/mpeg">
         <?php endif; ?>
@@ -435,6 +435,15 @@ function formatTime(seconds) {
     return mins + ':' + (secs < 10 ? '0' : '') + secs;
 }
 
+function escapeHtml(value) {
+    return String(value === null || value === undefined ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // 更新播放列表UI
 function updatePlaylistUI() {
     var playlistElement = document.getElementById('playlist');
@@ -454,9 +463,9 @@ function updatePlaylistUI() {
         return (
             '<div class="playlist-item ' + isActive + '" data-index="' + index + '">' +
                 '<div class="playlist-content">' +
-                    '<span class="playlist-title">' + song.title + '</span>' +
+                    '<span class="playlist-title">' + escapeHtml(song.title) + '</span>' +
                     '<span class="playlist-separator">-</span>' +
-                    '<span class="playlist-artist">' + song.artist + '</span>' +
+                    '<span class="playlist-artist">' + escapeHtml(song.artist) + '</span>' +
                 '</div>' +
             '</div>'
         );

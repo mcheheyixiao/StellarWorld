@@ -6,7 +6,7 @@ namespace Core;
 final class BaiduSEO
 {
     private const BAIDU_PUSH_HOST = 'data.zz.baidu.com';
-    private const BAIDU_PUSH_ENDPOINT = 'http://data.zz.baidu.com/urls';
+    private const BAIDU_PUSH_ENDPOINT = 'https://data.zz.baidu.com/urls';
 
     /**
      * @return list<string>

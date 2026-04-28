@@ -25,6 +25,28 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
     </div>
     <?php
 };
+
+$userCount = (int)($userCount ?? 0);
+$announcementCount = (int)($announcementCount ?? 0);
+$galleryCount = (int)($galleryCount ?? 0);
+$players = is_array($players ?? null) ? $players : [];
+$announcements = is_array($announcements ?? null) ? $announcements : [];
+$milestones = is_array($milestones ?? null) ? $milestones : [];
+$images = is_array($images ?? null) ? $images : [];
+$siteSettings = is_array($siteSettings ?? null) ? $siteSettings : [];
+$teamMembers = is_array($teamMembers ?? null) ? $teamMembers : [];
+$ipWhitelist = is_array($ipWhitelist ?? null) ? $ipWhitelist : [];
+$ipBlacklist = is_array($ipBlacklist ?? null) ? $ipBlacklist : [];
+$playersPagination = is_array($playersPagination ?? null) ? $playersPagination : [];
+$announcementsPagination = is_array($announcementsPagination ?? null) ? $announcementsPagination : [];
+$milestonesPagination = is_array($milestonesPagination ?? null) ? $milestonesPagination : [];
+$imagesPagination = is_array($imagesPagination ?? null) ? $imagesPagination : [];
+$teamMembersPagination = is_array($teamMembersPagination ?? null) ? $teamMembersPagination : [];
+$ipWhitelistPagination = is_array($ipWhitelistPagination ?? null) ? $ipWhitelistPagination : [];
+$ipBlacklistPagination = is_array($ipBlacklistPagination ?? null) ? $ipBlacklistPagination : [];
+$realtimePanelEnabled = !empty($realtimePanelEnabled);
+$csrfToken = (string)($csrfToken ?? ($_SESSION['csrf_token'] ?? ''));
+$csrfTokenEscaped = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
 ?>
 <div id="admin-main-content" class="space-y-6">
 
@@ -193,12 +215,12 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                                 <td>
                                     <div class="ta-action-stack">
                                         <form id="<?= $formId ?>" method="post" action="/admin/players/update">
-                                            <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                                            <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                                             <input type="hidden" name="id" value="<?= (int)$p['id'] ?>">
                                             <button type="submit" class="ta-btn ta-btn-secondary">保存</button>
                                         </form>
                                         <form method="post" action="/admin/players/delete" onsubmit="return confirm('确定要删除该玩家账号吗？此操作不可撤销。');">
-                                            <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                                            <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                                             <input type="hidden" name="id" value="<?= (int)$p['id'] ?>">
                                             <button type="submit" class="ta-btn ta-btn-primary">删除</button>
                                         </form>
@@ -261,7 +283,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                                 <button type="button" class="ta-btn ta-btn-secondary"
                                         onclick='editAnnouncement(<?= (int)$a['id'] ?>, <?= json_encode($a['title'] ?? '', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>, <?= json_encode($a['content'] ?? '', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>, <?= (int)($a['is_published'] ?? 0) ?>, <?= json_encode($a['created_at'] ?? '', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>)'>编辑</button>
                                 <form method="post" action="/admin/announcements/delete" onsubmit="return confirm('确定要永久删除此公告吗？');">
-                                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                                     <input type="hidden" name="id" value="<?= (int)$a['id'] ?>">
                                     <button type="submit" class="ta-btn ta-btn-secondary">删除</button>
                                 </form>
@@ -274,7 +296,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                 <h2>新建 / 编辑公告</h2>
                 <?php $renderAdminPagination($announcementsPagination ?? [], 'announcements'); ?>
                 <form method="post" action="/admin/announcements/save">
-                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                    <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                     <input type="hidden" name="id" value="">
                     <div>
                         <label>标题</label>
@@ -356,7 +378,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                                 <button type="button" class="ta-btn ta-btn-secondary"
                                         onclick='editMilestone(<?= (int)$m['id'] ?>, <?= json_encode($m['milestone_date'] ?? '', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>, <?= json_encode($m['description'] ?? '', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>)'>编辑</button>
                                 <form method="post" action="/admin/milestones/delete" onsubmit="return confirm('确定要永久删除此纪事吗？');">
-                                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                                     <input type="hidden" name="id" value="<?= (int)$m['id'] ?>">
                                     <button type="submit" class="ta-btn ta-btn-secondary">删除</button>
                                 </form>
@@ -369,7 +391,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                 <h2>新建 / 编辑纪事</h2>
                 <?php $renderAdminPagination($milestonesPagination ?? [], 'milestones'); ?>
                 <form method="post" action="/admin/milestones/save">
-                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                    <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                     <input type="hidden" name="id" value="">
                     <div>
                         <label>时间（示例：2024年1月）</label>
@@ -396,7 +418,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
 
                 <h2>上传新截图</h2>
                 <form method="post" action="/admin/gallery/upload" enctype="multipart/form-data">
-                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                    <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                     <div>
                         <label>标题</label>
                         <input name="title" type="text"
@@ -439,7 +461,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                                 </p>
                             <?php endif; ?>
                             <form method="post" action="/admin/gallery/delete" onsubmit="return confirm('确定要永久删除此图片及其文件吗？');">
-                                <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                                <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                                 <input type="hidden" name="id" value="<?= (int)$img['id'] ?>">
                                 <button type="submit" class="ta-btn ta-btn-secondary">删除</button>
                             </form>
@@ -461,7 +483,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                     <p>尚未创建 <code>site_settings</code> 表或无数据，请先执行 <code>database.sql</code> 中的相关段落。</p>
                 <?php else: ?>
                 <form method="post" action="/admin/site-settings/save">
-                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                    <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                     <?php foreach ($siteSettings as $s): ?>
                         <?php
                         $sk = (string)($s['setting_key'] ?? '');
@@ -535,7 +557,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                                     <button type="button" class="ta-btn ta-btn-secondary"
                                             onclick='editTeamMember(<?= (int)$tm['id'] ?>, <?= json_encode($tm['username'] ?? '', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>, <?= json_encode($tm['role'] ?? '', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>)'>编辑</button>
                                     <form method="post" action="/admin/team-members/delete" onsubmit="return confirm('确定从团队中移除该成员吗？');">
-                                        <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                                        <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                                         <input type="hidden" name="id" value="<?= (int)$tm['id'] ?>">
                                         <button type="submit" class="ta-btn ta-btn-secondary">删除</button>
                                     </form>
@@ -549,7 +571,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                 <h2>新建 / 编辑成员</h2>
                 <?php $renderAdminPagination($teamMembersPagination ?? [], 'team'); ?>
                 <form method="post" action="/admin/team-members/save">
-                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                    <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                     <input type="hidden" name="id" value="">
                     <div>
                         <label>游戏名（Minecraft）</label>
@@ -601,7 +623,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                             <td><?= htmlspecialchars((string)($wl['created_at'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                             <td>
                                 <form method="post" action="/admin/ip-whitelist/delete" onsubmit="return confirm('确定要删除该白名单规则吗？');">
-                                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                                     <input type="hidden" name="id" value="<?= (int)$wl['id'] ?>">
                                     <button type="submit" class="ta-btn ta-btn-secondary">删除</button>
                                 </form>
@@ -614,7 +636,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                 <h2>添加规则</h2>
                 <?php $renderAdminPagination($ipWhitelistPagination ?? [], 'ip-whitelist'); ?>
                 <form method="post" action="/admin/ip-whitelist/add">
-                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                    <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                     <div>
                         <label>IP 或 CIDR</label>
                         <input name="ip_cidr" type="text" required placeholder="例如 203.0.113.1 或 2001:db8::/32"
@@ -665,7 +687,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                             <td><?= htmlspecialchars((string)($bl['created_at'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                             <td>
                                 <form method="post" action="/admin/ip-blacklist/delete" onsubmit="return confirm('确定要解封该 IP / 网段吗？');">
-                                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                                     <input type="hidden" name="id" value="<?= (int)$bl['id'] ?>">
                                     <button type="submit" class="ta-btn ta-btn-secondary">解封</button>
                                 </form>
@@ -678,7 +700,7 @@ $renderAdminPagination = static function (array $meta, string $tab): void {
                 <h2>添加规则</h2>
                 <?php $renderAdminPagination($ipBlacklistPagination ?? [], 'ip-blacklist'); ?>
                 <form method="post" action="/admin/ip-blacklist/add">
-                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                    <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                     <div>
                         <label>IP 或 CIDR</label>
                         <input name="ip_cidr" type="text" required placeholder="例如 203.0.113.0/24 或 2001:db8::/32"

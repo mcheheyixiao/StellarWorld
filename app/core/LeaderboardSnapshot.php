@@ -10,6 +10,30 @@ use PDOException;
  */
 final class LeaderboardSnapshot
 {
+    /**
+     * Explicitly enumerate every metric column allowed to flow into SQL.
+     *
+     * @var array<string,true>
+     */
+    private const COLUMN_WHITELIST = [
+        'play_time_ticks' => true,
+        'fly_distance_cm' => true,
+        'blocks_mined' => true,
+        'blocks_placed' => true,
+        'deaths' => true,
+        'player_kills' => true,
+        'fish_caught' => true,
+    ];
+
+    /**
+     * @var array<string,true>
+     */
+    private const FORMAT_WHITELIST = [
+        'float1' => true,
+        'float2' => true,
+        'int' => true,
+    ];
+
     public const REDIS_KEY = 'mc:leaderboard_snapshot:v1';
 
     public const FILE_NAME = 'leaderboard_snapshot.json';
@@ -21,7 +45,7 @@ final class LeaderboardSnapshot
      */
     public static function boardConfigs(): array
     {
-        return [
+        $configs = [
             ['key' => 'play_time', 'column' => 'play_time_ticks', 'title' => '肝帝榜 / 活跃', 'unit' => 'h', 'format' => 'float1'],
             ['key' => 'fly_distance', 'column' => 'fly_distance_cm', 'title' => '飞行榜', 'unit' => 'km', 'format' => 'float2'],
             ['key' => 'blocks_mined', 'column' => 'blocks_mined', 'title' => '矿工榜 / 挖掘', 'unit' => '', 'format' => 'int'],
@@ -30,6 +54,45 @@ final class LeaderboardSnapshot
             ['key' => 'player_kills', 'column' => 'player_kills', 'title' => '杀手榜 / 击杀', 'unit' => '次', 'format' => 'int'],
             ['key' => 'fish_caught', 'column' => 'fish_caught', 'title' => '渔夫榜 / 钓鱼', 'unit' => '次', 'format' => 'int'],
         ];
+
+        $safeConfigs = [];
+        foreach ($configs as $config) {
+            $normalized = self::normalizeBoardConfig($config);
+            if ($normalized !== null) {
+                $safeConfigs[] = $normalized;
+            }
+        }
+
+        return $safeConfigs;
+    }
+
+    /**
+     * @return array{key:string,column:string,title:string,unit:string,format:string}|null
+     */
+    public static function resolveBoardConfig(string $boardKey): ?array
+    {
+        $boardKey = trim($boardKey);
+        if ($boardKey === '') {
+            return null;
+        }
+
+        foreach (self::boardConfigs() as $config) {
+            if ($config['key'] === $boardKey) {
+                return $config;
+            }
+        }
+
+        return null;
+    }
+
+    public static function safeColumnIdentifier(string $column): ?string
+    {
+        $column = trim($column);
+        if ($column === '' || !isset(self::COLUMN_WHITELIST[$column])) {
+            return null;
+        }
+
+        return '`' . $column . '`';
     }
 
     /**
@@ -114,16 +177,19 @@ final class LeaderboardSnapshot
                 $column = $config['column'];
                 $format = $config['format'];
                 $unit = $config['unit'];
+                $safeColumn = self::safeColumnIdentifier($column);
+                if ($safeColumn === null) {
+                    continue;
+                }
 
-                $q = $db->prepare(
-                    "SELECT mc_uuid, username, {$column} FROM player_stats ORDER BY {$column} DESC LIMIT 10"
+                $q = $db->query(
+                    "SELECT mc_uuid, username, {$safeColumn} AS metric_value FROM player_stats ORDER BY {$safeColumn} DESC LIMIT 10"
                 );
-                $q->execute();
                 $rows = $q->fetchAll() ?: [];
 
                 $entries = [];
                 foreach ($rows as $r) {
-                    $raw = (int)($r[$column] ?? 0);
+                    $raw = (int)($r['metric_value'] ?? 0);
                     $display = $raw;
 
                     if ($format === 'float1') {
@@ -156,6 +222,34 @@ final class LeaderboardSnapshot
             'leaderboards' => $leaderboards,
             'lastUpdate' => $lastUpdate,
             'leaderboardError' => $leaderboardError,
+        ];
+    }
+
+    /**
+     * @param array<string,mixed> $config
+     * @return array{key:string,column:string,title:string,unit:string,format:string}|null
+     */
+    private static function normalizeBoardConfig(array $config): ?array
+    {
+        $key = trim((string)($config['key'] ?? ''));
+        $column = trim((string)($config['column'] ?? ''));
+        $title = trim((string)($config['title'] ?? ''));
+        $unit = (string)($config['unit'] ?? '');
+        $format = trim((string)($config['format'] ?? ''));
+
+        if ($key === '' || $column === '' || $title === '') {
+            return null;
+        }
+        if (!isset(self::COLUMN_WHITELIST[$column]) || !isset(self::FORMAT_WHITELIST[$format])) {
+            return null;
+        }
+
+        return [
+            'key' => $key,
+            'column' => $column,
+            'title' => $title,
+            'unit' => $unit,
+            'format' => $format,
         ];
     }
 }

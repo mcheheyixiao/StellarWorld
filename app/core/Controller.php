@@ -27,9 +27,6 @@ class Controller
                 $validatorOk = preg_match('/^[0-9a-fA-F]{64}$/', $validator) === 1;
 
                 if ($selectorOk && $validatorOk) {
-                    $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
-                        || (($_SERVER['SERVER_PORT'] ?? '') === '443');
-
                     $authed = false;
                     $usersModel = new User();
                     $dbRow = null;
@@ -62,13 +59,7 @@ class Controller
                             // ignore cleanup failures
                         }
 
-                        setcookie('remember_me', '', [
-                            'expires' => time() - 3600,
-                            'path' => '/',
-                            'secure' => $isHttps,
-                            'httponly' => true,
-                            'samesite' => 'Strict',
-                        ]);
+                        $this->clearRememberMeCookie();
                     }
                 }
             }
@@ -311,6 +302,17 @@ class Controller
         }
     }
 
+    protected function clearRememberMeCookie(): void
+    {
+        setcookie('remember_me', '', [
+            'expires' => time() - 3600,
+            'path' => '/',
+            'secure' => $this->isHttpsRequest(),
+            'httponly' => true,
+            'samesite' => 'Strict',
+        ]);
+    }
+
     protected function generateCsrfToken(): void
     {
         if (empty($_SESSION['csrf_token'])) {
@@ -373,6 +375,12 @@ class Controller
         return '0.0.0.0';
     }
 
+    protected function isHttpsRequest(): bool
+    {
+        return (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
+            || (($_SERVER['SERVER_PORT'] ?? '') === '443');
+    }
+
     protected function checkRateLimit(string $action, int $maxRequests, int $timeWindowSeconds): void
     {
         $ip = $this->getClientIp();
@@ -384,7 +392,7 @@ class Controller
                 $now = microtime(true);
                 $windowStart = $now - $timeWindowSeconds;
 
-                $redis->zRemRangeByScore($redisKey, 0, $windowStart);
+                $redis->zRemRangeByScore($redisKey, (string)0, (string)$windowStart);
                 $count = (int)$redis->zCard($redisKey);
                 if ($count >= $maxRequests) {
                     $this->json(['success' => false, 'message' => '请求过于频繁，请稍后再试'], 429);

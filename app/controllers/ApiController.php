@@ -450,29 +450,26 @@ class ApiController extends Controller
             $q = mb_substr($q, 0, 64);
         }
 
-        $config = null;
-        foreach (LeaderboardSnapshot::boardConfigs() as $c) {
-            if (($c['key'] ?? '') === $boardKey) {
-                $config = $c;
-                break;
-            }
-        }
-
+        $config = LeaderboardSnapshot::resolveBoardConfig($boardKey);
         if ($config === null) {
             $this->json(['success' => false, 'code' => ApiCode::SERVER_ERROR, 'message' => 'Unknown board'], 400);
             return;
         }
 
-        $column = $config['column'];
-        $format = $config['format'];
-        $unit = $config['unit'];
+        $safeColumn = LeaderboardSnapshot::safeColumnIdentifier((string)$config['column']);
+        if ($safeColumn === null) {
+            $this->json(['success' => false, 'code' => ApiCode::SERVER_ERROR, 'message' => 'Board misconfigured', 'results' => []], 500);
+            return;
+        }
+
+        $format = (string)$config['format'];
+        $unit = (string)$config['unit'];
 
         try {
             $db = Database::connection();
-            $stmt = $db->prepare(
-                "SELECT mc_uuid, username, {$column} AS metric FROM player_stats ORDER BY {$column} DESC LIMIT 2000"
+            $stmt = $db->query(
+                "SELECT mc_uuid, username, {$safeColumn} AS metric FROM player_stats ORDER BY {$safeColumn} DESC LIMIT 2000"
             );
-            $stmt->execute();
             $rows = $stmt->fetchAll() ?: [];
         } catch (PDOException $e) {
             $this->json(['success' => false, 'code' => ApiCode::SERVER_ERROR, 'message' => 'Database error', 'results' => []], 500);

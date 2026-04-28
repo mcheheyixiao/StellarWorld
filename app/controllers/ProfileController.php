@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Controller;
 
+use Core\AuthMePassword;
 use Core\Controller;
 use Core\Database;
 use Core\MUAFetcher;
@@ -97,12 +98,12 @@ class ProfileController extends Controller
         $stmt = $db->prepare('SELECT password_hash FROM users WHERE id = :id LIMIT 1');
         $stmt->execute([':id' => $userId]);
         $row = $stmt->fetch(\PDO::FETCH_ASSOC);
-        if (!$row || !$this->verifyAuthMeHash($oldPassword, (string)$row['password_hash'])) {
+        if (!$row || !AuthMePassword::verify($oldPassword, (string)$row['password_hash'])) {
             $this->json(['success' => false, 'message' => '旧密码不正确'], 400);
             return;
         }
 
-        $newHash = $this->generateAuthMeHash($newPassword);
+        $newHash = AuthMePassword::hash($newPassword);
         $this->users->updatePassword($userId, $newHash);
 
         try {
@@ -260,38 +261,6 @@ class ProfileController extends Controller
                 $this->json(['success' => false, 'message' => '系统服务异常，请联系管理员'], 500);
             }
         }
-    }
-
-    private function clearRememberMeCookie(): void
-    {
-        $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
-            || (($_SERVER['SERVER_PORT'] ?? '') === '443');
-
-        setcookie('remember_me', '', [
-            'expires' => time() - 3600,
-            'path' => '/',
-            'secure' => $isHttps,
-            'httponly' => true,
-            'samesite' => 'Strict',
-        ]);
-    }
-
-    private function generateAuthMeHash(string $password): string
-    {
-        $salt = substr(hash('sha256', uniqid((string)mt_rand(), true)), 0, 16);
-        $hash = hash('sha256', hash('sha256', $password) . $salt);
-        return '$SHA$' . $salt . '$' . $hash;
-    }
-
-    private function verifyAuthMeHash(string $password, string $hash): bool
-    {
-        $parts = explode('$', $hash);
-        if (count($parts) === 4 && $parts[1] === 'SHA') {
-            $salt = $parts[2];
-            $validHash = hash('sha256', hash('sha256', $password) . $salt);
-            return hash_equals($validHash, $parts[3]);
-        }
-        return false;
     }
 
     private function maskEmail(string $email): string

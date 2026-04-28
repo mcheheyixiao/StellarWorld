@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Controller;
 
+use Core\AuthMePassword;
 use Core\Controller;
 use Core\MUAFetcher;
 use Core\RconClient;
@@ -373,7 +374,7 @@ class AuthController extends Controller
         }
 
         $email = (string)$row['email'];
-        $hash = $this->generateAuthMeHash($passwordRaw);
+        $hash = AuthMePassword::hash($passwordRaw);
 
         $upd = $db->prepare('UPDATE users SET password_hash = :hash WHERE email = :email LIMIT 1');
         $upd->execute([
@@ -452,7 +453,7 @@ class AuthController extends Controller
         }
 
         $user = $this->users->findByUsername($username);
-        if (!$user || !$this->verifyAuthMeHash($passwordRaw, (string)$user['password_hash'])) {
+        if (!$user || !AuthMePassword::verify($passwordRaw, (string)$user['password_hash'])) {
             $this->recordLoginAttempt($ip, $username, false);
             $this->json(['success' => false, 'message' => '用户名或密码错误'], 401);
             return;
@@ -607,7 +608,7 @@ class AuthController extends Controller
         }
 
         // 使用 AuthMe 原生 SHA256 算法生成哈希
-        $hash = $this->generateAuthMeHash($passwordRaw);
+        $hash = AuthMePassword::hash($passwordRaw);
 
         $userId = $this->users->create([
             'username' => $username,
@@ -734,24 +735,6 @@ class AuthController extends Controller
             'title' => '邮箱验证',
             'message' => $message,
         ]);
-    }
-
-    private function generateAuthMeHash(string $password): string
-    {
-        $salt = substr(hash('sha256', uniqid((string)mt_rand(), true)), 0, 16);
-        $hash = hash('sha256', hash('sha256', $password) . $salt);
-        return '$SHA$' . $salt . '$' . $hash;
-    }
-
-    private function verifyAuthMeHash(string $password, string $hash): bool
-    {
-        $parts = explode('$', $hash);
-        if (count($parts) === 4 && $parts[1] === 'SHA') {
-            $salt = $parts[2];
-            $validHash = hash('sha256', hash('sha256', $password) . $salt);
-            return hash_equals($validHash, $parts[3]);
-        }
-        return false;
     }
 
     private function isEmailAllowed(string $email): bool
@@ -1094,20 +1077,6 @@ class AuthController extends Controller
         $_SESSION['user_id'] = (int)$user['id'];
         $_SESSION['username'] = (string)$user['username'];
         $_SESSION['role'] = (string)$user['role'];
-    }
-
-    private function clearRememberMeCookie(): void
-    {
-        $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
-            || (($_SERVER['SERVER_PORT'] ?? '') === '443');
-
-        setcookie('remember_me', '', [
-            'expires' => time() - 3600,
-            'path' => '/',
-            'secure' => $isHttps,
-            'httponly' => true,
-            'samesite' => 'Strict',
-        ]);
     }
 
     private function syncMuaSkinToGameByUser(int $userId): void

@@ -700,6 +700,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                         </div>
                     </section>
 
+                    <?php if (false): ?>
                     <section id="panel-player" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
                         <h3 class="text-lg font-semibold text-slate-100">D. 玩家签到系统</h3>
                         <p class="mt-1 text-sm text-slate-400">展示静态签到界面与交互，不涉及真实数据写入。</p>
@@ -824,6 +825,97 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                             </article>
                         </div>
                     </section>
+                    <?php endif; ?>
+
+                    <section
+                        id="panel-player"
+                        data-profile-panel
+                        data-checkin-csrf="<?= htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                        class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6"
+                    >
+                        <h3 class="text-lg font-semibold text-slate-100">D. 玩家签到系统</h3>
+                        <p class="mt-1 text-sm text-slate-400">已接入真实签到接口，会写入数据库记录并创建奖励发放任务。</p>
+
+                        <div class="player-checkin-wrap mt-5 space-y-4">
+                            <article class="checkin-card checkin-card-main">
+                                <div class="checkin-card-head">
+                                    <h4 class="checkin-card-title">每日签到</h4>
+                                    <span class="checkin-card-status" data-checkin-status>今日状态：加载中</span>
+                                </div>
+                                <div class="checkin-kpi-grid">
+                                    <div class="checkin-kpi-item">
+                                        <span>连续签到</span>
+                                        <strong data-checkin-streak>0 天</strong>
+                                    </div>
+                                    <div class="checkin-kpi-item">
+                                        <span>本月签到</span>
+                                        <strong data-checkin-month-count>0 次</strong>
+                                    </div>
+                                </div>
+                                <p class="checkin-streak-tip" data-checkin-summary-tip>累计签到 0 天，最近发放状态 --</p>
+                                <button type="button" class="checkin-action-btn is-idle" data-checkin-action data-state="idle" disabled>加载中...</button>
+                                <p class="mt-3 text-xs text-slate-400" data-checkin-bind-hint>正在读取 MC 绑定状态...</p>
+                            </article>
+
+                            <article class="checkin-card checkin-card-reward">
+                                <h4 class="checkin-card-title">今日奖励预览</h4>
+                                <div class="checkin-reward-row" data-checkin-reward-list>
+                                    <div class="checkin-reward-item">
+                                        <span class="checkin-reward-icon" aria-hidden="true">🎁</span>
+                                        <span class="checkin-reward-text">正在加载奖励...</span>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article class="checkin-card checkin-card-calendar">
+                                <div class="checkin-calendar-head">
+                                    <h4 class="checkin-card-title">签到日历</h4>
+                                    <div class="checkin-calendar-switch">
+                                        <span class="checkin-calendar-month" data-checkin-month-label>--</span>
+                                    </div>
+                                </div>
+                                <div class="checkin-week-row">
+                                    <span>一</span>
+                                    <span>二</span>
+                                    <span>三</span>
+                                    <span>四</span>
+                                    <span>五</span>
+                                    <span>六</span>
+                                    <span>日</span>
+                                </div>
+                                <div class="checkin-calendar-grid" data-checkin-calendar-grid></div>
+                                <div class="checkin-calendar-legend">
+                                    <span class="checkin-legend-item">
+                                        <i class="checkin-legend-dot is-signed"></i>
+                                        已签到
+                                    </span>
+                                    <span class="checkin-legend-item">
+                                        <i class="checkin-legend-dot is-today"></i>
+                                        今日
+                                    </span>
+                                    <span class="checkin-legend-item">
+                                        <i class="checkin-legend-dot is-missed"></i>
+                                        未签到
+                                    </span>
+                                </div>
+                            </article>
+
+                            <article class="checkin-card checkin-card-history">
+                                <button
+                                    type="button"
+                                    class="checkin-history-toggle"
+                                    data-checkin-history-toggle
+                                    aria-expanded="false"
+                                    aria-controls="checkin-history-list"
+                                >
+                                    最近签到记录
+                                </button>
+                                <div id="checkin-history-list" class="checkin-history-list" hidden>
+                                    <div class="checkin-history-empty" data-checkin-history-empty="true">正在加载...</div>
+                                </div>
+                            </article>
+                        </div>
+                    </section>
                 </div>
             </main>
         </div>
@@ -878,6 +970,304 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 <script>
 (() => {
+    const root = document.getElementById('panel-player');
+    const actionBtn = document.querySelector('[data-checkin-action]');
+    const statusText = document.querySelector('[data-checkin-status]');
+    const streakText = document.querySelector('[data-checkin-streak]');
+    const monthCountText = document.querySelector('[data-checkin-month-count]');
+    const summaryTip = document.querySelector('[data-checkin-summary-tip]');
+    const bindHint = document.querySelector('[data-checkin-bind-hint]');
+    const monthLabel = document.querySelector('[data-checkin-month-label]');
+    const calendarGrid = document.querySelector('[data-checkin-calendar-grid]');
+    const rewardList = document.querySelector('[data-checkin-reward-list]');
+    const historyToggle = document.querySelector('[data-checkin-history-toggle]');
+    const historyList = document.getElementById('checkin-history-list');
+    const historyEmpty = historyList ? historyList.querySelector('[data-checkin-history-empty]') : null;
+
+    if (!root || !actionBtn || !statusText || !streakText || !monthCountText || !summaryTip || !bindHint || !monthLabel || !calendarGrid || !rewardList || !historyToggle || !historyList || !historyEmpty) {
+        return;
+    }
+
+    const csrfToken = String(root.getAttribute('data-checkin-csrf') || '');
+    const today = new Date();
+    let historyItems = [];
+
+    const parseJson = async (res) => {
+        try {
+            return await res.json();
+        } catch (e) {
+            return { success: false, message: '响应解析失败' };
+        }
+    };
+
+    const unwrap = (payload) => {
+        if (!payload || typeof payload !== 'object') {
+            return {};
+        }
+        if (payload.data && typeof payload.data === 'object') {
+            return payload.data;
+        }
+        return payload;
+    };
+
+    const escapeHtml = (value) => String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    const setButtonState = (mode, text, disabled) => {
+        actionBtn.dataset.state = mode;
+        actionBtn.disabled = !!disabled;
+        actionBtn.classList.toggle('is-idle', mode !== 'done');
+        actionBtn.classList.toggle('is-done', mode === 'done');
+        actionBtn.textContent = text;
+    };
+
+    const createRewardNode = (icon, text) => {
+        const item = document.createElement('div');
+        item.className = 'checkin-reward-item';
+        item.innerHTML = '<span class="checkin-reward-icon" aria-hidden="true">' + icon + '</span><span class="checkin-reward-text">' + escapeHtml(text) + '</span>';
+        return item;
+    };
+
+    const renderRewards = (reward, isBound) => {
+        rewardList.innerHTML = '';
+
+        if (!isBound) {
+            rewardList.appendChild(createRewardNode('🔒', '绑定 MC 账号后可预览奖励'));
+            return;
+        }
+
+        if (!reward || typeof reward !== 'object') {
+            rewardList.appendChild(createRewardNode('🎁', '当前没有可发放的奖励规则'));
+            return;
+        }
+
+        let hasAny = false;
+
+        if (Number(reward.coins || 0) > 0) {
+            rewardList.appendChild(createRewardNode('🪙', '金币 x' + Number(reward.coins || 0)));
+            hasAny = true;
+        }
+
+        if (Number(reward.points || 0) > 0) {
+            rewardList.appendChild(createRewardNode('⭐', '积分 x' + Number(reward.points || 0)));
+            hasAny = true;
+        }
+
+        if (Array.isArray(reward.items)) {
+            reward.items.forEach((item) => {
+                const itemId = String((item && (item.id || item.name)) || '').trim();
+                if (!itemId) {
+                    return;
+                }
+                const amount = Math.max(1, Number((item && item.amount) || 1));
+                rewardList.appendChild(createRewardNode('📦', itemId + ' x' + amount));
+                hasAny = true;
+            });
+        }
+
+        if (Array.isArray(reward.commands) && reward.commands.length > 0) {
+            rewardList.appendChild(createRewardNode('⚙️', '命令 x' + reward.commands.length));
+            hasAny = true;
+        }
+
+        if (!hasAny) {
+            rewardList.appendChild(createRewardNode('🎁', '今日没有额外奖励'));
+        }
+    };
+
+    const renderCalendar = () => {
+        const year = today.getFullYear();
+        const month = today.getMonth();
+        const firstDay = new Date(year, month, 1);
+        const totalDays = new Date(year, month + 1, 0).getDate();
+        const mondayIndex = (firstDay.getDay() + 6) % 7;
+        const signedDays = new Set(
+            historyItems
+                .map((item) => String(item.checkin_date || ''))
+                .filter((date) => date.startsWith(String(year) + '-' + String(month + 1).padStart(2, '0') + '-'))
+                .map((date) => Number(date.slice(-2)))
+                .filter((day) => Number.isFinite(day) && day > 0)
+        );
+
+        monthLabel.textContent = year + ' 年 ' + String(month + 1).padStart(2, '0') + ' 月';
+        calendarGrid.innerHTML = '';
+
+        for (let i = 0; i < mondayIndex; i += 1) {
+            const empty = document.createElement('div');
+            empty.className = 'checkin-day is-empty';
+            calendarGrid.appendChild(empty);
+        }
+
+        for (let day = 1; day <= totalDays; day += 1) {
+            const node = document.createElement('div');
+            node.className = 'checkin-day';
+            const isSigned = signedDays.has(day);
+            const isToday = day === today.getDate();
+
+            if (isSigned) {
+                node.classList.add('is-signed');
+            } else if (isToday) {
+                node.classList.add('is-today');
+            } else if (day < today.getDate()) {
+                node.classList.add('is-missed');
+            }
+
+            if (isSigned && isToday) {
+                node.classList.add('is-today');
+            }
+
+            node.textContent = String(day);
+            calendarGrid.appendChild(node);
+        }
+    };
+
+    const rewardSummaryText = (reward) => {
+        if (!reward || typeof reward !== 'object') {
+            return '无奖励';
+        }
+
+        const parts = [];
+        if (Number(reward.coins || 0) > 0) {
+            parts.push('金币 +' + Number(reward.coins || 0));
+        }
+        if (Number(reward.points || 0) > 0) {
+            parts.push('积分 +' + Number(reward.points || 0));
+        }
+        if (Array.isArray(reward.items) && reward.items.length > 0) {
+            parts.push('物品 x' + reward.items.length);
+        }
+        if (Array.isArray(reward.commands) && reward.commands.length > 0) {
+            parts.push('命令 x' + reward.commands.length);
+        }
+        return parts.length > 0 ? parts.join(' / ') : '无奖励';
+    };
+
+    const renderHistory = () => {
+        historyList.querySelectorAll('.checkin-history-item').forEach((node) => node.remove());
+
+        if (historyItems.length === 0) {
+            historyEmpty.hidden = false;
+            historyEmpty.textContent = '暂无签到记录';
+            return;
+        }
+
+        historyEmpty.hidden = true;
+        historyItems.forEach((item) => {
+            const row = document.createElement('div');
+            row.className = 'checkin-history-item';
+            row.textContent = String(item.checkin_date || '--') + ' | 连续 ' + Number(item.streak_days || 0) + ' 天 | ' + rewardSummaryText(item.reward);
+            historyList.appendChild(row);
+        });
+    };
+
+    const applyStatus = (status) => {
+        const isBound = !!status.bound_mc;
+        const checkedIn = !!status.checked_in_today;
+        const deliveryStatus = status.latest_delivery_status ? String(status.latest_delivery_status) : '--';
+
+        statusText.textContent = checkedIn ? '今日状态：已签到' : '今日状态：未签到';
+        streakText.textContent = String(Number(status.streak_days || 0)) + ' 天';
+        monthCountText.textContent = String(Number(status.month_days || 0)) + ' 次';
+        summaryTip.textContent = '累计签到 ' + String(Number(status.total_days || 0)) + ' 天，最近发放状态 ' + deliveryStatus;
+
+        if (!isBound) {
+            bindHint.textContent = '请先在上一个标签页绑定有效的 MC 用户名和 UUID。';
+            setButtonState('idle', '先绑定 MC 账号', true);
+        } else if (checkedIn) {
+            bindHint.textContent = '奖励已进入发放队列，等待插件拉取并 ACK。';
+            setButtonState('done', '今日已签到', true);
+        } else {
+            bindHint.textContent = '会校验今日是否已签到，并创建一条 pending 奖励发放任务。';
+            setButtonState('idle', '立即签到', false);
+        }
+
+        renderRewards(status.today_reward || null, isBound);
+    };
+
+    const loadCheckinData = async () => {
+        setButtonState('idle', '加载中...', true);
+
+        const [statusRes, historyRes] = await Promise.all([
+            fetch('/api/checkin/status', {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            }),
+            fetch('/api/checkin/history', {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            })
+        ]);
+
+        const statusPayload = await parseJson(statusRes);
+        if (!statusPayload.success) {
+            throw new Error(statusPayload.message || '加载签到状态失败');
+        }
+
+        const historyPayload = await parseJson(historyRes);
+        historyItems = historyPayload.success ? (unwrap(historyPayload).items || []) : [];
+
+        applyStatus(unwrap(statusPayload));
+        renderCalendar();
+        renderHistory();
+    };
+
+    actionBtn.addEventListener('click', async () => {
+        if (actionBtn.disabled) {
+            return;
+        }
+
+        setButtonState('idle', '签到中...', true);
+        try {
+            const formData = new FormData();
+            formData.append('csrf_token', csrfToken);
+
+            const res = await fetch('/api/checkin/claim', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            const payload = await parseJson(res);
+            if (!payload.success) {
+                throw new Error(payload.message || '签到失败');
+            }
+
+            await loadCheckinData();
+            alert(payload.message || '签到成功');
+        } catch (error) {
+            console.error('Check-in request failed', error);
+            alert(error instanceof Error ? error.message : '签到失败');
+            try {
+                await loadCheckinData();
+            } catch (reloadError) {
+                console.error('Reload check-in state failed', reloadError);
+            }
+        }
+    });
+
+    historyToggle.addEventListener('click', () => {
+        const willExpand = historyList.hidden;
+        historyList.hidden = !willExpand;
+        historyToggle.setAttribute('aria-expanded', String(willExpand));
+    });
+
+    loadCheckinData().catch((error) => {
+        console.error('Load check-in state failed', error);
+        statusText.textContent = '今日状态：加载失败';
+        summaryTip.textContent = '签到状态读取失败，请稍后重试。';
+        bindHint.textContent = error instanceof Error ? error.message : '加载失败';
+        renderRewards(null, false);
+        renderCalendar();
+        renderHistory();
+    });
+})();
+</script>
+<script>
+(() => {
     const navButtons = document.querySelectorAll('[data-profile-tab-btn]');
     const panels = document.querySelectorAll('[data-profile-panel]');
 
@@ -917,6 +1307,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setActiveTab('panel-game');
 })();
 </script>
+<?php if (false): ?>
 <script>
 (() => {
     const actionBtn = document.querySelector('[data-checkin-action]');
@@ -992,6 +1383,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 })();
 </script>
+<?php endif; ?>
 <script>
 (() => {
     const parseJson = async (res) => {

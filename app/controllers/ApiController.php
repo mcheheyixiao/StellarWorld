@@ -8,6 +8,7 @@ use Core\ApiCode;
 use Core\ApiResponse;
 use Core\Database;
 use Core\LeaderboardSnapshot;
+use Model\Checkin;
 use PDOException;
 
 /**
@@ -27,10 +28,13 @@ class ApiController extends Controller
 
     private static bool $avatarCacheTableReady = false;
     private static bool $serverStatusHistoryTableReady = false;
+    private Checkin $checkins;
+    private ?array $jsonRequestBody = null;
 
     public function __construct()
     {
         parent::__construct();
+        $this->checkins = new Checkin();
     }
 
     public function avatar(): void
@@ -436,6 +440,211 @@ class ApiController extends Controller
     /**
      * 排行榜模糊搜索：Levenshtein 相似度加权排序（数据源 player_stats）。
      */
+    public function checkinStatus(): void
+    {
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $status = $userId > 0
+            ? $this->checkins->getStatusForUser($userId)
+            : $this->checkins->getStatusForUser(0);
+
+        $this->json([
+            'success' => true,
+            'data' => $status,
+        ]);
+    }
+
+    public function checkinClaim(): void
+    {
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0) {
+            $this->json([
+                'success' => false,
+                'code' => ApiCode::AUTH_INVALID,
+                'message' => 'Login required',
+            ], 401);
+            return;
+        }
+
+        $this->validateCsrfToken();
+
+        $result = $this->checkins->claimForUser(
+            $userId,
+            $this->getClientIp(),
+            (string)($_SERVER['HTTP_USER_AGENT'] ?? '')
+        );
+
+        $payload = [
+            'success' => (bool)($result['ok'] ?? false),
+            'message' => (string)($result['message'] ?? 'Check-in failed'),
+        ];
+
+        if (isset($result['record']) && is_array($result['record'])) {
+            $payload['record'] = $result['record'];
+        }
+        if (isset($result['delivery']) && is_array($result['delivery'])) {
+            $payload['delivery'] = $result['delivery'];
+        }
+
+        $this->json($payload, (int)($result['status'] ?? 500));
+    }
+
+    public function checkinHistory(): void
+    {
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0) {
+            $this->json([
+                'success' => false,
+                'code' => ApiCode::AUTH_INVALID,
+                'message' => 'Login required',
+            ], 401);
+            return;
+        }
+
+        $items = $this->checkins->getHistoryForUser($userId, 30);
+        $this->json([
+            'success' => true,
+            'data' => [
+                'items' => $items,
+            ],
+        ]);
+    }
+
+    public function checkinRewards(): void
+    {
+        $this->json([
+            'success' => true,
+            'data' => $this->checkins->getRewardRulesForCurrentMonth(),
+        ]);
+    }
+
+    public function pluginCheckinDeliveries(): void
+    {
+        if (!$this->isPluginAuthorized()) {
+            $this->json([
+                'success' => false,
+                'code' => ApiCode::AUTH_INVALID,
+                'message' => 'Unauthorized',
+            ], 401);
+            return;
+        }
+
+        $limit = (int)($_GET['limit'] ?? 20);
+        $items = $this->checkins->pullPendingDeliveries($limit);
+
+        $this->json([
+            'success' => true,
+            'data' => [
+                'items' => $items,
+                'count' => count($items),
+            ],
+        ]);
+    }
+
+    public function pluginCheckinDeliveriesAck(): void
+    {
+        if (!$this->isPluginAuthorized()) {
+            $this->json([
+                'success' => false,
+                'code' => ApiCode::AUTH_INVALID,
+                'message' => 'Unauthorized',
+            ], 401);
+            return;
+        }
+
+        $body = $this->readJsonRequestBody();
+        $deliveryId = (int)($body['delivery_id'] ?? ($_POST['delivery_id'] ?? 0));
+        $success = $this->parseBooleanValue($body['success'] ?? ($_POST['success'] ?? null));
+        $message = trim((string)($body['message'] ?? ($_POST['message'] ?? '')));
+
+        if ($deliveryId <= 0 || $success === null) {
+            $this->json([
+                'success' => false,
+                'message' => 'delivery_id and success are required',
+            ], 400);
+            return;
+        }
+
+        $result = $this->checkins->ackDelivery($deliveryId, $success, $message);
+        $payload = [
+            'success' => (bool)($result['ok'] ?? false),
+            'message' => (string)($result['message'] ?? 'Delivery ack failed'),
+        ];
+        if (isset($result['delivery']) && is_array($result['delivery'])) {
+            $payload['delivery'] = $result['delivery'];
+        }
+
+        $this->json($payload, (int)($result['status'] ?? 500));
+    }
+
+    private function readJsonRequestBody(): array
+    {
+        if ($this->jsonRequestBody !== null) {
+            return $this->jsonRequestBody;
+        }
+
+        $raw = file_get_contents('php://input');
+        if (!is_string($raw) || trim($raw) === '') {
+            $this->jsonRequestBody = [];
+            return $this->jsonRequestBody;
+        }
+
+        $decoded = json_decode($raw, true);
+        $this->jsonRequestBody = is_array($decoded) ? $decoded : [];
+        return $this->jsonRequestBody;
+    }
+
+    private function isPluginAuthorized(): bool
+    {
+        $token = $this->extractPluginToken();
+        return $token !== '' && hash_equals((string)SERVER_TOKEN, $token);
+    }
+
+    private function extractPluginToken(): string
+    {
+        $body = $this->readJsonRequestBody();
+        $authorization = trim((string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
+        if ($authorization !== '') {
+            if (preg_match('/^Bearer\s+(.+)$/i', $authorization, $matches) === 1) {
+                return trim((string)$matches[1]);
+            }
+
+            return $authorization;
+        }
+
+        foreach (['HTTP_X_API_TOKEN', 'HTTP_X_SERVER_TOKEN'] as $key) {
+            $header = trim((string)($_SERVER[$key] ?? ''));
+            if ($header !== '') {
+                return $header;
+            }
+        }
+
+        $token = $body['token'] ?? $_POST['token'] ?? $_GET['token'] ?? '';
+        return trim((string)$token);
+    }
+
+    private function parseBooleanValue($value): ?bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_int($value) || is_float($value)) {
+            return ((int)$value) === 1;
+        }
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $normalized = strtolower(trim($value));
+        if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
+            return true;
+        }
+        if (in_array($normalized, ['0', 'false', 'no', 'off'], true)) {
+            return false;
+        }
+
+        return null;
+    }
+
     public function searchLeaderboard(): void
     {
         if (session_status() === PHP_SESSION_ACTIVE) {

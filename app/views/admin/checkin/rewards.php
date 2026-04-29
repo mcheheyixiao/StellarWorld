@@ -1,120 +1,142 @@
+<?php
+$checkinRewardRules = isset($checkinRewardRules) && is_array($checkinRewardRules) ? $checkinRewardRules : [];
+$dailyRules = isset($checkinRewardRules['daily']) && is_array($checkinRewardRules['daily'])
+    ? $checkinRewardRules['daily']
+    : [];
+$monthlyRules = isset($checkinRewardRules['monthly']) && is_array($checkinRewardRules['monthly'])
+    ? $checkinRewardRules['monthly']
+    : [];
+$monthKey = (string)($checkinRewardRules['month_key'] ?? date('Y-m'));
+$csrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT_QUOTES, 'UTF-8');
+$saved = isset($_GET['saved']) && (string)$_GET['saved'] === '1';
+$hasError = isset($_GET['err']) && (string)$_GET['err'] === 'checkin_rule';
+
+$escape = static function ($value): string {
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+};
+
+$jsonText = static function ($value): string {
+    $json = json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    return htmlspecialchars(is_string($json) ? $json : '[]', ENT_QUOTES, 'UTF-8');
+};
+
+$renderRuleCard = static function (array $rule, string $scope, string $csrfToken, callable $escape, callable $jsonText): void {
+    $id = (int)($rule['id'] ?? 0);
+    $day = (int)($rule['day'] ?? ($scope === 'daily' ? 1 : 0));
+    $coins = (int)($rule['coins'] ?? 0);
+    $points = (int)($rule['points'] ?? 0);
+    $enabled = !empty($rule['enabled']);
+    $items = isset($rule['items']) && is_array($rule['items']) ? $rule['items'] : [];
+    $commands = isset($rule['commands']) && is_array($rule['commands']) ? $rule['commands'] : [];
+    ?>
+    <form method="post" action="/admin/checkin/rewards/save" class="ta-card space-y-4">
+        <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+        <input type="hidden" name="id" value="<?= $escape($id) ?>">
+        <input type="hidden" name="scope" value="<?= $escape($scope) ?>">
+
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+                <h4 class="text-base font-semibold">
+                    <?= $scope === 'daily' ? '基础日常奖励' : ('月度奖励 - 第 ' . $escape($day) . ' 天') ?>
+                </h4>
+                <p class="ta-help-text mt-1">
+                    <?= $scope === 'daily' ? '每日签到都会叠加这条规则。' : '当本月签到次数达到该天数时额外发放。' ?>
+                </p>
+            </div>
+            <label class="inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" name="enabled" value="1" <?= $enabled ? 'checked' : '' ?>>
+                <span>启用</span>
+            </label>
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <label class="block">
+                <span class="text-sm font-medium">Day</span>
+                <input
+                    type="number"
+                    name="day"
+                    min="1"
+                    max="31"
+                    value="<?= $escape($day) ?>"
+                    <?= $scope === 'daily' ? 'readonly' : '' ?>
+                >
+            </label>
+            <label class="block">
+                <span class="text-sm font-medium">Coins</span>
+                <input type="number" name="coins" min="0" step="1" value="<?= $escape($coins) ?>">
+            </label>
+            <label class="block">
+                <span class="text-sm font-medium">Points</span>
+                <input type="number" name="points" min="0" step="1" value="<?= $escape($points) ?>">
+            </label>
+            <div class="flex items-end">
+                <button type="submit" class="ta-btn ta-btn-primary w-full transition-all hover:scale-[1.02]">
+                    保存规则
+                </button>
+            </div>
+        </div>
+
+        <label class="block">
+            <span class="text-sm font-medium">items_json</span>
+            <textarea name="items_json" rows="5"><?= $jsonText($items) ?></textarea>
+        </label>
+
+        <label class="block">
+            <span class="text-sm font-medium">commands_json</span>
+            <textarea name="commands_json" rows="5"><?= $jsonText($commands) ?></textarea>
+        </label>
+    </form>
+    <?php
+};
+?>
+
 <div id="checkin-rewards-page" class="ta-checkin-page space-y-6">
     <div class="ta-card">
-        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div class="flex items-center gap-2">
-                <button type="button" class="ta-btn ta-btn-secondary transition-all hover:scale-[1.02]" data-checkin-month-prev>上个月</button>
-                <h2 class="text-lg font-semibold" data-checkin-month-label>2026年04月</h2>
-                <button type="button" class="ta-btn ta-btn-secondary transition-all hover:scale-[1.02]" data-checkin-month-next>下个月</button>
+        <h2 class="text-lg font-semibold">奖励规则</h2>
+        <p class="ta-help-text mt-2">当前月份：<?= $escape($monthKey) ?>。第一阶段支持 `daily` 与 `monthly` 两种 scope。</p>
+
+        <?php if ($saved): ?>
+            <div class="mt-4 rounded-xl border border-emerald-300/35 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                奖励规则已保存到数据库。
             </div>
-            <button type="button" class="ta-btn ta-btn-primary transition-all hover:scale-[1.02]" data-checkin-reset-month>重置本月</button>
+        <?php endif; ?>
+
+        <?php if ($hasError): ?>
+            <div class="mt-4 rounded-xl border border-rose-300/35 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                奖励规则保存失败，请检查 day、JSON 格式以及命令占位符是否有效。
+            </div>
+        <?php endif; ?>
+
+        <div class="mt-4 rounded-xl border border-sky-300/25 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+            `commands_json` 只允许使用 `{player}` 和 `{uuid}` 占位符；`items_json` 必须是 JSON 数组。
         </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-6 xl:grid-cols-[1.6fr_1fr]">
-        <section class="ta-card">
-            <div class="mb-3 flex items-center justify-between gap-3">
-                <h3 class="text-base font-semibold">每日奖励日历编辑器</h3>
-                <span class="ta-help-text">点击日期可编辑奖励</span>
-            </div>
-
-            <div class="ta-checkin-weekdays">
-                <span>一</span>
-                <span>二</span>
-                <span>三</span>
-                <span>四</span>
-                <span>五</span>
-                <span>六</span>
-                <span>日</span>
-            </div>
-
-            <div class="ta-checkin-calendar-grid" data-checkin-calendar-grid></div>
-        </section>
-
-        <aside class="ta-card ta-checkin-preview-card">
-            <h3 class="text-base font-semibold">当前日期奖励预览</h3>
-            <div class="mt-3 space-y-2" data-checkin-preview-meta></div>
-
-            <h4 class="mt-5 text-sm font-semibold">奖励 JSON 预览（只读）</h4>
-            <pre class="ta-checkin-json-preview mt-2" data-checkin-json-preview></pre>
-
-            <button type="button" class="ta-btn ta-btn-secondary mt-4 w-full transition-all hover:scale-[1.02]" data-checkin-open-editor>
-                编辑当前日期奖励
-            </button>
-        </aside>
-    </div>
-
-    <div class="ta-checkin-modal hidden" data-checkin-modal aria-hidden="true">
-        <div class="ta-checkin-modal-backdrop" data-checkin-modal-close></div>
-        <div class="ta-checkin-modal-panel ta-card">
-            <div class="flex items-start justify-between gap-3">
-                <div>
-                    <h3 class="text-base font-semibold">奖励编辑</h3>
-                    <p class="ta-help-text" data-checkin-modal-title>编辑 1 号奖励</p>
-                </div>
-                <button type="button" class="ta-btn ta-btn-secondary transition-all hover:scale-[1.02]" data-checkin-modal-close>关闭</button>
-            </div>
-
-            <div class="mt-4 space-y-4">
-                <label class="block">
-                    <span class="text-sm font-medium">金币：</span>
-                    <input type="number" min="0" step="1" value="120" data-checkin-input-coins>
-                </label>
-
-                <label class="block">
-                    <span class="text-sm font-medium">连续加成：</span>
-                    <input type="number" min="0" step="1" value="10" data-checkin-input-streak>
-                </label>
-
-                <div class="space-y-2">
-                    <div class="flex items-center justify-between">
-                        <h4 class="text-sm font-semibold">物品：</h4>
-                        <button type="button" class="ta-btn ta-btn-secondary transition-all hover:scale-[1.02]" data-checkin-add-item>+ 添加物品</button>
-                    </div>
-                    <div class="space-y-2" data-checkin-item-list></div>
-                </div>
-
-                <div class="space-y-2">
-                    <div class="flex items-center justify-between">
-                        <h4 class="text-sm font-semibold">命令：</h4>
-                        <button type="button" class="ta-btn ta-btn-secondary transition-all hover:scale-[1.02]" data-checkin-add-command>+ 添加命令</button>
-                    </div>
-                    <div class="space-y-2" data-checkin-command-list></div>
-                </div>
-
-                <div class="space-y-2">
-                    <h4 class="text-sm font-semibold">作用范围：</h4>
-                    <label class="ta-checkin-scope-option">
-                        <input type="radio" name="checkin_scope" value="month" checked data-checkin-scope>
-                        <span>仅本月</span>
-                    </label>
-                    <label class="ta-checkin-scope-option">
-                        <input type="radio" name="checkin_scope" value="global" data-checkin-scope>
-                        <span>全局模板</span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="mt-5 flex justify-end gap-2">
-                <button type="button" class="ta-btn ta-btn-secondary transition-all hover:scale-[1.02]" data-checkin-modal-close>取消</button>
-                <button type="button" class="ta-btn ta-btn-primary transition-all hover:scale-[1.02]" data-checkin-save>保存奖励</button>
-            </div>
+    <section class="space-y-4">
+        <div class="ta-card">
+            <h3 class="text-base font-semibold">Daily 规则</h3>
+            <p class="ta-help-text mt-2">如果还没有 daily 规则，下面会显示一个可直接保存的空白表单。</p>
         </div>
-    </div>
 
-    <template data-checkin-item-template>
-        <div class="ta-checkin-input-card">
-            <input type="text" placeholder="物品 ID / 名称" data-checkin-item-name aria-label="Reward item name">
-            <input type="number" min="1" step="1" value="1" data-checkin-item-amount aria-label="Reward item amount">
-            <button type="button" class="ta-btn ta-btn-secondary transition-all hover:scale-[1.02]" data-checkin-remove-row>移除</button>
-        </div>
-    </template>
+        <?php if ($dailyRules === []): ?>
+            <?php $renderRuleCard(['day' => 1, 'coins' => 0, 'points' => 0, 'items' => [], 'commands' => [], 'enabled' => true], 'daily', $csrfToken, $escape, $jsonText); ?>
+        <?php else: ?>
+            <?php foreach ($dailyRules as $rule): ?>
+                <?php $renderRuleCard($rule, 'daily', $csrfToken, $escape, $jsonText); ?>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </section>
 
-    <template data-checkin-command-template>
-        <div class="ta-checkin-input-card">
-            <input type="text" placeholder="输入命令（例如：give @p diamond 1）" data-checkin-command-text aria-label="Reward command">
-            <button type="button" class="ta-btn ta-btn-secondary transition-all hover:scale-[1.02]" data-checkin-remove-row>移除</button>
+    <section class="space-y-4">
+        <div class="ta-card">
+            <h3 class="text-base font-semibold">Monthly 规则</h3>
+            <p class="ta-help-text mt-2">当玩家本月签到次数达到对应 Day 时，会叠加发放该奖励。</p>
         </div>
-    </template>
+
+        <?php foreach ($monthlyRules as $rule): ?>
+            <?php $renderRuleCard($rule, 'monthly', $csrfToken, $escape, $jsonText); ?>
+        <?php endforeach; ?>
+
+        <?php $renderRuleCard(['day' => 7, 'coins' => 0, 'points' => 0, 'items' => [], 'commands' => [], 'enabled' => true], 'monthly', $csrfToken, $escape, $jsonText); ?>
+    </section>
 </div>
-
-<script src="/scripts/admin-checkin-rewards.js"></script>

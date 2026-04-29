@@ -10,16 +10,19 @@ use Core\BaiduSEO;
 use Core\Database;
 use Core\ImageProcessor;
 use Core\MinecraftUuid;
+use Model\Checkin;
 use Model\User;
 
 class AdminController extends Controller
 {
     private User $users;
+    private Checkin $checkins;
 
     public function __construct()
     {
         parent::__construct();
         $this->users = new User();
+        $this->checkins = new Checkin();
         $this->requireAdmin();
     }
 
@@ -132,6 +135,21 @@ class AdminController extends Controller
         $siteSettings = [];
         $teamMembers = [];
         $ipWhitelist = [];
+        $checkinLogs = [];
+        $checkinStats = [
+            'today_count' => 0,
+            'yesterday_count' => 0,
+            'month_total' => 0,
+            'pending_deliveries' => 0,
+            'failed_deliveries' => 0,
+            'delivered_deliveries' => 0,
+            'top_streaks' => [],
+        ];
+        $checkinRewardRules = [
+            'month_key' => date('Y-m'),
+            'daily' => [],
+            'monthly' => [],
+        ];
 
         $playersPagination = $buildPagination(0, 1, $perPage, 'players_page');
         $announcementsPagination = $buildPagination(0, 1, $perPage, 'announcements_page');
@@ -235,6 +253,18 @@ class AdminController extends Controller
             }
         }
 
+        if ($activeTab === 'checkin-logs') {
+            $checkinLogs = $this->checkins->getAdminLogs();
+        }
+
+        if ($activeTab === 'checkin-stats') {
+            $checkinStats = $this->checkins->getAdminStats();
+        }
+
+        if ($activeTab === 'checkin-rewards') {
+            $checkinRewardRules = $this->checkins->getAdminRewardRules();
+        }
+
         return $this->render('admin/dashboard', [
             'title' => '后台总览',
             'userCount' => $userCount,
@@ -255,6 +285,9 @@ class AdminController extends Controller
             'teamMembersPagination' => $teamMembersPagination,
             'ipWhitelist' => $ipWhitelist,
             'ipWhitelistPagination' => $ipWhitelistPagination,
+            'checkinLogs' => $checkinLogs,
+            'checkinStats' => $checkinStats,
+            'checkinRewardRules' => $checkinRewardRules,
             'realtimePanelEnabled' => (bool)$realtimeWsConfig['enable_realtime_panel'],
             'realtimeWsConfig' => $realtimeWsConfig,
         ]);
@@ -357,6 +390,30 @@ class AdminController extends Controller
             $this->users->unbindCharacter($id);
         }
         $this->completeAdminAction('/admin?tab=players');
+    }
+
+    public function checkinRewardSave(): void
+    {
+        $this->validateCsrfForFormPost('/admin?tab=checkin-rewards');
+        $result = $this->checkins->saveRewardRule($_POST);
+
+        if (($result['ok'] ?? false) !== true) {
+            if ($this->isAjaxRequest() || array_key_exists('ajax', $_GET) || array_key_exists('ajax', $_POST)) {
+                http_response_code((int)($result['status'] ?? 400));
+                header('Content-Type: application/json; charset=utf-8');
+                echo ApiResponse::error(ApiCode::SERVER_ERROR, (string)($result['message'] ?? 'Save failed'));
+                exit;
+            }
+
+            header('Location: /admin?tab=checkin-rewards&err=checkin_rule');
+            exit;
+        }
+
+        $this->completeAdminAction(
+            '/admin?tab=checkin-rewards&saved=1',
+            ['rule_id' => (int)($result['rule_id'] ?? 0)],
+            (string)($result['message'] ?? 'Reward rule saved')
+        );
     }
 
     public function announcementSave(): void

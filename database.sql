@@ -207,9 +207,87 @@ CREATE TABLE IF NOT EXISTS user_checkins (
     UNIQUE KEY uq_user_checkins_user_date (user_id, checkin_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS checkin_records (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    mc_uuid VARCHAR(64) NOT NULL,
+    username VARCHAR(64) NOT NULL,
+    checkin_date DATE NOT NULL,
+    checkin_time DATETIME NOT NULL,
+    month_key CHAR(7) NOT NULL,
+    streak_days INT UNSIGNED NOT NULL DEFAULT 1,
+    month_days INT UNSIGNED NOT NULL DEFAULT 1,
+    total_days INT UNSIGNED NOT NULL DEFAULT 1,
+    reward_snapshot_json JSON NOT NULL,
+    delivery_status ENUM('pending', 'delivering', 'delivered', 'failed', 'cancelled') NOT NULL DEFAULT 'pending',
+    ip_hash CHAR(64) NOT NULL DEFAULT '',
+    user_agent_hash CHAR(64) NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    CONSTRAINT fk_checkin_records_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_checkin_records_user_date (user_id, checkin_date),
+    KEY idx_checkin_records_month_user (month_key, user_id),
+    KEY idx_checkin_records_delivery_status (delivery_status),
+    KEY idx_checkin_records_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS checkin_reward_rules (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    day TINYINT UNSIGNED NOT NULL,
+    scope ENUM('daily', 'monthly') NOT NULL,
+    coins INT NOT NULL DEFAULT 0,
+    points INT NOT NULL DEFAULT 0,
+    items_json JSON NULL,
+    commands_json JSON NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_checkin_reward_scope_day (scope, day),
+    KEY idx_checkin_reward_enabled (enabled)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS checkin_reward_deliveries (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    record_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    mc_uuid VARCHAR(64) NOT NULL,
+    username VARCHAR(64) NOT NULL,
+    reward_payload_json JSON NOT NULL,
+    delivery_mode ENUM('plugin_poll') NOT NULL DEFAULT 'plugin_poll',
+    status ENUM('pending', 'delivering', 'delivered', 'failed', 'cancelled') NOT NULL DEFAULT 'pending',
+    attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    last_error VARCHAR(255) NULL DEFAULT NULL,
+    locked_at DATETIME NULL DEFAULT NULL,
+    delivered_at DATETIME NULL DEFAULT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    CONSTRAINT fk_checkin_reward_deliveries_record FOREIGN KEY (record_id) REFERENCES checkin_records(id) ON DELETE CASCADE,
+    CONSTRAINT fk_checkin_reward_deliveries_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    KEY idx_checkin_reward_deliveries_status_locked (status, locked_at),
+    KEY idx_checkin_reward_deliveries_user (user_id),
+    KEY idx_checkin_reward_deliveries_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 新增：为玩家行为时间轴查询补充索引
 ALTER TABLE user_checkins ADD INDEX idx_user_checkins_user_created_at (user_id, created_at);
 ALTER TABLE audit_logs ADD INDEX idx_audit_logs_user_created_at (user_id, created_at);
+
+INSERT INTO checkin_reward_rules (day, scope, coins, points, items_json, commands_json, enabled, created_at, updated_at)
+SELECT
+    1,
+    'daily',
+    120,
+    0,
+    '[{"id":"minecraft:iron_ingot","amount":10}]',
+    '[]',
+    1,
+    NOW(),
+    NOW()
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM checkin_reward_rules
+    LIMIT 1
+);
 
 -- Remember Me tokens for persistent multi-device login
 CREATE TABLE IF NOT EXISTS auth_tokens (

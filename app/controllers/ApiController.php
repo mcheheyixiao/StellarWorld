@@ -520,7 +520,7 @@ class ApiController extends Controller
     public function pluginCheckinDeliveries(): void
     {
         if (!$this->isPluginAuthorized()) {
-            $this->json([
+            $this->respondPluginJson([
                 'success' => false,
                 'code' => ApiCode::AUTH_INVALID,
                 'message' => 'Unauthorized',
@@ -528,22 +528,33 @@ class ApiController extends Controller
             return;
         }
 
-        $limit = (int)($_GET['limit'] ?? 20);
-        $items = $this->checkins->pullPendingDeliveries($limit);
+        try {
+            $limit = (int)($_GET['limit'] ?? 20);
+            $items = $this->checkins->pullPendingDeliveries($limit);
+            $deliveries = $this->formatPluginCheckinDeliveries($items);
 
-        $this->json([
-            'success' => true,
-            'data' => [
-                'items' => $items,
-                'count' => count($items),
-            ],
-        ]);
+            $this->respondPluginJson([
+                'success' => true,
+                'deliveries' => $deliveries,
+                'count' => count($deliveries),
+                'data' => [
+                    'items' => $items,
+                    'count' => count($items),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[Checkin] plugin deliveries failed: ' . $e->getMessage());
+            $this->respondPluginJson([
+                'success' => false,
+                'message' => 'Checkin delivery service unavailable',
+            ], 500);
+        }
     }
 
     public function pluginCheckinDeliveriesAck(): void
     {
         if (!$this->isPluginAuthorized()) {
-            $this->json([
+            $this->respondPluginJson([
                 'success' => false,
                 'code' => ApiCode::AUTH_INVALID,
                 'message' => 'Unauthorized',
@@ -551,29 +562,78 @@ class ApiController extends Controller
             return;
         }
 
-        $body = $this->readJsonRequestBody();
-        $deliveryId = (int)($body['delivery_id'] ?? ($_POST['delivery_id'] ?? 0));
-        $success = $this->parseBooleanValue($body['success'] ?? ($_POST['success'] ?? null));
-        $message = trim((string)($body['message'] ?? ($_POST['message'] ?? '')));
+        try {
+            $body = $this->readJsonRequestBody();
+            $deliveryId = (int)($body['delivery_id'] ?? ($_POST['delivery_id'] ?? 0));
+            $success = $this->parseBooleanValue($body['success'] ?? ($_POST['success'] ?? null));
+            $message = trim((string)($body['message'] ?? ($_POST['message'] ?? '')));
 
-        if ($deliveryId <= 0 || $success === null) {
-            $this->json([
+            if ($deliveryId <= 0 || $success === null) {
+                $this->respondPluginJson([
+                    'success' => false,
+                    'message' => 'delivery_id and success are required',
+                ], 400);
+                return;
+            }
+
+            $result = $this->checkins->ackDelivery($deliveryId, $success, $message);
+            $payload = [
+                'success' => (bool)($result['ok'] ?? false),
+                'message' => (string)($result['message'] ?? 'Delivery ack failed'),
+            ];
+            if (isset($result['delivery']) && is_array($result['delivery'])) {
+                $payload['delivery'] = $result['delivery'];
+            }
+
+            $this->respondPluginJson($payload, (int)($result['status'] ?? 500));
+        } catch (\Throwable $e) {
+            error_log('[Checkin] plugin deliveries ack failed: ' . $e->getMessage());
+            $this->respondPluginJson([
                 'success' => false,
-                'message' => 'delivery_id and success are required',
-            ], 400);
+                'message' => 'Checkin delivery acknowledgement unavailable',
+            ], 500);
+        }
+    }
+
+    private function formatPluginCheckinDeliveries(array $items): array
+    {
+        return array_map(static function (array $item): array {
+            $deliveryId = (int)($item['delivery_id'] ?? ($item['id'] ?? 0));
+            $player = isset($item['player']) && is_array($item['player']) ? $item['player'] : [];
+            $username = trim((string)($item['username'] ?? ($player['username'] ?? '')));
+            $mcUuid = trim((string)($item['mc_uuid'] ?? ($player['uuid'] ?? '')));
+            $reward = isset($item['reward']) && is_array($item['reward']) ? $item['reward'] : [];
+
+            if (!isset($reward['commands']) || !is_array($reward['commands'])) {
+                $reward['commands'] = [];
+            }
+
+            $player['username'] = $username;
+            $player['uuid'] = $mcUuid;
+
+            return array_merge($item, [
+                'id' => $deliveryId,
+                'delivery_id' => $deliveryId,
+                'username' => $username,
+                'mc_uuid' => $mcUuid,
+                'player' => $player,
+                'reward' => $reward,
+            ]);
+        }, $items);
+    }
+
+    private function respondPluginJson(array $payload, int $status = 200): void
+    {
+        http_response_code($status);
+        header('Content-Type: application/json; charset=utf-8');
+
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (is_string($json)) {
+            echo $json;
             return;
         }
 
-        $result = $this->checkins->ackDelivery($deliveryId, $success, $message);
-        $payload = [
-            'success' => (bool)($result['ok'] ?? false),
-            'message' => (string)($result['message'] ?? 'Delivery ack failed'),
-        ];
-        if (isset($result['delivery']) && is_array($result['delivery'])) {
-            $payload['delivery'] = $result['delivery'];
-        }
-
-        $this->json($payload, (int)($result['status'] ?? 500));
+        echo '{"success":false,"message":"json encode failed"}';
     }
 
     private function readJsonRequestBody(): array

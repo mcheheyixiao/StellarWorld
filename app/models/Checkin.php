@@ -1172,11 +1172,14 @@ class Checkin extends Model
             UPDATE checkin_records cr
             INNER JOIN checkin_reward_deliveries d ON d.record_id = cr.id
             SET cr.delivery_status = \'failed\',
-                cr.updated_at = :updated_at
+                cr.updated_at = :record_updated_at
             WHERE d.status = \'failed\'
-              AND d.updated_at = :updated_at
+              AND d.updated_at = :delivery_updated_at
         ');
-        $recordUpdate->execute([':updated_at' => $nowString]);
+        $recordUpdate->execute([
+            ':record_updated_at' => $nowString,
+            ':delivery_updated_at' => $nowString,
+        ]);
     }
 
     private function countByDate(string $checkinDate): int

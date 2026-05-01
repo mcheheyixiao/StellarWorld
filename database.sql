@@ -1,13 +1,13 @@
 -- MySQL schema for Minecraft web system
 --
--- 鐠囧瓨妲戦敍姘辨瑜?/ 閹垫儳娲栫€靛棛鐖?/ 濞夈劌鍞界粵?Rate Limit 娑撳孩甯撶悰灞绢渷妞ょ敻娼扮紓鎾崇摠姒涙顓绘担璺ㄦ暏 Redis閿涘潷hpredis閿涘绱?
--- 鏉╃偞甯存径杈Е閺冨墎鏁辨惔鏃傛暏鐏炲倽鍤滈崝銊╂缁狙冨煂 storage/cache 娑?JSON 閺傚洣娆㈤敍灞炬￥闂団偓妫版繂顦?DDL閵?
+-- 缓存 / 会话 / 限流优先使用 Redis（phpredis / predis），不可用时回退到文件存储。
+-- 文件缓存默认写入 storage/cache 下的 JSON 文件；执行 DDL 前请确认目录可写。
 
 CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(32) NOT NULL UNIQUE,
-    mc_username VARCHAR(64) NULL DEFAULT NULL COMMENT '缂佹垵鐣鹃惃鍕埗閹村繗顫楅懝鎻掓倳',
-    mc_uuid VARCHAR(64) NULL DEFAULT NULL COMMENT '缂佹垵鐣鹃惃鍕埗閹村虎UID',
+    mc_username VARCHAR(64) NULL DEFAULT NULL COMMENT '当前绑定的 Minecraft 用户名',
+    mc_uuid VARCHAR(64) NULL DEFAULT NULL COMMENT '当前绑定的 Minecraft UUID',
     ip VARCHAR(40) DEFAULT NULL,
     lastlogin BIGINT DEFAULT NULL,
     regip VARCHAR(40) DEFAULT NULL,
@@ -20,8 +20,8 @@ CREATE TABLE IF NOT EXISTS users (
     role ENUM('player','admin') NOT NULL DEFAULT 'player',
     status ENUM('active','frozen','banned') NOT NULL DEFAULT 'active',
     email_verified TINYINT(1) NOT NULL DEFAULT 0,
-    mua_sub VARCHAR(255) UNIQUE DEFAULT NULL COMMENT 'MUA Union 閸烆垯绔撮弽鍥槕',
-    last_mc_bind_at DATETIME NULL DEFAULT NULL COMMENT '閺堚偓鏉╂垳绔村▎鈥叉叏閺€瑙勭埗閹村繗顫楅懝鑼拨鐎规碍妞傞梻?,
+    mua_sub VARCHAR(255) UNIQUE DEFAULT NULL COMMENT 'MUA Union 用户唯一标识',
+    last_mc_bind_at DATETIME NULL DEFAULT NULL COMMENT '最近一次绑定 Minecraft 账号的时间',
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
     INDEX idx_users_email_verified (email_verified),
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS users (
 --   ADD COLUMN isLogged SMALLINT DEFAULT 0,
 --   ADD COLUMN hasSession SMALLINT DEFAULT 0,
 --   ADD COLUMN totp VARCHAR(32) DEFAULT NULL;
---   ADD COLUMN last_mc_bind_at DATETIME NULL DEFAULT NULL COMMENT '閺堚偓鏉╂垳绔村▎鈥叉叏閺€瑙勭埗閹村繗顫楅懝鑼拨鐎规碍妞傞梻?;
+--   ADD COLUMN last_mc_bind_at DATETIME NULL DEFAULT NULL COMMENT '最近一次绑定 Minecraft 账号的时间';
 
 -- Safe upgrade for existing databases: add users.last_mc_bind_at if missing
 SET @has_last_mc_bind_at := (
@@ -49,7 +49,7 @@ SET @has_last_mc_bind_at := (
 );
 SET @add_last_mc_bind_sql := IF(
     @has_last_mc_bind_at = 0,
-    'ALTER TABLE users ADD COLUMN last_mc_bind_at DATETIME NULL DEFAULT NULL COMMENT ''閺堚偓鏉╂垳绔村▎鈥叉叏閺€瑙勭埗閹村繗顫楅懝鑼拨鐎规碍妞傞梻?' AFTER email_verified',
+    'ALTER TABLE users ADD COLUMN last_mc_bind_at DATETIME NULL DEFAULT NULL COMMENT ''最近一次绑定 Minecraft 账号的时间'' AFTER email_verified',
     'SELECT ''users.last_mc_bind_at already exists'' AS message'
 );
 PREPARE stmt_add_last_mc_bind FROM @add_last_mc_bind_sql;
@@ -66,7 +66,7 @@ SET @has_mua_sub := (
 );
 SET @add_mua_sub_sql := IF(
     @has_mua_sub = 0,
-    'ALTER TABLE users ADD COLUMN mua_sub VARCHAR(255) UNIQUE DEFAULT NULL COMMENT ''MUA Union 閸烆垯绔撮弽鍥槕'' AFTER email_verified',
+    'ALTER TABLE users ADD COLUMN mua_sub VARCHAR(255) UNIQUE DEFAULT NULL COMMENT ''MUA Union 用户唯一标识'' AFTER email_verified',
     'SELECT ''users.mua_sub already exists'' AS message'
 );
 PREPARE stmt_add_mua_sub FROM @add_mua_sub_sql;
@@ -84,7 +84,7 @@ SET @mua_sub_char_len := (
 );
 SET @alter_mua_sub_len_sql := IF(
     @mua_sub_char_len IS NOT NULL AND @mua_sub_char_len < 255,
-    'ALTER TABLE users MODIFY COLUMN mua_sub VARCHAR(255) DEFAULT NULL COMMENT ''MUA Union 閸烆垯绔撮弽鍥槕''',
+    'ALTER TABLE users MODIFY COLUMN mua_sub VARCHAR(255) DEFAULT NULL COMMENT ''MUA Union 用户唯一标识''',
     'SELECT ''users.mua_sub length already compatible'' AS message'
 );
 PREPARE stmt_alter_mua_sub_len FROM @alter_mua_sub_len_sql;
@@ -290,7 +290,7 @@ PREPARE stmt_add_idx_email_verifications_email_purpose_created FROM @add_idx_ema
 EXECUTE stmt_add_idx_email_verifications_email_purpose_created;
 DEALLOCATE PREPARE stmt_add_idx_email_verifications_email_purpose_created;
 
--- 閺傛澘顤冮敍姘槕閻線鍣哥純顔款唶瑜版洝銆?
+-- 密码重置令牌记录
 CREATE TABLE IF NOT EXISTS password_resets (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) NOT NULL,
@@ -319,7 +319,7 @@ CREATE TABLE IF NOT EXISTS gallery_images (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Seed super admin user (DEV/TEST only)
--- 濮濓絽绱℃稉濠勫殠瀵ら缚顔呴敍姘灩闂?濞夈劑鍣撮張顒侇唽閿涘本鏁兼稉鍝勬倵閸欐澘鍨卞鐑樺灗閸楁洜瀚幍褑顢?seed.sql閿涘矂浼╅崗宥堫嚖閻劌宕版担宥呯槕閻降鈧?
+-- 请在生产环境执行前替换默认管理员账号、邮箱与密码哈希，或拆分到单独的 seed.sql。
 INSERT INTO users (username, email, password_hash, role, status, email_verified, created_at, updated_at)
 VALUES (
     'StellarVan',
@@ -334,7 +334,7 @@ VALUES (
 
 CREATE TABLE IF NOT EXISTS milestones (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    milestone_date VARCHAR(50) NOT NULL COMMENT '婵″偊绱?024楠?閺?,
+    milestone_date VARCHAR(50) NOT NULL COMMENT '里程碑日期（如 2024 年 1 月）',
     description TEXT NOT NULL,
     created_at DATETIME NOT NULL,
     INDEX idx_milestones_created_at (created_at)
@@ -342,10 +342,10 @@ CREATE TABLE IF NOT EXISTS milestones (
 
 CREATE TABLE IF NOT EXISTS `audit_logs` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `user_id` INT NULL COMMENT '閸欘垯浜掗弰鐤LL閿涘本鐦俊鍌涙弓閻ц缍嶇拋鍨吂閹垮秳缍旈幋鏈匬I鐠嬪啰鏁?,
-    `action` VARCHAR(50) NOT NULL COMMENT '婵?LOGIN, REGISTER, API_AUTH',
+    `user_id` INT NULL COMMENT '关联用户 ID；NULL 表示系统或匿名操作',
+    `action` VARCHAR(50) NOT NULL COMMENT '操作类型，如 LOGIN、REGISTER、API_AUTH',
     `ip_address` VARCHAR(45) NOT NULL,
-    `details` JSON NULL COMMENT '鐠囷妇绮忛崣妯绘纯閸愬懎顔愰幋鏍晩鐠囶垯淇婇幁?,
+    `details` JSON NULL COMMENT '附加详情 JSON；写入前应完成脱敏',
     `request_id` VARCHAR(32) NULL DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -383,7 +383,7 @@ CREATE TABLE IF NOT EXISTS player_stats (
         ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 閺傛澘顤冮敍姘辩秹妞ょ數顒烽崚鎵濋崚鍡楃摟濞?
+-- 为 users 表补充 coins 字段，兼容旧数据库升级
 SET @sql = (
     SELECT IF(
         EXISTS (
@@ -400,7 +400,7 @@ SET @sql = (
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
--- 閺傛澘顤冮敍姘辨暏閹撮攱鐦￠弮銉ь劮閸掓媽顔囪ぐ?
+-- 每日签到记录
 CREATE TABLE IF NOT EXISTS user_checkins (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id INT UNSIGNED NOT NULL,
@@ -471,7 +471,7 @@ CREATE TABLE IF NOT EXISTS checkin_reward_deliveries (
     KEY idx_checkin_reward_deliveries_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 閺傛澘顤冮敍姘礋閻溾晛顔嶇悰灞艰礋閺冨爼妫挎潪瀛樼叀鐠囥垼藟閸忓懐鍌ㄥ?
+-- 为签到与审计日志补充复合索引，兼容旧数据库升级
 SET @sql = (
     SELECT IF(
         EXISTS (
@@ -551,13 +551,13 @@ CREATE TABLE IF NOT EXISTS avatar_cache (
 
 CREATE TABLE IF NOT EXISTS ip_blacklist (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    ip_cidr VARCHAR(45) NOT NULL COMMENT '缁墽鈥?IPv4/IPv6 閹?CIDR閿涘苯顩?192.168.1.0/24',
+    ip_cidr VARCHAR(45) NOT NULL COMMENT '支持 IPv4/IPv6 CIDR，例如 192.168.1.0/24',
     reason VARCHAR(255) NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL,
     UNIQUE KEY uq_ip_blacklist_ip_cidr (ip_cidr)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 缁旀瑧鍋ｉ柨顔尖偓濂稿帳缂冾噯绱欓崝銊︹偓浣规暈閸愬奔绗傞梽鎰┾偓浣烘閸氬秴宕熼梽鎰ウ缁涙牜鏆愮粵澶涚礆
+-- 站点设置表，用于后台可配置的运行时选项
 CREATE TABLE IF NOT EXISTS site_settings (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     setting_key VARCHAR(64) NOT NULL,
@@ -566,34 +566,34 @@ CREATE TABLE IF NOT EXISTS site_settings (
     UNIQUE KEY uq_site_settings_key (setting_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 閵嗗苯鍙ф禍搴㈠灉娴狀兙鈧秴娲熼梼鐔稿灇閸涙﹫绱欓弴澶稿敩 whitelist.json閿?
+-- 关于页成员列表数据，兼容旧 public/assets/memberlist/whitelist.json 配置
 CREATE TABLE IF NOT EXISTS team_members (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(64) NOT NULL COMMENT 'Minecraft 閻劍鍩涢崥宥忕礉閻劋绨径鏉戝剼娑撳骸鐫嶇粈?,
-    role VARCHAR(128) NOT NULL DEFAULT '閺堝秴濮熼崳銊﹀灇閸? COMMENT '閼卞奔缍?鐟欐帟澹婇幓蹇氬牚',
+    username VARCHAR(64) NOT NULL COMMENT 'Minecraft 玩家用户名',
+    role VARCHAR(128) NOT NULL DEFAULT '服务器成员' COMMENT '职位名称，用于前台展示',
     created_at DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 鐠併倛鐦夐幒銉ュ經 IP 閻ц棄鎮曢崡鏇礄娴兼ê鍘涚痪褔鐝禍搴ㄧ拨閸氬秴宕熼敍娑樺讲闁板秴鎮?site_settings 閺€鎯ь啍闂勬劖绁﹂敍?
+-- 注册 IP 白名单；命中后可配合 site_settings 放宽频率限制
 CREATE TABLE IF NOT EXISTS ip_whitelist (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    ip_cidr VARCHAR(45) NOT NULL COMMENT '缁墽鈥?IPv4/IPv6 閹?CIDR',
+    ip_cidr VARCHAR(45) NOT NULL COMMENT '支持 IPv4/IPv6 CIDR',
     reason VARCHAR(255) NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL,
     UNIQUE KEY uq_ip_whitelist_ip_cidr (ip_cidr)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO site_settings (setting_key, setting_value, description) VALUES
-    ('register_ip_limit', '2', '閸氬奔绔?IP 24 鐏忓繑妞傞崘鍛帒鐠佸憡鏁為崘宀€娈戦張鈧径褑澶勯崣閿嬫殶閿涘牏娅ч崥宥呭礋 IP 娑撳秴褰堝銈夋閸掕绱?),
-    ('whitelist_ignores_rate_limit', '0', '鐠佸彞璐?1 閺冭绱伴惂钘夋倳閸?IP 閸氬本妞傞弮鐘侯潒 checkRateLimit閵嗕胶娅ヨぐ鏇炪亼鐠愩儵鏀ｇ€规哎鈧椒绱扮拠婵嗗枎閸楀鐡戦梽鎰ウ')
+    ('register_ip_limit', '2', '同一 IP 24 小时内允许注册的账号数量；命中后拒绝继续注册'),
+    ('whitelist_ignores_rate_limit', '0', '是否允许白名单 IP 跳过 checkRateLimit 限制：1 启用，0 禁用')
 ON DUPLICATE KEY UPDATE setting_key = setting_key;
 
 INSERT INTO site_settings (setting_key, setting_value, description) VALUES
-    ('email_domain_whitelist_enabled', '1', '閺勵垰鎯侀崥顖滄暏闁喚顔堥崺鐔锋倳閻ц棄鎮曢崡鏇窗1閸氼垳鏁ら敍?閸忔娊妫?),
-    ('email_domain_whitelist', 'qq.com,foxmail.com,163.com,126.com,gmail.com,outlook.com,hotmail.com,icloud.com,yahoo.com', '閸忎浇顔忓▔銊ュ斀閻ㄥ嫰鍋栫粻鍗炵厵閸氬稄绱濋柅妤€褰块崚鍡涙'),
-    ('email_code_expire_seconds', '600', '闁喚顔堟宀冪槈閻焦婀侀弫鍫熸埂缁夋帗鏆?),
-    ('email_code_send_cooldown_seconds', '60', '閸氬奔绔撮柇顔绢唸閸欐垿鈧線鐛欑拠浣虹垳閸愬嘲宓堢粔鎺撴殶'),
-    ('audit_log_storage', 'mysql', '鐎孤ゎ吀閺冦儱绻旂€涙ê鍋嶅Ο鈥崇础閿涙ysql / file / both')
+    ('email_domain_whitelist_enabled', '1', '是否启用邮箱域名白名单：1 启用，0 禁用'),
+    ('email_domain_whitelist', 'qq.com,foxmail.com,163.com,126.com,gmail.com,outlook.com,hotmail.com,icloud.com,yahoo.com', '允许注册的邮箱域名列表，使用逗号分隔'),
+    ('email_code_expire_seconds', '600', '邮箱验证码有效期，单位为秒'),
+    ('email_code_send_cooldown_seconds', '60', '同一邮箱发送验证码的冷却时间，单位为秒'),
+    ('audit_log_storage', 'mysql', '审计日志存储模式：mysql / file / both')
 ON DUPLICATE KEY UPDATE setting_key = setting_key;
 
 -- Realtime status history snapshots (WS primary source, DB fallback)

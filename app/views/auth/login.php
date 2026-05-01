@@ -1,7 +1,6 @@
 <div class="page-container">
     <div class="mc-glass-card fade-in w-full p-6 md:p-8">
         <h1 class="text-fusion-pixel mb-4 text-2xl text-white">玩家登录</h1>
-        <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
         <form id="loginForm" method="post" action="/auth/login">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
             <div style="margin-bottom:1rem;">
@@ -22,8 +21,17 @@
                     <input id="password" name="password" type="password" required class="custom-input" placeholder="请输入密码" autocomplete="current-password">
                 </div>
             </div>
-            <div class="cf-turnstile-shell">
-                <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars((string)TURNSTILE_SITE_KEY, ENT_QUOTES, 'UTF-8') ?>"></div>
+            <div style="margin-bottom:1rem;">
+                <label for="loginCaptchaAnswer">图形验证码</label>
+                <div style="margin-top:0.45rem;display:flex;flex-wrap:wrap;align-items:center;gap:0.75rem;">
+                    <img id="loginCaptchaImage" src="/auth/captcha?purpose=login" alt="图形验证码" style="width:240px;height:64px;border-radius:0.85rem;border:1px solid rgba(103,232,249,.3);background:rgba(15,23,42,.9);object-fit:cover;">
+                    <button type="button" id="loginCaptchaRefresh" class="auth-action-btn auth-action-btn--secondary rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-sm font-semibold text-slate-200 transition-all">
+                        刷新验证码
+                    </button>
+                </div>
+                <div class="input-group" style="margin-top:0.65rem;">
+                    <input id="loginCaptchaAnswer" name="captcha_answer" type="text" required class="custom-input" placeholder="请输入图片中的计算结果" autocomplete="off" inputmode="numeric">
+                </div>
             </div>
             <div class="auth-remember-row">
                 <label class="auth-remember-label" for="remember">
@@ -48,15 +56,17 @@
 </div>
 
 <script>
-function safeTurnstileReset() {
-    try {
-        if (window.turnstile && typeof window.turnstile.reset === 'function') {
-            window.turnstile.reset();
-        }
-    } catch (e) {
-        // ignore
+function refreshLoginCaptcha() {
+    const image = document.getElementById('loginCaptchaImage');
+    const answer = document.getElementById('loginCaptchaAnswer');
+    if (!image) return;
+    image.src = '/auth/captcha?purpose=login&t=' + Date.now();
+    if (answer) {
+        answer.value = '';
     }
 }
+
+document.getElementById('loginCaptchaRefresh').addEventListener('click', refreshLoginCaptcha);
 
 document.getElementById('loginForm').addEventListener('submit', async function (e) {
     e.preventDefault();
@@ -85,7 +95,7 @@ document.getElementById('loginForm').addEventListener('submit', async function (
             btn.disabled = false;
             btn.textContent = originalText;
         }
-        safeTurnstileReset();
+        refreshLoginCaptcha();
     } catch (err) {
         console.error(err);
         msgBox.textContent = '网络错误，请稍后重试';
@@ -93,7 +103,7 @@ document.getElementById('loginForm').addEventListener('submit', async function (
             btn.disabled = false;
             btn.textContent = originalText;
         }
-        safeTurnstileReset();
+        refreshLoginCaptcha();
     }
 });
 </script>

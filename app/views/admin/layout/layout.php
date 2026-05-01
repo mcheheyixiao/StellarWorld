@@ -500,7 +500,7 @@ $csrfTokenEscaped = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                             <?php if ($sd !== ''): ?>
                                 <p><?= htmlspecialchars($sd, ENT_QUOTES, 'UTF-8') ?></p>
                             <?php endif; ?>
-                            <?php if ($sk === 'whitelist_ignores_rate_limit'): ?>
+                            <?php if ($sk === 'whitelist_ignores_rate_limit' || $sk === 'email_domain_whitelist_enabled'): ?>
                                 <select name="settings[<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>]">
                                     <option value="0" <?= $sv === '1' ? '' : 'selected'; ?>>关闭（0）</option>
                                     <option value="1" <?= $sv === '1' ? 'selected' : ''; ?>>开启（1）</option>
@@ -509,6 +509,23 @@ $csrfTokenEscaped = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
                                 <input type="number" name="settings[<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>]" min="0" max="9999" step="1" value="<?= htmlspecialchars($sv, ENT_QUOTES, 'UTF-8') ?>" aria-label="<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>"
                                        >
                                 <span>0 表示不限制（非白名单 IP）</span>
+                            <?php elseif ($sk === 'email_code_expire_seconds'): ?>
+                                <input type="number" name="settings[<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>]" min="60" max="3600" step="1" value="<?= htmlspecialchars($sv, ENT_QUOTES, 'UTF-8') ?>" aria-label="<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>"
+                                       >
+                                <span>建议 300-900 秒。</span>
+                            <?php elseif ($sk === 'email_code_send_cooldown_seconds'): ?>
+                                <input type="number" name="settings[<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>]" min="30" max="3600" step="1" value="<?= htmlspecialchars($sv, ENT_QUOTES, 'UTF-8') ?>" aria-label="<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>"
+                                       >
+                                <span>同一邮箱两次发送之间的最短间隔。</span>
+                            <?php elseif ($sk === 'email_domain_whitelist'): ?>
+                                <textarea name="settings[<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>]" rows="4" aria-label="<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($sv, ENT_QUOTES, 'UTF-8') ?></textarea>
+                                <span>多个域名使用英文逗号分隔，例如 <code>qq.com,gmail.com,outlook.com</code>。</span>
+                            <?php elseif ($sk === 'audit_log_storage'): ?>
+                                <select name="settings[<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>]">
+                                    <option value="mysql" <?= $sv === 'mysql' ? 'selected' : ''; ?>>MySQL</option>
+                                    <option value="file" <?= $sv === 'file' ? 'selected' : ''; ?>>文件</option>
+                                    <option value="both" <?= $sv === 'both' ? 'selected' : ''; ?>>双写</option>
+                                </select>
                             <?php else: ?>
                                 <input type="text" name="settings[<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>]" value="<?= htmlspecialchars($sv, ENT_QUOTES, 'UTF-8') ?>" aria-label="<?= htmlspecialchars($sk, ENT_QUOTES, 'UTF-8') ?>"
                                        >

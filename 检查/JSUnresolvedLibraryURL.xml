@@ -1,0 +1,98 @@
+﻿<problems>
+<problem>
+  <file>file://$PROJECT_DIR$/app/views/auth/forgot_password.php</file>
+  <line>4</line>
+  <module>MinecraftWebsite[鏈€鍚嶿</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/views/auth/forgot_password.php" />
+  <problem_class id="JSUnresolvedLibraryURL" severity="WARNING" attribute_key="WARNING_ATTRIBUTES">HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</problem_class>
+  <description>HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</description>
+  <highlighted_element>/auth/captcha</highlighted_element>
+  <language>HTML</language>
+  <offset>21</offset>
+  <length>53</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/views/auth/login.php</file>
+  <line>4</line>
+  <module>MinecraftWebsite[鏈€鍚嶿</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/views/auth/login.php" />
+  <problem_class id="JSUnresolvedLibraryURL" severity="WARNING" attribute_key="WARNING_ATTRIBUTES">HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</problem_class>
+  <description>HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</description>
+  <highlighted_element>/auth/captcha</highlighted_element>
+  <language>HTML</language>
+  <offset>21</offset>
+  <length>53</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/views/auth/register.php</file>
+  <line>5</line>
+  <module>MinecraftWebsite[鏈€鍚嶿</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/views/auth/register.php" />
+  <problem_class id="JSUnresolvedLibraryURL" severity="WARNING" attribute_key="WARNING_ATTRIBUTES">HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</problem_class>
+  <description>HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</description>
+  <highlighted_element>/auth/captcha</highlighted_element>
+  <language>HTML</language>
+  <offset>21</offset>
+  <length>53</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/views/layouts/main.php</file>
+  <line>49</line>
+  <module>MinecraftWebsite[鏈€鍚嶿</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/views/layouts/main.php" />
+  <problem_class id="JSUnresolvedLibraryURL" severity="WARNING" attribute_key="WARNING_ATTRIBUTES">HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</problem_class>
+  <description>HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</description>
+  <highlighted_element>https://cdn.staticfile.net/MaterialDesign-Webfont/7.4.47/css/materialdesignicons.min.css</highlighted_element>
+  <language>HTML</language>
+  <offset>30</offset>
+  <length>88</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/views/layouts/main.php</file>
+  <line>50</line>
+  <module>MinecraftWebsite[鏈€鍚嶿</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/views/layouts/main.php" />
+  <problem_class id="JSUnresolvedLibraryURL" severity="WARNING" attribute_key="WARNING_ATTRIBUTES">HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</problem_class>
+  <description>HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</description>
+  <highlighted_element>https://cdn.staticfile.net/MaterialDesign-Webfont/7.4.47/css/materialdesignicons.min.css</highlighted_element>
+  <language>HTML</language>
+  <offset>43</offset>
+  <length>88</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/views/pages/player_profile.php</file>
+  <line>274</line>
+  <module>MinecraftWebsite[鏈€鍚嶿</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/views/pages/player_profile.php" />
+  <problem_class id="JSUnresolvedLibraryURL" severity="WARNING" attribute_key="WARNING_ATTRIBUTES">HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</problem_class>
+  <description>HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</description>
+  <highlighted_element>https://cdn.jsdelivr.net/npm/skinview3d@3.0.1/bundles/skinview3d.bundle.min.js</highlighted_element>
+  <language>HTML</language>
+  <offset>13</offset>
+  <length>78</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/views/pages/player_profile.php</file>
+  <line>275</line>
+  <module>MinecraftWebsite[鏈€鍚嶿</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/views/pages/player_profile.php" />
+  <problem_class id="JSUnresolvedLibraryURL" severity="WARNING" attribute_key="WARNING_ATTRIBUTES">HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</problem_class>
+  <description>HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</description>
+  <highlighted_element>https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js</highlighted_element>
+  <language>HTML</language>
+  <offset>13</offset>
+  <length>58</length>
+</problem>
+<problem>
+  <file>file://$PROJECT_DIR$/app/views/user/profile.php</file>
+  <line>833</line>
+  <module>MinecraftWebsite[鏈€鍚嶿</module>
+  <entry_point TYPE="file" FQNAME="file://$PROJECT_DIR$/app/views/user/profile.php" />
+  <problem_class id="JSUnresolvedLibraryURL" severity="WARNING" attribute_key="WARNING_ATTRIBUTES">HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</problem_class>
+  <description>HTTP 閾炬帴缂哄皯鏈湴瀛樺偍鐨勫簱</description>
+  <highlighted_element>https://unpkg.com/skinview3d@3.4.1/bundles/skinview3d.bundle.js</highlighted_element>
+  <language>HTML</language>
+  <offset>13</offset>
+  <length>63</length>
+</problem>
+</problems>

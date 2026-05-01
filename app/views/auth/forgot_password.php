@@ -1,7 +1,6 @@
 <div class="page-container">
     <div class="mc-glass-card fade-in w-full p-6 md:p-8">
         <h1 class="text-fusion-pixel mb-4 text-2xl text-white">找回密码</h1>
-        <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
         <form id="forgotForm" method="post" action="/forgot-password">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
             <div style="margin-bottom:1rem;">
@@ -12,8 +11,15 @@
                     我们会向该邮箱发送一封包含密码重置链接的邮件。
                 </small>
             </div>
-            <div style="margin-top:0.5rem;margin-bottom:0.5rem;display:flex;justify-content:center;">
-                <div class="cf-turnstile" data-sitekey="<?= htmlspecialchars((string)TURNSTILE_SITE_KEY, ENT_QUOTES, 'UTF-8') ?>"></div>
+            <div style="margin-bottom:1rem;">
+                <label for="forgotCaptchaAnswer">图形验证码</label>
+                <div style="margin-top:0.45rem;display:flex;flex-wrap:wrap;align-items:center;gap:0.75rem;">
+                    <img id="forgotCaptchaImage" src="/auth/captcha?purpose=forgot_password" alt="图形验证码" style="width:240px;height:64px;border-radius:0.85rem;border:1px solid rgba(103,232,249,.3);background:rgba(15,23,42,.9);object-fit:cover;">
+                    <button type="button" id="forgotCaptchaRefresh" class="auth-action-btn auth-action-btn--secondary rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-sm font-semibold text-slate-200 transition-all">
+                        刷新验证码
+                    </button>
+                </div>
+                <input id="forgotCaptchaAnswer" name="captcha_answer" type="text" required class="custom-input custom-input--no-icon mt-3 w-full" placeholder="请输入图片中的计算结果" autocomplete="off" inputmode="numeric">
             </div>
             <button type="submit" class="btn" style="width:100%;margin-top:0.5rem;border-radius:.75rem;background:rgba(14,165,233,.32);border:1px solid rgba(34,211,238,.4);color:#e0f2fe;">
                 发送重置链接
@@ -29,13 +35,14 @@
 <script>
 const AUTH_COOLDOWN_SECONDS = <?= (int)(defined('AUTH_ACTION_COOLDOWN') ? AUTH_ACTION_COOLDOWN : 60) ?>;
 
-function safeTurnstileReset() {
-    try {
-        if (window.turnstile && typeof window.turnstile.reset === 'function') {
-            window.turnstile.reset();
-        }
-    } catch (e) {
-        // ignore
+function refreshForgotCaptcha() {
+    const image = document.getElementById('forgotCaptchaImage');
+    const answer = document.getElementById('forgotCaptchaAnswer');
+    if (image) {
+        image.src = '/auth/captcha?purpose=forgot_password&t=' + Date.now();
+    }
+    if (answer) {
+        answer.value = '';
     }
 }
 
@@ -50,12 +57,13 @@ function startButtonCooldown(btn, originalText, seconds) {
             clearInterval(timer);
             btn.disabled = false;
             btn.textContent = originalText;
-            safeTurnstileReset();
             return;
         }
         btn.textContent = `重新发送 (${remain}s)`;
     }, 1000);
 }
+
+document.getElementById('forgotCaptchaRefresh').addEventListener('click', refreshForgotCaptcha);
 
 document.getElementById('forgotForm').addEventListener('submit', async function (e) {
     e.preventDefault();
@@ -90,7 +98,7 @@ document.getElementById('forgotForm').addEventListener('submit', async function 
             btn.disabled = false;
             btn.textContent = originalText;
         }
-        safeTurnstileReset();
+        refreshForgotCaptcha();
     } catch (err) {
         console.error(err);
         msgBox.textContent = '网络错误，请稍后重试';
@@ -98,7 +106,7 @@ document.getElementById('forgotForm').addEventListener('submit', async function 
             btn.disabled = false;
             btn.textContent = originalText;
         }
-        safeTurnstileReset();
+        refreshForgotCaptcha();
     }
 });
 </script>

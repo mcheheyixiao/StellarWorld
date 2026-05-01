@@ -17,8 +17,10 @@ $router->get('/', [HomeController::class, 'index']);
 // Auth pages
 $router->get('/auth/login', [AuthController::class, 'showLogin']);
 $router->get('/auth/register', [AuthController::class, 'showRegister']);
+$router->get('/auth/captcha', [AuthController::class, 'captcha']);
 $router->get('/auth/mua', [AuthController::class, 'muaRedirect']);
 $router->get('/auth/mua/callback', [AuthController::class, 'muaCallback']);
+$router->post('/auth/email-code/send', [AuthController::class, 'sendEmailCode']);
 $router->post('/auth/login', [AuthController::class, 'login']);
 $router->post('/auth/register', [AuthController::class, 'register']);
 $router->get('/auth/logout', [AuthController::class, 'logout']);

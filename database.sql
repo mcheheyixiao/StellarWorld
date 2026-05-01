@@ -110,13 +110,185 @@ CREATE TABLE IF NOT EXISTS registration_limits (
 
 CREATE TABLE IF NOT EXISTS email_verifications (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id INT UNSIGNED NOT NULL,
-    token VARCHAR(64) NOT NULL UNIQUE,
+    user_id INT UNSIGNED NULL,
+    token VARCHAR(64) NULL UNIQUE,
+    purpose VARCHAR(32) NOT NULL DEFAULT 'register',
+    email VARCHAR(255) NULL DEFAULT NULL,
+    code_hash VARCHAR(255) NULL DEFAULT NULL,
+    expires_at DATETIME NULL DEFAULT NULL,
+    attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    ip_hash CHAR(64) NOT NULL DEFAULT '',
+    user_agent_hash CHAR(64) NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL,
     used TINYINT(1) NOT NULL DEFAULT 0,
     used_at DATETIME NULL,
+    KEY idx_email_verifications_email_purpose_created (email, purpose, created_at),
     CONSTRAINT fk_email_verifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Safe upgrade for existing databases: allow pending email-code rows without a user yet
+SET @email_verifications_user_id_nullable := (
+    SELECT IS_NULLABLE
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'email_verifications'
+      AND COLUMN_NAME = 'user_id'
+    LIMIT 1
+);
+SET @alter_email_verifications_user_id_sql := IF(
+    @email_verifications_user_id_nullable = 'NO',
+    'ALTER TABLE email_verifications MODIFY COLUMN user_id INT UNSIGNED NULL',
+    'SELECT ''email_verifications.user_id already nullable'' AS message'
+);
+PREPARE stmt_alter_email_verifications_user_id FROM @alter_email_verifications_user_id_sql;
+EXECUTE stmt_alter_email_verifications_user_id;
+DEALLOCATE PREPARE stmt_alter_email_verifications_user_id;
+
+-- Safe upgrade for existing databases: allow NULL token for numeric email-code rows
+SET @email_verifications_token_nullable := (
+    SELECT IS_NULLABLE
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'email_verifications'
+      AND COLUMN_NAME = 'token'
+    LIMIT 1
+);
+SET @alter_email_verifications_token_sql := IF(
+    @email_verifications_token_nullable = 'NO',
+    'ALTER TABLE email_verifications MODIFY COLUMN token VARCHAR(64) NULL',
+    'SELECT ''email_verifications.token already nullable'' AS message'
+);
+PREPARE stmt_alter_email_verifications_token FROM @alter_email_verifications_token_sql;
+EXECUTE stmt_alter_email_verifications_token;
+DEALLOCATE PREPARE stmt_alter_email_verifications_token;
+
+SET @has_email_verifications_purpose := (
+    SELECT COUNT(*)
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'email_verifications'
+      AND COLUMN_NAME = 'purpose'
+);
+SET @add_email_verifications_purpose_sql := IF(
+    @has_email_verifications_purpose = 0,
+    'ALTER TABLE email_verifications ADD COLUMN purpose VARCHAR(32) NOT NULL DEFAULT ''register'' AFTER token',
+    'SELECT ''email_verifications.purpose already exists'' AS message'
+);
+PREPARE stmt_add_email_verifications_purpose FROM @add_email_verifications_purpose_sql;
+EXECUTE stmt_add_email_verifications_purpose;
+DEALLOCATE PREPARE stmt_add_email_verifications_purpose;
+
+SET @has_email_verifications_email := (
+    SELECT COUNT(*)
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'email_verifications'
+      AND COLUMN_NAME = 'email'
+);
+SET @add_email_verifications_email_sql := IF(
+    @has_email_verifications_email = 0,
+    'ALTER TABLE email_verifications ADD COLUMN email VARCHAR(255) NULL DEFAULT NULL AFTER purpose',
+    'SELECT ''email_verifications.email already exists'' AS message'
+);
+PREPARE stmt_add_email_verifications_email FROM @add_email_verifications_email_sql;
+EXECUTE stmt_add_email_verifications_email;
+DEALLOCATE PREPARE stmt_add_email_verifications_email;
+
+SET @has_email_verifications_code_hash := (
+    SELECT COUNT(*)
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'email_verifications'
+      AND COLUMN_NAME = 'code_hash'
+);
+SET @add_email_verifications_code_hash_sql := IF(
+    @has_email_verifications_code_hash = 0,
+    'ALTER TABLE email_verifications ADD COLUMN code_hash VARCHAR(255) NULL DEFAULT NULL AFTER email',
+    'SELECT ''email_verifications.code_hash already exists'' AS message'
+);
+PREPARE stmt_add_email_verifications_code_hash FROM @add_email_verifications_code_hash_sql;
+EXECUTE stmt_add_email_verifications_code_hash;
+DEALLOCATE PREPARE stmt_add_email_verifications_code_hash;
+
+SET @has_email_verifications_expires_at := (
+    SELECT COUNT(*)
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'email_verifications'
+      AND COLUMN_NAME = 'expires_at'
+);
+SET @add_email_verifications_expires_at_sql := IF(
+    @has_email_verifications_expires_at = 0,
+    'ALTER TABLE email_verifications ADD COLUMN expires_at DATETIME NULL DEFAULT NULL AFTER code_hash',
+    'SELECT ''email_verifications.expires_at already exists'' AS message'
+);
+PREPARE stmt_add_email_verifications_expires_at FROM @add_email_verifications_expires_at_sql;
+EXECUTE stmt_add_email_verifications_expires_at;
+DEALLOCATE PREPARE stmt_add_email_verifications_expires_at;
+
+SET @has_email_verifications_attempts := (
+    SELECT COUNT(*)
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'email_verifications'
+      AND COLUMN_NAME = 'attempts'
+);
+SET @add_email_verifications_attempts_sql := IF(
+    @has_email_verifications_attempts = 0,
+    'ALTER TABLE email_verifications ADD COLUMN attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER expires_at',
+    'SELECT ''email_verifications.attempts already exists'' AS message'
+);
+PREPARE stmt_add_email_verifications_attempts FROM @add_email_verifications_attempts_sql;
+EXECUTE stmt_add_email_verifications_attempts;
+DEALLOCATE PREPARE stmt_add_email_verifications_attempts;
+
+SET @has_email_verifications_ip_hash := (
+    SELECT COUNT(*)
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'email_verifications'
+      AND COLUMN_NAME = 'ip_hash'
+);
+SET @add_email_verifications_ip_hash_sql := IF(
+    @has_email_verifications_ip_hash = 0,
+    'ALTER TABLE email_verifications ADD COLUMN ip_hash CHAR(64) NOT NULL DEFAULT '''' AFTER attempts',
+    'SELECT ''email_verifications.ip_hash already exists'' AS message'
+);
+PREPARE stmt_add_email_verifications_ip_hash FROM @add_email_verifications_ip_hash_sql;
+EXECUTE stmt_add_email_verifications_ip_hash;
+DEALLOCATE PREPARE stmt_add_email_verifications_ip_hash;
+
+SET @has_email_verifications_user_agent_hash := (
+    SELECT COUNT(*)
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'email_verifications'
+      AND COLUMN_NAME = 'user_agent_hash'
+);
+SET @add_email_verifications_user_agent_hash_sql := IF(
+    @has_email_verifications_user_agent_hash = 0,
+    'ALTER TABLE email_verifications ADD COLUMN user_agent_hash CHAR(64) NOT NULL DEFAULT '''' AFTER ip_hash',
+    'SELECT ''email_verifications.user_agent_hash already exists'' AS message'
+);
+PREPARE stmt_add_email_verifications_user_agent_hash FROM @add_email_verifications_user_agent_hash_sql;
+EXECUTE stmt_add_email_verifications_user_agent_hash;
+DEALLOCATE PREPARE stmt_add_email_verifications_user_agent_hash;
+
+SET @has_idx_email_verifications_email_purpose_created := (
+    SELECT COUNT(*)
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'email_verifications'
+      AND INDEX_NAME = 'idx_email_verifications_email_purpose_created'
+);
+SET @add_idx_email_verifications_email_purpose_created_sql := IF(
+    @has_idx_email_verifications_email_purpose_created = 0,
+    'ALTER TABLE email_verifications ADD INDEX idx_email_verifications_email_purpose_created (email, purpose, created_at)',
+    'SELECT ''idx_email_verifications_email_purpose_created already exists'' AS message'
+);
+PREPARE stmt_add_idx_email_verifications_email_purpose_created FROM @add_idx_email_verifications_email_purpose_created_sql;
+EXECUTE stmt_add_idx_email_verifications_email_purpose_created;
+DEALLOCATE PREPARE stmt_add_idx_email_verifications_email_purpose_created;
 
 -- 新增：密码重置记录表
 CREATE TABLE IF NOT EXISTS password_resets (
@@ -174,8 +346,25 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
     `action` VARCHAR(50) NOT NULL COMMENT '如 LOGIN, REGISTER, API_AUTH',
     `ip_address` VARCHAR(45) NOT NULL,
     `details` JSON NULL COMMENT '详细变更内容或错误信息',
+    `request_id` VARCHAR(32) NULL DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET @has_audit_logs_request_id := (
+    SELECT COUNT(*)
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'audit_logs'
+      AND COLUMN_NAME = 'request_id'
+);
+SET @add_audit_logs_request_id_sql := IF(
+    @has_audit_logs_request_id = 0,
+    'ALTER TABLE audit_logs ADD COLUMN request_id VARCHAR(32) NULL DEFAULT NULL AFTER details',
+    'SELECT ''audit_logs.request_id already exists'' AS message'
+);
+PREPARE stmt_add_audit_logs_request_id FROM @add_audit_logs_request_id_sql;
+EXECUTE stmt_add_audit_logs_request_id;
+DEALLOCATE PREPARE stmt_add_audit_logs_request_id;
 
 CREATE TABLE IF NOT EXISTS player_stats (
     mc_uuid VARCHAR(64) NOT NULL,
@@ -353,6 +542,14 @@ CREATE TABLE IF NOT EXISTS ip_whitelist (
 INSERT INTO site_settings (setting_key, setting_value, description) VALUES
     ('register_ip_limit', '2', '同一 IP 24 小时内允许注册的最大账号数（白名单 IP 不受此限制）'),
     ('whitelist_ignores_rate_limit', '0', '设为 1 时：白名单 IP 同时无视 checkRateLimit、登录失败锁定、会话冷却等限流')
+ON DUPLICATE KEY UPDATE setting_key = setting_key;
+
+INSERT INTO site_settings (setting_key, setting_value, description) VALUES
+    ('email_domain_whitelist_enabled', '1', '是否启用邮箱域名白名单：1启用，0关闭'),
+    ('email_domain_whitelist', 'qq.com,foxmail.com,163.com,126.com,gmail.com,outlook.com,hotmail.com,icloud.com,yahoo.com', '允许注册的邮箱域名，逗号分隔'),
+    ('email_code_expire_seconds', '600', '邮箱验证码有效期秒数'),
+    ('email_code_send_cooldown_seconds', '60', '同一邮箱发送验证码冷却秒数'),
+    ('audit_log_storage', 'mysql', '审计日志存储模式：mysql / file / both')
 ON DUPLICATE KEY UPDATE setting_key = setting_key;
 
 -- Realtime status history snapshots (WS primary source, DB fallback)

@@ -8,6 +8,7 @@ use Core\ApiCode;
 use Core\ApiResponse;
 use Core\BaiduSEO;
 use Core\Database;
+use Core\EmailDomainWhitelist;
 use Core\ImageProcessor;
 use Core\MinecraftUuid;
 use Model\Checkin;
@@ -714,6 +715,25 @@ class AdminController extends Controller
                 $val = (string)$n;
             } elseif ($key === 'whitelist_ignores_rate_limit') {
                 $val = $val === '1' ? '1' : '0';
+            } elseif ($key === 'email_domain_whitelist_enabled') {
+                $val = $val === '1' ? '1' : '0';
+            } elseif ($key === 'email_domain_whitelist') {
+                $val = implode(',', EmailDomainWhitelist::normalize($val));
+            } elseif ($key === 'email_code_expire_seconds') {
+                if (!ctype_digit($val)) {
+                    continue;
+                }
+                $val = (string)max(60, min(3600, (int)$val));
+            } elseif ($key === 'email_code_send_cooldown_seconds') {
+                if (!ctype_digit($val)) {
+                    continue;
+                }
+                $val = (string)max(30, min(3600, (int)$val));
+            } elseif ($key === 'audit_log_storage') {
+                $val = strtolower($val);
+                if (!in_array($val, ['mysql', 'file', 'both'], true)) {
+                    continue;
+                }
             }
             $upd->execute([':v' => $val, ':k' => $key]);
         }

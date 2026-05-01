@@ -206,19 +206,6 @@
     transform: translate(-50%, -55%) scale(1);
   }
 
-  /* 登录页：Turnstile 的 iframe 常带高层级且可能溢出，会挡住下方自定义 checkbox；限制验证码区域并抬高「保持登录」层 */
-  .cf-turnstile-shell {
-    position: relative;
-    z-index: 0;
-    isolation: isolate;
-    min-height: 65px;
-    margin: 0.5rem 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-  }
-
   .auth-remember-row {
     position: relative;
     z-index: 100;

@@ -12,9 +12,27 @@ define('DB_NAME', getenv('DB_NAME') ?: 'mc_web');
 define('DB_USER', getenv('DB_USER') ?: 'mc_web');
 define('DB_PASS', getenv('DB_PASS') ?: '');
 
-//TurnStile
-define('TURNSTILE_SITE_KEY', getenv('TURNSTILE_SITE_KEY') ?: '');
-define('TURNSTILE_SECRET_KEY', getenv('TURNSTILE_SECRET_KEY') ?: '');
+// Self-hosted auth verification defaults
+define('AUTH_CAPTCHA_EXPIRE_SECONDS', max(60, (int)(getenv('CAPTCHA_EXPIRE_SECONDS') ?: 300)));
+define('AUTH_CAPTCHA_REFRESH_COOLDOWN_SECONDS', max(1, (int)(getenv('CAPTCHA_REFRESH_COOLDOWN_SECONDS') ?: 3)));
+define('AUTH_CAPTCHA_REFRESH_LIMIT_WINDOW_SECONDS', max(60, (int)(getenv('CAPTCHA_REFRESH_LIMIT_WINDOW_SECONDS') ?: 300)));
+define('AUTH_CAPTCHA_REFRESH_LIMIT_COUNT', max(1, (int)(getenv('CAPTCHA_REFRESH_LIMIT_COUNT') ?: 20)));
+
+define('DEFAULT_EMAIL_DOMAIN_WHITELIST_ENABLED', getenv('EMAIL_DOMAIN_WHITELIST_ENABLED') !== false
+    ? (trim((string)getenv('EMAIL_DOMAIN_WHITELIST_ENABLED')) === '1' ? '1' : '0')
+    : '1');
+define('DEFAULT_EMAIL_DOMAIN_WHITELIST', getenv('EMAIL_DOMAIN_WHITELIST') ?: 'qq.com,foxmail.com,163.com,126.com,gmail.com,outlook.com,hotmail.com,icloud.com,yahoo.com');
+define('DEFAULT_EMAIL_CODE_EXPIRE_SECONDS', max(60, (int)(getenv('EMAIL_CODE_EXPIRE_SECONDS') ?: 600)));
+define('DEFAULT_EMAIL_CODE_SEND_COOLDOWN_SECONDS', max(30, (int)(getenv('EMAIL_CODE_SEND_COOLDOWN_SECONDS') ?: 60)));
+define('EMAIL_CODE_IP_HOURLY_LIMIT', max(1, (int)(getenv('EMAIL_CODE_IP_HOURLY_LIMIT') ?: 10)));
+define('EMAIL_CODE_EMAIL_DAILY_LIMIT', max(1, (int)(getenv('EMAIL_CODE_EMAIL_DAILY_LIMIT') ?: 10)));
+
+$_auditLogStorage = strtolower(trim((string)(getenv('AUDIT_LOG_STORAGE') ?: 'mysql')));
+if (!in_array($_auditLogStorage, ['mysql', 'file', 'both'], true)) {
+    $_auditLogStorage = 'mysql';
+}
+define('DEFAULT_AUDIT_LOG_STORAGE', $_auditLogStorage);
+unset($_auditLogStorage);
 
 // Auth rate-limit cooldown in seconds
 define('AUTH_ACTION_COOLDOWN', max(1, (int)(getenv('AUTH_ACTION_COOLDOWN') ?: 60)));

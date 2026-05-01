@@ -4,7 +4,10 @@ declare(strict_types=1);
 namespace Controller;
 
 use Core\AuthMePassword;
+use Core\CaptchaService;
 use Core\Controller;
+use Core\EmailCodeService;
+use Core\EmailDomainWhitelist;
 use Core\MUAFetcher;
 use Core\RconClient;
 use Core\MinecraftUuid;
@@ -17,12 +20,16 @@ class AuthController extends Controller
 {
     private User $users;
     private AuditModel $audit;
+    private CaptchaService $captchaService;
+    private EmailCodeService $emailCodeService;
 
     public function __construct()
     {
         parent::__construct();
         $this->users = new User();
         $this->audit = new AuditModel();
+        $this->captchaService = new CaptchaService();
+        $this->emailCodeService = new EmailCodeService();
     }
 
     public function showLogin(): string
@@ -46,10 +53,148 @@ class AuthController extends Controller
         }
 
         $this->generateCsrfToken();
+        $oauthPendingEmail = (string)($_SESSION['oauth_pending_user']['email'] ?? '');
         return $this->render('auth/register', [
             'title' => '玩家注册',
-            'oauthPendingEmail' => (string)($_SESSION['oauth_pending_user']['email'] ?? ''),
+            'oauthPendingEmail' => $oauthPendingEmail,
+            'registerRequiresEmailCode' => $oauthPendingEmail === '',
+            'registerEmailCodeCooldownSeconds' => max(30, (int)$this->getSiteSetting('email_code_send_cooldown_seconds', (string)DEFAULT_EMAIL_CODE_SEND_COOLDOWN_SECONDS)),
         ]);
+    }
+
+    public function sendEmailCode(): void
+    {
+        $this->validateCsrfToken();
+        header('Content-Type: application/json; charset=utf-8');
+
+        $ip = $this->getClientIp();
+        $isWhite = $this->isIpWhitelisted($ip);
+        $block = !$isWhite ? $this->findIpBlacklistMatch($ip) : null;
+        if ($block !== null) {
+            try {
+                $this->audit->logAction(null, 'IP_BANNED_BLOCKED', $ip, [
+                    'route' => '/auth/email-code/send',
+                    'reason' => $block['reason'],
+                    'matched_rule' => $block['matched_rule'],
+                ]);
+            } catch (\Throwable $e) {
+            }
+            $this->json(['success' => false, 'message' => '访问被拒绝'], 403);
+            return;
+        }
+
+        if (!$this->whitelistSkipsRateLimits($isWhite)) {
+            $this->checkRateLimit('auth_email_code|' . $ip, 10, 3600);
+        }
+
+        $email = trim((string)($_POST['email'] ?? ''));
+        $purpose = trim((string)($_POST['purpose'] ?? 'register'));
+        $captchaAnswer = trim((string)($_POST['captcha_answer'] ?? ''));
+        $maskedEmail = EmailCodeService::maskEmail($email);
+
+        if ($email === '' || $captchaAnswer === '') {
+            $this->json(['success' => false, 'message' => '参数不完整'], 400);
+            return;
+        }
+
+        if ($purpose !== 'register') {
+            $this->json(['success' => false, 'message' => '不支持的验证码用途'], 400);
+            return;
+        }
+
+        if (!$this->captchaService->verify($captchaAnswer, 'email_code')) {
+            try {
+                $this->audit->logAction(null, 'EMAIL_CODE_CAPTCHA_FAILED', $ip, [
+                    'email_mask' => $maskedEmail,
+                    'email_hash' => EmailCodeService::hashIdentifier($email),
+                    'purpose' => $purpose,
+                ]);
+            } catch (\Throwable $e) {
+            }
+            $this->json(['success' => false, 'message' => '图形验证码错误或已失效'], 403);
+            return;
+        }
+
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            $this->json(['success' => false, 'message' => '邮箱格式不正确'], 400);
+            return;
+        }
+
+        if (!$this->isEmailAllowed($email)) {
+            $this->json(['success' => false, 'message' => '暂不支持该邮箱域名'], 400);
+            return;
+        }
+
+        if ($this->users->findByEmail($email)) {
+            $this->json(['success' => false, 'message' => '该邮箱已被注册'], 400);
+            return;
+        }
+
+        try {
+            $this->emailCodeService->sendCode(
+                $email,
+                'register',
+                $ip,
+                (string)($_SERVER['HTTP_USER_AGENT'] ?? '')
+            );
+            $this->audit->logAction(null, 'EMAIL_CODE_SENT', $ip, [
+                'email_mask' => $maskedEmail,
+                'email_hash' => EmailCodeService::hashIdentifier($email),
+                'purpose' => $purpose,
+            ]);
+            $this->json(['success' => true, 'message' => '验证码已发送，请查收邮箱'], 200);
+        } catch (\RuntimeException $e) {
+            try {
+                $this->audit->logAction(null, 'EMAIL_CODE_SEND_BLOCKED', $ip, [
+                    'email_mask' => $maskedEmail,
+                    'email_hash' => EmailCodeService::hashIdentifier($email),
+                    'purpose' => $purpose,
+                    'reason' => $e->getMessage(),
+                ]);
+            } catch (\Throwable $ignored) {
+            }
+
+            $message = $e->getMessage();
+            $status = str_contains($message, '频繁') || str_contains($message, '上限') ? 429 : 400;
+            $this->json(['success' => false, 'message' => $message], $status);
+        } catch (\Throwable $e) {
+            try {
+                $this->audit->logAction(null, 'EMAIL_CODE_SEND_ERROR', $ip, [
+                    'email_mask' => $maskedEmail,
+                    'email_hash' => EmailCodeService::hashIdentifier($email),
+                    'purpose' => $purpose,
+                ]);
+            } catch (\Throwable $ignored) {
+            }
+
+            $this->json(['success' => false, 'message' => '系统邮件服务异常，请稍后重试'], 500);
+        }
+    }
+
+    public function captcha(): void
+    {
+        $purpose = 'login';
+
+        try {
+            $purpose = $this->resolveCaptchaPurpose((string)($_GET['purpose'] ?? 'login'));
+            $issued = $this->captchaService->issue($purpose, $this->getClientIp());
+
+            http_response_code(200);
+            header('Content-Type: image/svg+xml; charset=utf-8');
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Pragma: no-cache');
+            header('Expires: 0');
+            echo $issued['svg'];
+            exit;
+        } catch (\Throwable $e) {
+            http_response_code(429);
+            header('Content-Type: image/svg+xml; charset=utf-8');
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Pragma: no-cache');
+            header('Expires: 0');
+            echo $this->buildCaptchaErrorSvg('captcha refresh limited');
+            exit;
+        }
     }
 
     public function muaRedirect(): void
@@ -178,14 +323,19 @@ class AuthController extends Controller
             return;
         }
 
-        // === 新增：Turnstile 人机验证（找回密码强制） ===
-        $tsResp = trim((string)($_POST['cf-turnstile-response'] ?? ''));
-        if ($tsResp === '' || !$this->verifyTurnstile($tsResp, $ip)) {
+        $captchaAnswer = trim((string)($_POST['captcha_answer'] ?? ''));
+        if ($captchaAnswer === '' || !$this->captchaService->verify($captchaAnswer, 'forgot_password')) {
+            try {
+                $this->audit->logAction(null, 'PASSWORD_RESET_CAPTCHA_FAILED', $ip, [
+                    'email_mask' => EmailCodeService::maskEmail($email),
+                    'email_hash' => EmailCodeService::hashIdentifier($email),
+                ]);
+            } catch (\Throwable $e) {
+            }
             $this->json(['success' => false, 'message' => '人机验证失败，请重试'], 403);
             return;
         }
 
-        // === 新增：Session 轻量级冷却限流（无数据库）===
         if (!$this->whitelistSkipsRateLimits($isWhite)) {
             $cooldown = defined('AUTH_ACTION_COOLDOWN') ? (int)AUTH_ACTION_COOLDOWN : 60;
             $last = isset($_SESSION['last_auth_action']) ? (int)$_SESSION['last_auth_action'] : 0;
@@ -197,6 +347,13 @@ class AuthController extends Controller
 
         $user = $this->users->findByEmail($email);
         if (!$user) {
+            try {
+                $this->audit->logAction(null, 'PASSWORD_RESET_EMAIL_NOT_FOUND', $ip, [
+                    'email_mask' => EmailCodeService::maskEmail($email),
+                    'email_hash' => EmailCodeService::hashIdentifier($email),
+                ]);
+            } catch (\Throwable $e) {
+            }
             $this->json(['success' => false, 'message' => '该邮箱未注册'], 404);
             return;
         }
@@ -286,11 +443,25 @@ class AuthController extends Controller
             $mail->Body    = $body;
 
             $mail->send();
+            try {
+                $this->audit->logAction((int)($user['id'] ?? 0) ?: null, 'PASSWORD_RESET_LINK_SENT', $ip, [
+                    'email_mask' => EmailCodeService::maskEmail($email),
+                    'email_hash' => EmailCodeService::hashIdentifier($email),
+                ]);
+            } catch (\Throwable $e) {
+            }
 
             // === 新增：找回密码成功后写入冷却时间 ===
             $_SESSION['last_auth_action'] = time();
             $this->json(['success' => true, 'message' => '重置链接已发送，请查收邮箱']);
         } catch (\Throwable $e) {
+            try {
+                $this->audit->logAction((int)($user['id'] ?? 0) ?: null, 'PASSWORD_RESET_LINK_ERROR', $ip, [
+                    'email_mask' => EmailCodeService::maskEmail($email),
+                    'email_hash' => EmailCodeService::hashIdentifier($email),
+                ]);
+            } catch (\Throwable $ignored) {
+            }
             if (APP_ENV === 'development') {
                 $this->json(['success' => false, 'message' => '系统错误: ' . $e->getMessage()], 500);
             } else {
@@ -395,6 +566,14 @@ class AuthController extends Controller
 
         $this->clearRememberMeCookie();
         $this->regenerateSessionIdSafely();
+        try {
+            $user = $this->users->findByEmail($email);
+            $this->audit->logAction(is_array($user) && isset($user['id']) ? (int)$user['id'] : null, 'PASSWORD_RESET_COMPLETED', $ip, [
+                'email_mask' => EmailCodeService::maskEmail($email),
+                'email_hash' => EmailCodeService::hashIdentifier($email),
+            ]);
+        } catch (\Throwable $e) {
+        }
 
         $this->json(['success' => true, 'message' => '密码已更新，请使用新密码登录']);
     }
@@ -440,9 +619,14 @@ class AuthController extends Controller
             return;
         }
 
-        // === 新增：Turnstile 人机验证（登录强制，移除旧版兼容）===
-        $tsResp = trim((string)($_POST['cf-turnstile-response'] ?? ''));
-        if ($tsResp === '' || !$this->verifyTurnstile($tsResp, $ip)) {
+        $captchaAnswer = trim((string)($_POST['captcha_answer'] ?? ''));
+        if ($captchaAnswer === '' || !$this->captchaService->verify($captchaAnswer, 'login')) {
+            try {
+                $this->audit->logAction(null, 'LOGIN_CAPTCHA_FAILED', $ip, [
+                    'username' => $username,
+                ]);
+            } catch (\Throwable $e) {
+            }
             $this->json(['success' => false, 'message' => '人机验证失败，请重试'], 403);
             return;
         }
@@ -455,6 +639,12 @@ class AuthController extends Controller
         $user = $this->users->findByUsername($username);
         if (!$user || !AuthMePassword::verify($passwordRaw, (string)$user['password_hash'])) {
             $this->recordLoginAttempt($ip, $username, false);
+            try {
+                $this->audit->logAction(null, 'LOGIN_FAILED', $ip, [
+                    'username' => $username,
+                ]);
+            } catch (\Throwable $e) {
+            }
             $this->json(['success' => false, 'message' => '用户名或密码错误'], 401);
             return;
         }
@@ -553,7 +743,8 @@ class AuthController extends Controller
         $username = trim((string)($_POST['username'] ?? ''));
         $email = trim((string)($_POST['email'] ?? ''));
         $passwordRaw = (string)($_POST['password'] ?? '');
-        $turnstileResponse = trim((string)($_POST['cf-turnstile-response'] ?? ''));
+        $captchaAnswer = trim((string)($_POST['captcha_answer'] ?? ''));
+        $emailCode = trim((string)($_POST['email_code'] ?? ''));
         $mcUuid = trim((string)($_POST['mc_uuid'] ?? '')); // legacy support
         $mcName = trim((string)($_POST['mc_name'] ?? '')); // legacy support
         $mcUsername = trim((string)($_POST['mc_username'] ?? ''));
@@ -568,7 +759,6 @@ class AuthController extends Controller
             return;
         }
 
-        // === 新增：Session 轻量级冷却限流（无数据库）===
         if (!$this->whitelistSkipsRateLimits($isWhite)) {
             $cooldown = defined('AUTH_ACTION_COOLDOWN') ? (int)AUTH_ACTION_COOLDOWN : 60;
             $last = isset($_SESSION['last_auth_action']) ? (int)$_SESSION['last_auth_action'] : 0;
@@ -578,8 +768,21 @@ class AuthController extends Controller
             }
         }
 
-        if ($turnstileResponse === '' || !$this->verifyTurnstile($turnstileResponse, $ip)) {
+        if ($captchaAnswer === '' || !$this->captchaService->verify($captchaAnswer, 'register')) {
+            try {
+                $this->audit->logAction(null, 'REGISTER_CAPTCHA_FAILED', $ip, [
+                    'email_mask' => EmailCodeService::maskEmail($email),
+                    'email_hash' => EmailCodeService::hashIdentifier($email),
+                    'username' => $username,
+                ]);
+            } catch (\Throwable $e) {
+            }
             $this->json(['success' => false, 'message' => '人机验证失败，请重试'], 403);
+            return;
+        }
+
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            $this->json(['success' => false, 'message' => '邮箱格式不正确'], 400);
             return;
         }
 
@@ -607,6 +810,26 @@ class AuthController extends Controller
             return;
         }
 
+        if (!$isMuaPending) {
+            if ($emailCode === '') {
+                $this->json(['success' => false, 'message' => '请先发送并填写邮箱验证码'], 400);
+                return;
+            }
+
+            if (!$this->emailCodeService->consumeCode($email, $emailCode, 'register')) {
+                try {
+                    $this->audit->logAction(null, 'REGISTER_EMAIL_CODE_FAILED', $ip, [
+                        'email_mask' => EmailCodeService::maskEmail($email),
+                        'email_hash' => EmailCodeService::hashIdentifier($email),
+                    ]);
+                } catch (\Throwable $e) {
+                }
+
+                $this->json(['success' => false, 'message' => '邮箱验证码错误或已失效'], 400);
+                return;
+            }
+        }
+
         // 使用 AuthMe 原生 SHA256 算法生成哈希
         $hash = AuthMePassword::hash($passwordRaw);
 
@@ -616,7 +839,7 @@ class AuthController extends Controller
             'password_hash' => $hash,
             'role' => 'player',
             'status' => 'active',
-            'email_verified' => $isMuaPending ? 1 : 0,
+            'email_verified' => 1,
             'mua_sub' => $isMuaPending ? (string)$pendingOAuth['sub'] : null,
         ]);
 
@@ -626,7 +849,7 @@ class AuthController extends Controller
                 $userId,
                 'REGISTER',
                 $ip,
-                ['username' => $username, 'email' => $email, 'success' => true]
+                ['username' => $username, 'email_mask' => EmailCodeService::maskEmail($email), 'email_hash' => EmailCodeService::hashIdentifier($email), 'success' => true]
             );
         } catch (\Throwable $e) {
             // 忽略审计失败，避免影响注册
@@ -653,19 +876,8 @@ class AuthController extends Controller
             return;
         }
 
-        try {
-            $this->sendVerificationEmail($userId, $email);
-            // === 新增：注册成功（发送验证邮件后）写入冷却时间 ===
-            $_SESSION['last_auth_action'] = time();
-            $this->json(['success' => true, 'message' => '注册成功，请查收邮箱完成验证']);
-        } catch (\Exception $e) {
-            // 仅在开发模式显示真实原因，生产环境模糊提示
-            if (APP_ENV === 'development') {
-                $this->json(['success' => false, 'message' => '邮件发送失败: ' . $e->getMessage()], 500);
-            } else {
-                $this->json(['success' => false, 'message' => '系统邮件服务异常，请联系管理员'], 500);
-            }
-        }
+        $_SESSION['last_auth_action'] = time();
+        $this->json(['success' => true, 'message' => '注册成功，邮箱已验证，现在可以直接登录']);
     }
 
     public function logout(): void
@@ -739,27 +951,12 @@ class AuthController extends Controller
 
     private function isEmailAllowed(string $email): bool
     {
-        $domain = strtolower((string)substr(strrchr($email, '@'), 1));
-        if ($domain === '') {
-            return false;
-        }
+        $enabled = $this->getSiteSetting('email_domain_whitelist_enabled', DEFAULT_EMAIL_DOMAIN_WHITELIST_ENABLED) === '1';
+        $allowed = EmailDomainWhitelist::normalize(
+            $this->getSiteSetting('email_domain_whitelist', DEFAULT_EMAIL_DOMAIN_WHITELIST)
+        );
 
-        // 允许的主流邮箱白名单，可在部署时扩展
-        $allowed = [
-            'qq.com',
-            '163.com',
-            '126.com',
-            'yeah.net',
-            'gmail.com',
-            'outlook.com',
-            'hotmail.com',
-            'live.com',
-            'proton.me',
-        ];
-
-        // 预留：可在此加入常见临时邮箱黑名单逻辑
-
-        return in_array($domain, $allowed, true);
+        return EmailDomainWhitelist::isAllowed($email, $enabled, $allowed);
     }
 
     private function isRegistrationLimited(string $ip, bool $isWhitelisted): bool
@@ -828,148 +1025,30 @@ class AuthController extends Controller
         ]);
     }
 
-    private function sendVerificationEmail(int $userId, string $email): void
+    private function resolveCaptchaPurpose(string $purpose): string
     {
-        $db = \Core\Database::connection();
-        $token = bin2hex(random_bytes(16));
-
-        $stmt = $db->prepare('
-            INSERT INTO email_verifications (user_id, token, created_at, used)
-            VALUES (:user_id, :token, NOW(), 0)
-        ');
-        $stmt->execute([
-            ':user_id' => $userId,
-            ':token' => $token,
-        ]);
-
-        $verifyUrl = sprintf('%s://%s/auth/verify?token=%s',
-            isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http',
-            $_SERVER['HTTP_HOST'] ?? 'localhost',
-            urlencode($token)
-        );
-        
-        $subject = '繁星World 账号邮箱验证';
-        $uStmt = $db->prepare('SELECT username FROM users WHERE id = :id LIMIT 1');
-        $uStmt->execute([':id' => $userId]);
-        $uRow = $uStmt->fetch();
-        $username = '';
-        if ($uRow && isset($uRow['username'])) {
-            $username = trim((string)$uRow['username']);
-        }
-        if ($username === '') {
-            $username = '玩家';
+        $normalized = strtolower(trim($purpose));
+        $allowed = ['login', 'register', 'forgot_password', 'email_code'];
+        if (!in_array($normalized, $allowed, true)) {
+            throw new \RuntimeException('Unsupported captcha purpose');
         }
 
-        // TODO: 请将此处的 LOGO_URL 替换为您真实的图片链接
-        $template = '<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"></head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
-<table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 10px;background:#0f172a;"><tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#111827;border-radius:14px;overflow:hidden;border:1px solid #1f2937;">
-<tr><td align="center" style="padding:30px 20px;background:#020617;">
-<img src="LOGO_URL" width="80" style="display:block;margin-bottom:10px;">
-<h2 style="margin:0;font-weight:600;color:#38bdf8;">SERVER_NAME</h2>
-</td></tr>
-<tr><td style="padding:40px 35px;text-align:center;">
-<h1 style="margin-top:0;font-size:24px;color:#ffffff;">欢迎加入服务器 🎮</h1>
-<p style="color:#cbd5f5;font-size:15px;line-height:1.6;">你好 <b>USERNAME</b>，<br>感谢你注册我们的 Minecraft 服务器网站。<br>请点击下面按钮验证你的邮箱。</p>
-<table cellpadding="0" cellspacing="0" align="center" style="margin-top:30px;"><tr><td align="center" bgcolor="#2563eb" style="border-radius:8px;">
-<a href="VERIFY_LINK" style="display:inline-block;padding:14px 30px;color:#ffffff;font-weight:bold;text-decoration:none;font-size:16px;">验证邮箱</a>
-</td></tr></table>
-<p style="margin-top:30px;color:#94a3b8;font-size:13px;">如果按钮无法点击，请复制下面链接到浏览器：</p>
-<p style="word-break:break-all;color:#38bdf8;font-size:13px;">VERIFY_LINK</p>
-</td></tr>
-<tr><td style="padding:25px;text-align:center;background:#020617;color:#64748b;font-size:12px;">© 2026 SERVER_NAME<br>Minecraft Server Network</td></tr>
-</table></td></tr></table></body></html>';
-
-        $body = str_replace(
-            ['LOGO_URL', 'SERVER_NAME', 'USERNAME', 'VERIFY_LINK'],
-            ['https://www.stellarvan.cn/images/logo.png', '繁星World', htmlspecialchars($username, ENT_QUOTES, 'UTF-8'), htmlspecialchars($verifyUrl, ENT_QUOTES, 'UTF-8')],
-            $template
-        );
-
-        $mail = new PHPMailer(true);
-        
-        // 仅开发模式打印 SMTP 握手底层日志
-        if (APP_ENV === 'development') {
-            $mail->SMTPDebug = 2;
-            $mail->Debugoutput = function($str, $level) {
-                error_log("SMTP 调试日志: $str");
-            };
-        }
-
-        try {
-            // 服务器配置
-            $mail->isSMTP();
-            $mail->Host       = SMTP_HOST;
-            $mail->SMTPAuth   = true;
-            $mail->Username   = SMTP_USER;
-            $mail->Password   = SMTP_PASS;
-            // 自动根据端口判断加密方式（465使用SSL，587使用TLS）
-            $mail->SMTPSecure = (SMTP_PORT === 465) ? PHPMailer::ENCRYPTION_SMTPS : PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port       = SMTP_PORT;
-            $mail->CharSet    = 'UTF-8';
-
-            // 发件人与收件人
-            $mail->setFrom(SMTP_FROM_EMAIL, '繁星World');
-            $mail->addAddress($email);
-
-            // 邮件内容
-            $mail->isHTML(true);
-            $mail->Subject = $subject;
-            $mail->Body    = $body;
-
-            $mail->send();
-        } catch (Exception $e) {
-            throw new \Exception($mail->ErrorInfo);
-        }
+        return $normalized;
     }
 
-    private function verifyTurnstile(string $response, string $ip): bool
+    private function buildCaptchaErrorSvg(string $message): string
     {
-        $secret = defined('TURNSTILE_SECRET_KEY')
-            ? (string)TURNSTILE_SECRET_KEY
-            : (string)(getenv('TURNSTILE_SECRET_KEY') ?: '');
-        if ($secret === '') {
-            return APP_ENV === 'development';
-        }
+        $escapedMessage = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
 
-        $payload = http_build_query([
-            'secret' => $secret,
-            'response' => $response,
-            'remoteip' => $ip,
-        ]);
-
-        // 优先使用 curl（更稳定）；否则退化到 file_get_contents
-        if (function_exists('curl_init')) {
-            $ch = curl_init('https://challenges.cloudflare.com/turnstile/v0/siteverify');
-            curl_setopt_array($ch, [
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => $payload,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_CONNECTTIMEOUT => 3,
-                CURLOPT_TIMEOUT => 5,
-                CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
-            ]);
-            $resp = curl_exec($ch);
-            curl_close($ch);
-        } else {
-            $context = stream_context_create([
-                'http' => [
-                    'method' => 'POST',
-                    'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
-                    'content' => $payload,
-                    'timeout' => 5,
-                ],
-            ]);
-            $resp = @file_get_contents('https://challenges.cloudflare.com/turnstile/v0/siteverify', false, $context);
-        }
-
-        if (!is_string($resp) || $resp === '') {
-            return false;
-        }
-        $data = json_decode($resp, true);
-        return is_array($data) && !empty($data['success']);
+        return <<<SVG
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="64" viewBox="0 0 240 64" role="img" aria-label="captcha unavailable">
+  <rect width="240" height="64" rx="12" fill="#0f172a"/>
+  <rect x="1" y="1" width="238" height="62" rx="11" fill="none" stroke="#fda4af" stroke-opacity="0.35"/>
+  <text x="120" y="30" text-anchor="middle" fill="#fecdd3" font-size="15" font-family="Arial, Helvetica, sans-serif">captcha unavailable</text>
+  <text x="120" y="48" text-anchor="middle" fill="#e2e8f0" font-size="12" font-family="Arial, Helvetica, sans-serif">{$escapedMessage}</text>
+</svg>
+SVG;
     }
 
     private function muaRequestToken(string $code): array

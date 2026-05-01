@@ -38,8 +38,6 @@ final class EmailCodeService
             throw new \RuntimeException('验证码生成失败，请稍后重试');
         }
 
-        $this->sendMail($normalizedEmail, $code, $this->getExpireSeconds());
-
         $stmt = $this->db->prepare('
             INSERT INTO email_verifications (
                 user_id, token, purpose, email, code_hash, expires_at, attempts, ip_hash, user_agent_hash, created_at, used
@@ -55,6 +53,22 @@ final class EmailCodeService
             ':ip_hash' => $this->hashValue($ipAddress),
             ':user_agent_hash' => $this->hashValue($userAgent),
         ]);
+
+        $verificationId = (int)$this->db->lastInsertId();
+
+        try {
+            $this->sendMail($normalizedEmail, $code, $this->getExpireSeconds());
+        } catch (\Throwable $e) {
+            if ($verificationId > 0) {
+                try {
+                    $cleanup = $this->db->prepare('DELETE FROM email_verifications WHERE id = :id AND used = 0');
+                    $cleanup->execute([':id' => $verificationId]);
+                } catch (\Throwable $cleanupError) {
+                }
+            }
+
+            throw $e;
+        }
     }
 
     public function consumeCode(string $email, string $code, string $purpose): bool

@@ -53,6 +53,7 @@ $router->get('/profile', [ProfileController::class, 'index']);
 $router->post('/profile/password/update', [ProfileController::class, 'updatePassword']);
 $router->post('/profile/password/quick-reset', [ProfileController::class, 'sendQuickResetEmail']);
 $router->post('/profile/mc-character/update', [ProfileController::class, 'updateMinecraftCharacter']);
+$router->post('/profile/feedback/create', [ProfileController::class, 'feedbackCreate']);
 
 // Content pages
 $router->get('/gallery', [PageController::class, 'gallery']);
@@ -84,4 +85,5 @@ $router->post('/admin/team-members/save', [AdminController::class, 'teamMemberSa
 $router->post('/admin/team-members/delete', [AdminController::class, 'teamMemberDelete']);
 $router->post('/admin/ip-whitelist/add', [AdminController::class, 'ipWhitelistAdd']);
 $router->post('/admin/ip-whitelist/delete', [AdminController::class, 'ipWhitelistDelete']);
+$router->post('/admin/feedback/update', [AdminController::class, 'feedbackUpdate']);
 

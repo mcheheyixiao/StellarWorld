@@ -12,18 +12,21 @@ use Core\EmailDomainWhitelist;
 use Core\ImageProcessor;
 use Core\MinecraftUuid;
 use Model\Checkin;
+use Model\Feedback;
 use Model\User;
 
 class AdminController extends Controller
 {
     private User $users;
     private Checkin $checkins;
+    private Feedback $feedbacks;
 
     public function __construct()
     {
         parent::__construct();
         $this->users = new User();
         $this->checkins = new Checkin();
+        $this->feedbacks = new Feedback();
         $this->requireAdmin();
     }
 
@@ -123,12 +126,13 @@ class AdminController extends Controller
         };
 
         $activeTab = trim((string)($_GET['tab'] ?? 'dashboard'));
-        $allowedTabs = ['dashboard', 'realtime', 'checkin-rewards', 'checkin-logs', 'checkin-stats', 'players', 'announcements', 'milestones', 'gallery', 'site-settings', 'team', 'ip-whitelist', 'ip-blacklist'];
+        $allowedTabs = ['dashboard', 'realtime', 'checkin-rewards', 'checkin-logs', 'checkin-stats', 'players', 'feedback', 'announcements', 'milestones', 'gallery', 'site-settings', 'team', 'ip-whitelist', 'ip-blacklist'];
         if (!in_array($activeTab, $allowedTabs, true)) {
             $activeTab = 'dashboard';
         }
 
         $players = [];
+        $feedbackList = [];
         $announcements = [];
         $milestones = [];
         $images = [];
@@ -159,6 +163,13 @@ class AdminController extends Controller
         $ipBlacklistPagination = $buildPagination(0, 1, $perPage, 'blacklist_page');
         $teamMembersPagination = $buildPagination(0, 1, $perPage, 'team_page');
         $ipWhitelistPagination = $buildPagination(0, 1, $perPage, 'whitelist_page');
+        $feedbackPagination = $buildPagination(0, 1, $perPage, 'feedback_page');
+        $feedbackFilters = [
+            'q' => '',
+            'status' => '',
+            'category' => '',
+        ];
+        $feedbackLoadError = '';
 
         if ($activeTab === 'players') {
             $playersPagination = $buildPagination($userCount, $readPage('players_page'), $perPage, 'players_page');
@@ -254,6 +265,39 @@ class AdminController extends Controller
             }
         }
 
+        if ($activeTab === 'feedback') {
+            $feedbackFilters = [
+                'q' => trim((string)($_GET['feedback_q'] ?? '')),
+                'status' => strtolower(trim((string)($_GET['feedback_status'] ?? ''))),
+                'category' => strtolower(trim((string)($_GET['feedback_category'] ?? ''))),
+            ];
+
+            if (!in_array($feedbackFilters['status'], Feedback::allowedStatuses(), true)) {
+                $feedbackFilters['status'] = '';
+            }
+            if (!in_array($feedbackFilters['category'], Feedback::allowedCategories(), true)) {
+                $feedbackFilters['category'] = '';
+            }
+
+            $feedbackPage = $readPage('feedback_page');
+            try {
+                $feedbackTotal = $this->feedbacks->countAdminFeedbackList($feedbackFilters);
+                $feedbackPagination = $buildPagination($feedbackTotal, $feedbackPage, $perPage, 'feedback_page');
+                $feedbackList = $this->feedbacks->getAdminFeedbackList(
+                    $feedbackFilters,
+                    (int)$feedbackPagination['page'],
+                    $perPage
+                );
+            } catch (\Throwable $e) {
+                $feedbackList = [];
+                $feedbackPagination = $buildPagination(0, 1, $perPage, 'feedback_page');
+                $feedbackLoadError = '举报反馈功能暂不可用，请先执行数据库升级。';
+                if (APP_ENV === 'development') {
+                    $feedbackLoadError .= ' (' . $e->getMessage() . ')';
+                }
+            }
+        }
+
         if ($activeTab === 'checkin-logs') {
             $checkinLogs = $this->checkins->getAdminLogs();
         }
@@ -273,6 +317,10 @@ class AdminController extends Controller
             'galleryCount' => $galleryCount,
             'players' => $players,
             'playersPagination' => $playersPagination,
+            'feedbackList' => $feedbackList,
+            'feedbackPagination' => $feedbackPagination,
+            'feedbackFilters' => $feedbackFilters,
+            'feedbackLoadError' => $feedbackLoadError,
             'announcements' => $announcements,
             'announcementsPagination' => $announcementsPagination,
             'milestones' => $milestones,
@@ -391,6 +439,63 @@ class AdminController extends Controller
             $this->users->unbindCharacter($id);
         }
         $this->completeAdminAction('/admin?tab=players');
+    }
+
+    public function feedbackUpdate(): void
+    {
+        $isAjax = $this->isAjaxRequest() || array_key_exists('ajax', $_GET) || array_key_exists('ajax', $_POST);
+        if ($isAjax) {
+            $this->generateCsrfToken();
+            $token = (string)($_POST['csrf_token'] ?? '');
+            $sessionToken = (string)($_SESSION['csrf_token'] ?? '');
+            if ($token === '' || $sessionToken === '' || !hash_equals($sessionToken, $token)) {
+                $this->json(['success' => false, 'message' => 'CSRF token mismatch'], 403);
+                return;
+            }
+        } else {
+            $this->validateCsrfForFormPost('/admin?tab=feedback');
+        }
+
+        $feedbackId = (int)($_POST['feedback_id'] ?? 0);
+        if ($feedbackId <= 0) {
+            $this->completeAdminAction('/admin?tab=feedback&err=feedback_id', [], 'Invalid feedback id');
+            return;
+        }
+
+        $status = strtolower(trim((string)($_POST['status'] ?? 'pending')));
+        if (!in_array($status, Feedback::allowedStatuses(), true)) {
+            $this->completeAdminAction('/admin?tab=feedback&err=status', [], 'Invalid feedback status');
+            return;
+        }
+
+        $adminReply = trim((string)($_POST['admin_reply'] ?? ''));
+        if (mb_strlen($adminReply, 'UTF-8') > 5000) {
+            $this->completeAdminAction('/admin?tab=feedback&err=reply_len', [], 'Admin reply is too long');
+            return;
+        }
+
+        $adminId = (int)($_SESSION['user_id'] ?? 0);
+        if ($adminId <= 0) {
+            $this->completeAdminAction('/admin?tab=feedback&err=auth', [], 'Unauthorized');
+            return;
+        }
+
+        try {
+            $updated = $this->feedbacks->updateFeedbackStatus($feedbackId, $status, $adminReply, $adminId);
+            if (!$updated) {
+                $this->completeAdminAction('/admin?tab=feedback&err=not_found', [], 'Feedback not found');
+                return;
+            }
+        } catch (\Throwable $e) {
+            $this->completeAdminAction('/admin?tab=feedback&err=save', [], 'Feedback update failed');
+            return;
+        }
+
+        $this->completeAdminAction(
+            '/admin?tab=feedback&saved=1',
+            ['feedback_id' => $feedbackId, 'status' => $status],
+            'Feedback updated'
+        );
     }
 
     public function checkinRewardSave(): void

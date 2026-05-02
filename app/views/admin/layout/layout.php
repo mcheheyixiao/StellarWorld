@@ -30,6 +30,7 @@ $userCount = (int)($userCount ?? 0);
 $announcementCount = (int)($announcementCount ?? 0);
 $galleryCount = (int)($galleryCount ?? 0);
 $players = is_array($players ?? null) ? $players : [];
+$feedbackList = is_array($feedbackList ?? null) ? $feedbackList : [];
 $announcements = is_array($announcements ?? null) ? $announcements : [];
 $milestones = is_array($milestones ?? null) ? $milestones : [];
 $images = is_array($images ?? null) ? $images : [];
@@ -38,6 +39,9 @@ $teamMembers = is_array($teamMembers ?? null) ? $teamMembers : [];
 $ipWhitelist = is_array($ipWhitelist ?? null) ? $ipWhitelist : [];
 $ipBlacklist = is_array($ipBlacklist ?? null) ? $ipBlacklist : [];
 $playersPagination = is_array($playersPagination ?? null) ? $playersPagination : [];
+$feedbackPagination = is_array($feedbackPagination ?? null) ? $feedbackPagination : [];
+$feedbackFilters = is_array($feedbackFilters ?? null) ? $feedbackFilters : ['q' => '', 'status' => '', 'category' => ''];
+$feedbackLoadError = trim((string)($feedbackLoadError ?? ''));
 $announcementsPagination = is_array($announcementsPagination ?? null) ? $announcementsPagination : [];
 $milestonesPagination = is_array($milestonesPagination ?? null) ? $milestonesPagination : [];
 $imagesPagination = is_array($imagesPagination ?? null) ? $imagesPagination : [];
@@ -47,6 +51,29 @@ $ipBlacklistPagination = is_array($ipBlacklistPagination ?? null) ? $ipBlacklist
 $realtimePanelEnabled = !empty($realtimePanelEnabled);
 $csrfToken = (string)($csrfToken ?? ($_SESSION['csrf_token'] ?? ''));
 $csrfTokenEscaped = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
+$feedbackStatusLabels = [
+    'pending' => '待处理',
+    'reviewing' => '处理中',
+    'need_more_info' => '需要补充',
+    'resolved' => '已处理',
+    'rejected' => '已驳回',
+    'closed' => '已关闭',
+];
+$feedbackStatusClassMap = [
+    'pending' => 'ta-feedback-status--pending',
+    'reviewing' => 'ta-feedback-status--reviewing',
+    'need_more_info' => 'ta-feedback-status--need-more-info',
+    'resolved' => 'ta-feedback-status--resolved',
+    'rejected' => 'ta-feedback-status--rejected',
+    'closed' => 'ta-feedback-status--closed',
+];
+$feedbackCategoryLabels = [
+    'report' => '举报玩家',
+    'bug' => '漏洞问题',
+    'account' => '账号相关',
+    'suggestion' => '玩法建议',
+    'other' => '其他',
+];
 ?>
 <div id="admin-main-content" class="space-y-6">
 
@@ -236,6 +263,202 @@ $csrfTokenEscaped = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
         </div>
 
         <!-- 公告管理 Tab -->
+        <div id="tab-feedback" class="ta-tab-content tab-hidden">
+            <?php
+            $feedbackQuery = trim((string)($feedbackFilters['q'] ?? ''));
+            $feedbackStatusFilter = strtolower(trim((string)($feedbackFilters['status'] ?? '')));
+            $feedbackCategoryFilter = strtolower(trim((string)($feedbackFilters['category'] ?? '')));
+            $formatFeedbackTime = static function ($value): string {
+                $text = trim((string)$value);
+                if ($text === '') {
+                    return '--';
+                }
+                $ts = strtotime($text);
+                return $ts === false ? htmlspecialchars($text, ENT_QUOTES, 'UTF-8') : date('Y-m-d H:i:s', $ts);
+            };
+            $feedbackErr = trim((string)($_GET['err'] ?? ''));
+            ?>
+            <div class="ta-card ta-feedback-card">
+                <h1>举报反馈工单</h1>
+                <p class="ta-help-text">管理员可以在此检索玩家反馈、查看证据并更新处理状态。</p>
+
+                <?php if (isset($_GET['saved']) && (string)$_GET['saved'] === '1'): ?>
+                    <div class="ta-feedback-alert ta-feedback-alert--success">反馈状态已更新。</div>
+                <?php endif; ?>
+
+                <?php if ($feedbackErr !== ''): ?>
+                    <div class="ta-feedback-alert ta-feedback-alert--error">
+                        <?php
+                        $feedbackErrMap = [
+                            'csrf' => 'CSRF 校验失败，请刷新后重试。',
+                            'feedback_id' => '反馈编号无效。',
+                            'status' => '状态参数不合法。',
+                            'reply_len' => '管理员回复过长（最多 5000 字）。',
+                            'not_found' => '反馈记录不存在或已变更。',
+                            'auth' => '权限验证失败。',
+                            'save' => '保存失败，请稍后重试。',
+                        ];
+                        echo htmlspecialchars($feedbackErrMap[$feedbackErr] ?? ('操作失败：' . $feedbackErr), ENT_QUOTES, 'UTF-8');
+                        ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($feedbackLoadError !== ''): ?>
+                    <div class="ta-feedback-alert ta-feedback-alert--error">
+                        <?= htmlspecialchars($feedbackLoadError, ENT_QUOTES, 'UTF-8') ?>
+                    </div>
+                <?php endif; ?>
+
+                <form method="get" action="/admin" class="ta-feedback-filters">
+                    <input type="hidden" name="tab" value="feedback">
+                    <div>
+                        <label for="feedback-q">关键词</label>
+                        <input id="feedback-q" type="text" name="feedback_q" value="<?= htmlspecialchars($feedbackQuery, ENT_QUOTES, 'UTF-8') ?>" placeholder="搜索玩家、标题、内容">
+                    </div>
+                    <div>
+                        <label for="feedback-status">状态</label>
+                        <select id="feedback-status" name="feedback_status">
+                            <option value="">全部状态</option>
+                            <?php foreach ($feedbackStatusLabels as $statusKey => $statusLabel): ?>
+                                <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>" <?= $feedbackStatusFilter === $statusKey ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="feedback-category">类型</label>
+                        <select id="feedback-category" name="feedback_category">
+                            <option value="">全部类型</option>
+                            <?php foreach ($feedbackCategoryLabels as $categoryKey => $categoryLabel): ?>
+                                <option value="<?= htmlspecialchars($categoryKey, ENT_QUOTES, 'UTF-8') ?>" <?= $feedbackCategoryFilter === $categoryKey ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($categoryLabel, ENT_QUOTES, 'UTF-8') ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="ta-feedback-filter-actions">
+                        <button type="submit" class="ta-btn ta-btn-primary">搜索</button>
+                        <a href="/admin?tab=feedback" class="ta-btn ta-btn-secondary">重置</a>
+                    </div>
+                </form>
+
+                <div class="ta-table-wrap">
+                    <table class="ta-table ta-feedback-table">
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>玩家</th>
+                            <th>游戏名</th>
+                            <th>类型</th>
+                            <th>标题</th>
+                            <th>状态</th>
+                            <th>创建时间</th>
+                            <th>更新时间</th>
+                            <th>操作</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <?php if (empty($feedbackList)): ?>
+                            <tr>
+                                <td colspan="9" class="ta-help-text">暂无符合条件的反馈记录。</td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($feedbackList as $feedbackItem): ?>
+                                <?php
+                                $feedbackId = (int)($feedbackItem['id'] ?? 0);
+                                $feedbackUsername = (string)($feedbackItem['username'] ?? '');
+                                $feedbackMcUsername = (string)($feedbackItem['mc_username'] ?? '');
+                                $feedbackCategory = strtolower(trim((string)($feedbackItem['category'] ?? 'other')));
+                                $feedbackCategoryLabel = $feedbackCategoryLabels[$feedbackCategory] ?? $feedbackCategory;
+                                $feedbackTitle = (string)($feedbackItem['title'] ?? '');
+                                $feedbackStatus = strtolower(trim((string)($feedbackItem['status'] ?? 'pending')));
+                                $feedbackStatusLabel = $feedbackStatusLabels[$feedbackStatus] ?? $feedbackStatus;
+                                $feedbackStatusClass = $feedbackStatusClassMap[$feedbackStatus] ?? $feedbackStatusClassMap['pending'];
+                                $feedbackReply = trim((string)($feedbackItem['admin_reply'] ?? ''));
+                                $feedbackTargetPlayer = trim((string)($feedbackItem['target_player'] ?? ''));
+                                $feedbackOccurredAt = trim((string)($feedbackItem['occurred_at'] ?? ''));
+                                $feedbackWorld = trim((string)($feedbackItem['world'] ?? ''));
+                                $feedbackCoordinates = trim((string)($feedbackItem['coordinates'] ?? ''));
+                                $feedbackContent = trim((string)($feedbackItem['content'] ?? ''));
+                                $feedbackEvidence = trim((string)($feedbackItem['evidence_url'] ?? ''));
+                                $feedbackAttachments = is_array($feedbackItem['attachments'] ?? null) ? $feedbackItem['attachments'] : [];
+                                ?>
+                                <tr>
+                                    <td>#<?= $feedbackId ?></td>
+                                    <td><?= htmlspecialchars($feedbackUsername, ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars($feedbackMcUsername !== '' ? $feedbackMcUsername : '--', ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars($feedbackCategoryLabel, ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars($feedbackTitle, ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><span class="ta-feedback-status <?= htmlspecialchars($feedbackStatusClass, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($feedbackStatusLabel, ENT_QUOTES, 'UTF-8') ?></span></td>
+                                    <td><?= $formatFeedbackTime($feedbackItem['created_at'] ?? '') ?></td>
+                                    <td><?= $formatFeedbackTime($feedbackItem['updated_at'] ?? '') ?></td>
+                                    <td class="ta-feedback-cell-actions">
+                                        <details class="ta-feedback-details">
+                                            <summary class="ta-btn ta-btn-secondary">展开详情</summary>
+                                            <div class="ta-feedback-detail-body">
+                                                <p><strong>被举报玩家：</strong><?= htmlspecialchars($feedbackTargetPlayer !== '' ? $feedbackTargetPlayer : '--', ENT_QUOTES, 'UTF-8') ?></p>
+                                                <p><strong>发生时间：</strong><?= htmlspecialchars($feedbackOccurredAt !== '' ? $feedbackOccurredAt : '--', ENT_QUOTES, 'UTF-8') ?></p>
+                                                <p><strong>世界：</strong><?= htmlspecialchars($feedbackWorld !== '' ? $feedbackWorld : '--', ENT_QUOTES, 'UTF-8') ?></p>
+                                                <p><strong>坐标：</strong><?= htmlspecialchars($feedbackCoordinates !== '' ? $feedbackCoordinates : '--', ENT_QUOTES, 'UTF-8') ?></p>
+                                                <p><strong>详细内容：</strong></p>
+                                                <div class="ta-feedback-content"><?= nl2br(htmlspecialchars($feedbackContent, ENT_QUOTES, 'UTF-8')) ?></div>
+                                                <p>
+                                                    <strong>证据链接：</strong>
+                                                    <?php if ($feedbackEvidence !== ''): ?>
+                                                        <a href="<?= htmlspecialchars($feedbackEvidence, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer"><?= htmlspecialchars($feedbackEvidence, ENT_QUOTES, 'UTF-8') ?></a>
+                                                    <?php else: ?>
+                                                        --
+                                                    <?php endif; ?>
+                                                </p>
+                                                <?php if (!empty($feedbackAttachments)): ?>
+                                                    <div class="ta-feedback-attachments">
+                                                        <?php foreach ($feedbackAttachments as $attachment): ?>
+                                                            <?php
+                                                            $attachmentPath = trim((string)($attachment['file_path'] ?? ''));
+                                                            if ($attachmentPath === '') {
+                                                                continue;
+                                                            }
+                                                            if ($attachmentPath[0] !== '/') {
+                                                                $attachmentPath = '/' . ltrim($attachmentPath, '/');
+                                                            }
+                                                            ?>
+                                                            <a href="<?= htmlspecialchars($attachmentPath, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer">
+                                                                <img src="<?= htmlspecialchars($attachmentPath, ENT_QUOTES, 'UTF-8') ?>" alt="反馈附件" loading="lazy">
+                                                            </a>
+                                                        <?php endforeach; ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </div>
+                                        </details>
+
+                                        <form method="post" action="/admin/feedback/update" class="ta-feedback-update-form">
+                                            <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
+                                            <input type="hidden" name="feedback_id" value="<?= $feedbackId ?>">
+                                            <label for="feedback-status-<?= $feedbackId ?>">状态</label>
+                                            <select id="feedback-status-<?= $feedbackId ?>" name="status">
+                                                <?php foreach ($feedbackStatusLabels as $statusKey => $statusLabel): ?>
+                                                    <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>" <?= $feedbackStatus === $statusKey ? 'selected' : '' ?>>
+                                                        <?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <label for="feedback-reply-<?= $feedbackId ?>">管理员回复</label>
+                                            <textarea id="feedback-reply-<?= $feedbackId ?>" name="admin_reply" rows="3" maxlength="5000" placeholder="可填写处理说明或补充要求"><?= htmlspecialchars($feedbackReply, ENT_QUOTES, 'UTF-8') ?></textarea>
+                                            <button type="submit" class="ta-btn ta-btn-primary">保存</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <?php $renderAdminPagination($feedbackPagination ?? [], 'feedback'); ?>
+            </div>
+        </div>
+
         <div id="tab-announcements" class="ta-tab-content tab-hidden">
             <div class="ta-card">
                 <h1>公告管理</h1>

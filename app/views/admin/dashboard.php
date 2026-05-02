@@ -344,6 +344,172 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
 .ta-table td:last-child {
     text-align: right;
 }
+.ta-feedback-card {
+    display: grid;
+    gap: 1rem;
+}
+.ta-feedback-alert {
+    border-radius: 0.7rem;
+    border: 1px solid var(--ta-border-strong);
+    padding: 0.65rem 0.8rem;
+    font-size: 0.86rem;
+}
+.ta-feedback-alert--success {
+    border-color: rgba(34, 197, 94, 0.45);
+    background: rgba(34, 197, 94, 0.14);
+    color: #86efac;
+}
+.ta-feedback-alert--error {
+    border-color: rgba(248, 113, 113, 0.45);
+    background: rgba(248, 113, 113, 0.16);
+    color: #fecaca;
+}
+[data-theme="light"] .ta-feedback-alert--success {
+    color: #166534;
+    background: rgba(187, 247, 208, 0.7);
+}
+[data-theme="light"] .ta-feedback-alert--error {
+    color: #991b1b;
+    background: rgba(254, 226, 226, 0.8);
+}
+.ta-feedback-filters {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+@media (min-width: 768px) {
+    .ta-feedback-filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (min-width: 1280px) {
+    .ta-feedback-filters {
+        grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)) auto;
+        align-items: end;
+    }
+}
+.ta-feedback-filter-actions {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+.ta-feedback-table th:last-child,
+.ta-feedback-table td:last-child {
+    text-align: left;
+}
+.ta-feedback-status {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid var(--ta-border-strong);
+    padding: 0.2rem 0.6rem;
+    font-size: 0.76rem;
+    line-height: 1;
+    white-space: nowrap;
+}
+.ta-feedback-status--pending {
+    color: #fbbf24;
+    border-color: rgba(251, 191, 36, 0.45);
+    background: rgba(251, 191, 36, 0.12);
+}
+.ta-feedback-status--reviewing {
+    color: #67e8f9;
+    border-color: rgba(103, 232, 249, 0.45);
+    background: rgba(103, 232, 249, 0.12);
+}
+.ta-feedback-status--need-more-info {
+    color: #fb7185;
+    border-color: rgba(251, 113, 133, 0.45);
+    background: rgba(251, 113, 133, 0.12);
+}
+.ta-feedback-status--resolved {
+    color: #4ade80;
+    border-color: rgba(74, 222, 128, 0.45);
+    background: rgba(74, 222, 128, 0.12);
+}
+.ta-feedback-status--rejected {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.45);
+    background: rgba(248, 113, 113, 0.12);
+}
+.ta-feedback-status--closed {
+    color: #cbd5e1;
+    border-color: rgba(203, 213, 225, 0.45);
+    background: rgba(203, 213, 225, 0.12);
+}
+[data-theme="light"] .ta-feedback-status--pending {
+    color: #92400e;
+}
+[data-theme="light"] .ta-feedback-status--reviewing {
+    color: #0f766e;
+}
+[data-theme="light"] .ta-feedback-status--need-more-info {
+    color: #9f1239;
+}
+[data-theme="light"] .ta-feedback-status--resolved {
+    color: #166534;
+}
+[data-theme="light"] .ta-feedback-status--rejected {
+    color: #b91c1c;
+}
+[data-theme="light"] .ta-feedback-status--closed {
+    color: #334155;
+}
+.ta-feedback-cell-actions {
+    min-width: 320px;
+}
+.ta-feedback-details summary {
+    list-style: none;
+}
+.ta-feedback-details summary::-webkit-details-marker {
+    display: none;
+}
+.ta-feedback-detail-body {
+    margin-top: 0.65rem;
+    border: 1px dashed var(--ta-border-strong);
+    border-radius: 0.72rem;
+    padding: 0.72rem;
+    background: rgba(148, 163, 184, 0.08);
+}
+.ta-feedback-content {
+    border-radius: 0.55rem;
+    border: 1px solid var(--ta-border);
+    background: var(--ta-surface-input);
+    padding: 0.55rem 0.6rem;
+    white-space: pre-wrap;
+    line-height: 1.45;
+}
+.ta-feedback-attachments {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+.ta-feedback-attachments a {
+    display: inline-flex;
+    border: 1px solid var(--ta-border);
+    border-radius: 0.55rem;
+    overflow: hidden;
+    width: 84px;
+    height: 84px;
+}
+.ta-feedback-attachments img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.ta-feedback-update-form {
+    margin-top: 0.75rem;
+    display: grid;
+    gap: 0.45rem;
+}
+.ta-feedback-update-form label {
+    font-size: 0.8rem;
+    color: var(--ta-text-muted);
+}
+.ta-feedback-update-form textarea {
+    min-height: 88px !important;
+}
 .ta-gallery-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -1571,6 +1737,7 @@ function editTeamMember(id, username, role) {
         'checkin-stats': 'tab-checkin-stats',
         players: 'tab-players',
         users: 'tab-players',
+        feedback: 'tab-feedback',
         announcements: 'tab-announcements',
         milestones: 'tab-milestones',
         gallery: 'tab-gallery',

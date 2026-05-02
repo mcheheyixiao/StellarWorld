@@ -604,3 +604,45 @@ CREATE TABLE IF NOT EXISTS server_status_history (
     created_at DATETIME NOT NULL,
     INDEX idx_server_status_history_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Feedback ticket system
+CREATE TABLE IF NOT EXISTS player_feedback (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    username VARCHAR(64) NOT NULL,
+    mc_username VARCHAR(64) NULL,
+    category VARCHAR(32) NOT NULL DEFAULT 'other',
+    target_player VARCHAR(64) NULL,
+    title VARCHAR(120) NOT NULL,
+    content TEXT NOT NULL,
+    world VARCHAR(64) NULL,
+    coordinates VARCHAR(64) NULL,
+    occurred_at DATETIME NULL,
+    evidence_url VARCHAR(500) NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    admin_reply TEXT NULL,
+    handled_by INT UNSIGNED NULL,
+    handled_at DATETIME NULL,
+    created_ip VARCHAR(64) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_feedback_user_id (user_id),
+    INDEX idx_feedback_status (status),
+    INDEX idx_feedback_category (category),
+    INDEX idx_feedback_created_at (created_at),
+    INDEX idx_feedback_search (username, mc_username, target_player),
+    CONSTRAINT fk_player_feedback_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_player_feedback_handled_user FOREIGN KEY (handled_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS player_feedback_attachments (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    feedback_id BIGINT UNSIGNED NOT NULL,
+    file_path VARCHAR(255) NOT NULL,
+    original_name VARCHAR(255) NULL,
+    mime_type VARCHAR(100) NOT NULL,
+    file_size INT UNSIGNED NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_feedback_attachments_feedback_id (feedback_id),
+    CONSTRAINT fk_feedback_attachments_feedback FOREIGN KEY (feedback_id) REFERENCES player_feedback(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

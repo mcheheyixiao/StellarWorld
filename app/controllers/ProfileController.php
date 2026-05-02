@@ -9,12 +9,14 @@ use Core\Database;
 use Core\MUAFetcher;
 use Core\MinecraftUuid;
 use Core\RconClient;
+use Model\Feedback;
 use Model\User;
 use PHPMailer\PHPMailer\PHPMailer;
 
 class ProfileController extends Controller
 {
     private User $users;
+    private Feedback $feedbacks;
 
     public function __construct()
     {
@@ -24,6 +26,7 @@ class ProfileController extends Controller
             exit;
         }
         $this->users = new User();
+        $this->feedbacks = new Feedback();
     }
 
     public function index(): string
@@ -65,6 +68,23 @@ class ProfileController extends Controller
             }
         }
 
+        $feedbackList = [];
+        $feedbackLoadError = '';
+        try {
+            $feedbackList = $this->feedbacks->getUserFeedbackList($userId, 50);
+        } catch (\Throwable $e) {
+            $feedbackLoadError = '举报反馈功能暂不可用，请联系管理员执行数据库升级。';
+            if (APP_ENV === 'development') {
+                $feedbackLoadError .= ' (' . $e->getMessage() . ')';
+            }
+        }
+
+        $feedbackFlash = $_SESSION['profile_feedback_flash'] ?? null;
+        unset($_SESSION['profile_feedback_flash']);
+        if (!is_array($feedbackFlash) || !isset($feedbackFlash['type'], $feedbackFlash['message'])) {
+            $feedbackFlash = null;
+        }
+
         return $this->render('user/profile', [
             'title' => '个人中心',
             'profile' => $profile,
@@ -74,7 +94,141 @@ class ProfileController extends Controller
             'emailMasked' => $this->maskEmail((string)($profile['email'] ?? '')),
             'quickResetCooldownSeconds' => 60,
             'remainingCooldownSeconds' => $remainingSeconds,
+            'feedbackList' => $feedbackList,
+            'feedbackLoadError' => $feedbackLoadError,
+            'feedbackFlash' => $feedbackFlash,
         ]);
+    }
+
+    public function feedbackCreate(): void
+    {
+        $isAjax = $this->isAjaxRequest() || array_key_exists('ajax', $_GET) || array_key_exists('ajax', $_POST);
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0) {
+            $this->completeFeedbackCreate(false, '请先登录后再提交反馈。', 401, $isAjax);
+            return;
+        }
+
+        $this->generateCsrfToken();
+        $token = (string)($_POST['csrf_token'] ?? '');
+        $sessionToken = (string)($_SESSION['csrf_token'] ?? '');
+        if ($token === '' || $sessionToken === '' || !hash_equals($sessionToken, $token)) {
+            $this->completeFeedbackCreate(false, 'CSRF 校验失败，请刷新后重试。', 403, $isAjax);
+            return;
+        }
+
+        $profile = $this->users->getProfile($userId);
+        if (!$profile) {
+            $this->completeFeedbackCreate(false, '用户不存在，请重新登录。', 404, $isAjax);
+            return;
+        }
+
+        $category = strtolower(trim((string)($_POST['category'] ?? 'other')));
+        if (!in_array($category, Feedback::allowedCategories(), true)) {
+            $this->completeFeedbackCreate(false, '反馈类型不合法。', 400, $isAjax);
+            return;
+        }
+
+        $title = trim((string)($_POST['title'] ?? ''));
+        $titleLength = mb_strlen($title, 'UTF-8');
+        if ($titleLength < 3 || $titleLength > 120) {
+            $this->completeFeedbackCreate(false, '标题长度需在 3-120 字之间。', 400, $isAjax);
+            return;
+        }
+
+        $content = trim((string)($_POST['content'] ?? ''));
+        $contentLength = mb_strlen($content, 'UTF-8');
+        if ($contentLength < 10 || $contentLength > 5000) {
+            $this->completeFeedbackCreate(false, '详细内容长度需在 10-5000 字之间。', 400, $isAjax);
+            return;
+        }
+
+        $targetPlayer = trim((string)($_POST['target_player'] ?? ''));
+        if ($targetPlayer !== '') {
+            if (mb_strlen($targetPlayer, 'UTF-8') > 64) {
+                $this->completeFeedbackCreate(false, '被举报玩家名称过长。', 400, $isAjax);
+                return;
+            }
+            if (preg_match('/^[a-zA-Z0-9_]{1,64}$/', $targetPlayer) !== 1) {
+                $this->completeFeedbackCreate(false, '被举报玩家名称格式不合法。', 400, $isAjax);
+                return;
+            }
+        }
+
+        $world = trim((string)($_POST['world'] ?? ''));
+        if ($world !== '') {
+            if (mb_strlen($world, 'UTF-8') > 64) {
+                $this->completeFeedbackCreate(false, '世界名称过长。', 400, $isAjax);
+                return;
+            }
+            if (preg_match('/^[\p{L}\p{N}_\-\s\.]{1,64}$/u', $world) !== 1) {
+                $this->completeFeedbackCreate(false, '世界名称格式不合法。', 400, $isAjax);
+                return;
+            }
+        }
+
+        $coordinates = trim((string)($_POST['coordinates'] ?? ''));
+        if ($coordinates !== '') {
+            if (mb_strlen($coordinates, 'UTF-8') > 64) {
+                $this->completeFeedbackCreate(false, '坐标内容过长。', 400, $isAjax);
+                return;
+            }
+            if (preg_match('/^[a-zA-Z0-9,\-\+\.\s~:]{1,64}$/', $coordinates) !== 1) {
+                $this->completeFeedbackCreate(false, '坐标格式不合法。', 400, $isAjax);
+                return;
+            }
+        }
+
+        $evidenceUrl = trim((string)($_POST['evidence_url'] ?? ''));
+        if ($evidenceUrl !== '') {
+            if (mb_strlen($evidenceUrl, 'UTF-8') > 500) {
+                $this->completeFeedbackCreate(false, '证据链接长度不能超过 500 字符。', 400, $isAjax);
+                return;
+            }
+
+            $validatedUrl = filter_var($evidenceUrl, FILTER_VALIDATE_URL);
+            $scheme = strtolower((string)parse_url((string)$validatedUrl, PHP_URL_SCHEME));
+            if ($validatedUrl === false || !in_array($scheme, ['http', 'https'], true)) {
+                $this->completeFeedbackCreate(false, '证据链接必须为 http 或 https 地址。', 400, $isAjax);
+                return;
+            }
+            $evidenceUrl = (string)$validatedUrl;
+        }
+
+        $occurredAtInput = trim((string)($_POST['occurred_at'] ?? ''));
+        $occurredAt = null;
+        if ($occurredAtInput !== '') {
+            $occurredAt = $this->normalizeOptionalDatetime($occurredAtInput);
+        }
+
+        $feedbackData = [
+            'user_id' => $userId,
+            'username' => (string)($profile['username'] ?? ''),
+            'mc_username' => (string)($profile['mc_username'] ?? ''),
+            'category' => $category,
+            'target_player' => $targetPlayer,
+            'title' => $title,
+            'content' => $content,
+            'world' => $world,
+            'coordinates' => $coordinates,
+            'occurred_at' => $occurredAt,
+            'evidence_url' => $evidenceUrl,
+            'created_ip' => $this->getClientIp(),
+        ];
+
+        try {
+            $feedbackId = $this->feedbacks->createFeedback($feedbackData, $_FILES['attachments'] ?? []);
+            $this->completeFeedbackCreate(
+                true,
+                '反馈已提交，请等待管理员处理',
+                200,
+                $isAjax,
+                ['feedback_id' => $feedbackId]
+            );
+        } catch (\Throwable $e) {
+            $message = $e->getMessage() !== '' ? $e->getMessage() : '反馈提交失败，请稍后再试。';
+            $this->completeFeedbackCreate(false, $message, 400, $isAjax);
+        }
     }
 
     public function updatePassword(): void
@@ -261,6 +415,56 @@ class ProfileController extends Controller
                 $this->json(['success' => false, 'message' => '系统服务异常，请联系管理员'], 500);
             }
         }
+    }
+
+    private function normalizeOptionalDatetime(string $input): ?string
+    {
+        $input = trim($input);
+        if ($input === '') {
+            return null;
+        }
+
+        $normalized = str_replace('T', ' ', $input);
+        $dt = \DateTime::createFromFormat('Y-m-d H:i:s', $normalized);
+        if (!$dt instanceof \DateTime) {
+            $dt = \DateTime::createFromFormat('Y-m-d H:i', $normalized);
+        }
+
+        if (!$dt instanceof \DateTime) {
+            return null;
+        }
+
+        return $dt->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function completeFeedbackCreate(
+        bool $success,
+        string $message,
+        int $statusCode,
+        bool $isAjax,
+        array $payload = []
+    ): void {
+        if ($isAjax) {
+            $response = array_merge(
+                [
+                    'success' => $success,
+                    'message' => $message,
+                ],
+                $payload
+            );
+            $this->json($response, $statusCode);
+            return;
+        }
+
+        $_SESSION['profile_feedback_flash'] = [
+            'type' => $success ? 'success' : 'error',
+            'message' => $message,
+        ];
+        header('Location: /profile?tab=feedback');
+        exit;
     }
 
     private function maskEmail(string $email): string

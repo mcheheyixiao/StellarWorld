@@ -10,6 +10,36 @@ $canChangeMcName = (bool)($canChangeMcName ?? false);
 $cooldownMessage = (string)($cooldownMessage ?? '');
 $emailMasked = (string)($emailMasked ?? '未绑定邮箱');
 $muaSkinUrl = $muaSkinUrl ?? null;
+$feedbackList = is_array($feedbackList ?? null) ? $feedbackList : [];
+$feedbackLoadError = trim((string)($feedbackLoadError ?? ''));
+$feedbackFlash = is_array($feedbackFlash ?? null) ? $feedbackFlash : null;
+
+$feedbackStatusLabels = [
+    'pending' => '待处理',
+    'reviewing' => '处理中',
+    'need_more_info' => '需要补充',
+    'resolved' => '已处理',
+    'rejected' => '已驳回',
+    'closed' => '已关闭',
+];
+$feedbackCategoryLabels = [
+    'report' => '举报玩家',
+    'bug' => '漏洞问题',
+    'account' => '账号相关',
+    'suggestion' => '玩法建议',
+    'other' => '其他',
+];
+$formatFeedbackTime = static function ($value): string {
+    $text = trim((string)$value);
+    if ($text === '') {
+        return '--';
+    }
+    $ts = strtotime($text);
+    if ($ts === false) {
+        return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+    }
+    return date('Y-m-d H:i', $ts);
+};
 
 $mcUsername = trim((string)($profile['mc_username'] ?? ''));
 $hasMcName = $mcUsername !== '';
@@ -501,6 +531,94 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
     font-size: 0.88rem;
 }
 
+#panel-feedback .profile-feedback-layout {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+}
+#panel-feedback .profile-feedback-guide ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.45rem;
+}
+#panel-feedback .profile-feedback-guide li {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+#panel-feedback .profile-feedback-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: 1fr;
+}
+#panel-feedback .profile-feedback-table-wrap {
+    overflow-x: auto;
+    width: 100%;
+}
+#panel-feedback .profile-feedback-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+}
+#panel-feedback .profile-feedback-table th,
+#panel-feedback .profile-feedback-table td {
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.6rem 0.45rem;
+    text-align: left;
+    vertical-align: top;
+    color: var(--text-primary);
+    font-size: 0.86rem;
+}
+#panel-feedback .profile-feedback-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+#panel-feedback .profile-feedback-status {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid var(--border-color-strong);
+    padding: 0.2rem 0.6rem;
+    font-size: 0.78rem;
+    line-height: 1;
+    white-space: nowrap;
+}
+#panel-feedback .profile-feedback-status--pending {
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.5);
+    background: rgba(245, 158, 11, 0.12);
+}
+#panel-feedback .profile-feedback-status--reviewing {
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.5);
+    background: rgba(56, 189, 248, 0.12);
+}
+#panel-feedback .profile-feedback-status--need_more_info {
+    color: #fb7185;
+    border-color: rgba(251, 113, 133, 0.5);
+    background: rgba(251, 113, 133, 0.12);
+}
+#panel-feedback .profile-feedback-status--resolved {
+    color: #22c55e;
+    border-color: rgba(34, 197, 94, 0.5);
+    background: rgba(34, 197, 94, 0.12);
+}
+#panel-feedback .profile-feedback-status--rejected {
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.5);
+    background: rgba(239, 68, 68, 0.12);
+}
+#panel-feedback .profile-feedback-status--closed {
+    color: #94a3b8;
+    border-color: rgba(148, 163, 184, 0.5);
+    background: rgba(148, 163, 184, 0.12);
+}
+@media (min-width: 768px) {
+    #panel-feedback .profile-feedback-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
 @keyframes checkinPulse {
     0% {
         box-shadow: 0 0 0 0 var(--pulse-color);
@@ -547,6 +665,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                     <button type="button" data-profile-tab-btn data-target="panel-bind" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">账号绑定</button>
                     <button type="button" data-profile-tab-btn data-target="panel-security" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">安全中心</button>
                     <button type="button" data-profile-tab-btn data-target="panel-player" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">玩家功能</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-feedback" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">举报反馈</button>
                 </nav>
 
                 <div class="mt-auto rounded-xl border border-slate-700/80 bg-slate-800/60 p-3 text-xs text-slate-300">
@@ -576,7 +695,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 
                 <div class="min-h-0 flex-1">
                     <section id="panel-game" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
-                        <h3 class="text-lg font-semibold text-slate-100">A. 游戏数据</h3>
+                        <h3 class="text-lg font-semibold text-slate-100">游戏数据</h3>
                         <p class="mt-1 text-sm text-slate-400">游戏账号信息、在线状态、累计时长与死亡次数。</p>
 
                         <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_1fr]">
@@ -613,7 +732,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                     </section>
 
                     <section id="panel-bind" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
-                        <h3 class="text-lg font-semibold text-slate-100">B. 账号绑定</h3>
+                        <h3 class="text-lg font-semibold text-slate-100">账号绑定</h3>
                         <p class="mt-1 text-sm text-slate-400">Minecraft 与 Union 绑定管理。</p>
 
                         <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
@@ -664,7 +783,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                     </section>
 
                     <section id="panel-security" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
-                        <h3 class="text-lg font-semibold text-slate-100">C. 安全中心</h3>
+                        <h3 class="text-lg font-semibold text-slate-100">安全中心</h3>
                         <p class="mt-1 text-sm text-slate-400">修改密码与邮箱快速重置。</p>
 
                         <form id="password-form" method="post" action="/profile/password/update" class="mt-5 space-y-4 rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
@@ -702,7 +821,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 
                     <?php if (false): ?>
                     <section id="panel-player" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
-                        <h3 class="text-lg font-semibold text-slate-100">D. 玩家签到系统</h3>
+                        <h3 class="text-lg font-semibold text-slate-100">玩家签到系统</h3>
                         <p class="mt-1 text-sm text-slate-400">展示静态签到界面与交互，不涉及真实数据写入。</p>
 
                         <div class="player-checkin-wrap mt-5 space-y-4">
@@ -833,8 +952,8 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                         data-checkin-csrf="<?= htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                         class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6"
                     >
-                        <h3 class="text-lg font-semibold text-slate-100">D. 玩家签到系统</h3>
-                        <p class="mt-1 text-sm text-slate-400">已接入真实签到接口，会写入数据库记录并创建奖励发放任务。</p>
+                        <h3 class="text-lg font-semibold text-slate-100">玩家签到系统</h3>
+                        <p class="mt-1 text-sm text-slate-400">参与每日签到,可以获取海量资源</p>
 
                         <div class="player-checkin-wrap mt-5 space-y-4">
                             <article class="checkin-card checkin-card-main">
@@ -915,6 +1034,143 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                 </div>
                             </article>
                         </div>
+                    </section>
+
+                    <section id="panel-feedback" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
+                        <h3 class="text-lg font-semibold text-slate-100">举报反馈</h3>
+                        <p class="mt-1 text-sm text-slate-400">提交举报、漏洞反馈或建议，并在站内追踪处理状态。</p>
+
+                        <?php if (is_array($feedbackFlash) && isset($feedbackFlash['type'], $feedbackFlash['message'])): ?>
+                            <div class="mt-4 rounded-lg border px-3 py-2 text-sm <?= (string)$feedbackFlash['type'] === 'success' ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300' : 'border-red-500/50 bg-red-500/10 text-red-300' ?>">
+                                <?= htmlspecialchars((string)$feedbackFlash['message'], ENT_QUOTES, 'UTF-8') ?>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if ($feedbackLoadError !== ''): ?>
+                            <div class="mt-4 rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                                <?= htmlspecialchars($feedbackLoadError, ENT_QUOTES, 'UTF-8') ?>
+                            </div>
+                        <?php endif; ?>
+
+                        <div class="profile-feedback-layout mt-5">
+                            <article class="profile-feedback-guide rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                                <h4 class="text-base font-semibold text-slate-100">填写指南</h4>
+                                <ul class="mt-3">
+                                    <li>标题尽量具体，建议包含场景、时间和对象。</li>
+                                    <li>举报玩家时请填写对方游戏名，便于管理员快速核查。</li>
+                                    <li>证据支持外链与图片上传，图片最多 3 张，每张不超过 5MB。</li>
+                                    <li>状态说明：待处理、处理中、需要补充、已处理、已驳回、已关闭。</li>
+                                </ul>
+                            </article>
+
+                            <article class="profile-feedback-form rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                                <h4 class="text-base font-semibold text-slate-100">提交反馈</h4>
+                                <form id="profile-feedback-form" method="post" action="/profile/feedback/create" enctype="multipart/form-data" class="mt-3 space-y-4">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+
+                                    <div class="profile-feedback-grid">
+                                        <div>
+                                            <label for="feedback-category" class="block text-sm text-slate-300">类型</label>
+                                            <select id="feedback-category" name="category" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                                <option value="report">举报玩家</option>
+                                                <option value="bug">漏洞问题</option>
+                                                <option value="account">账号相关</option>
+                                                <option value="suggestion">玩法建议</option>
+                                                <option value="other">其他</option>
+                                            </select>
+                                        </div>
+                                        <div data-feedback-optional-field data-feedback-categories="report">
+                                            <label for="feedback-target-player" class="block text-sm text-slate-300">被举报玩家（可选）</label>
+                                            <input id="feedback-target-player" name="target_player" type="text" maxlength="64" placeholder="仅字母数字下划线" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                        </div>
+                                        <div data-feedback-optional-field data-feedback-categories="report,bug,account">
+                                            <label for="feedback-occurred-at" class="block text-sm text-slate-300">发生时间（可选）</label>
+                                            <input id="feedback-occurred-at" name="occurred_at" type="datetime-local" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                        </div>
+                                        <div data-feedback-optional-field data-feedback-categories="bug,suggestion">
+                                            <label for="feedback-world" class="block text-sm text-slate-300">世界（可选）</label>
+                                            <input id="feedback-world" name="world" type="text" maxlength="64" placeholder="例如：主世界 / 资源服" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                        </div>
+                                        <div data-feedback-optional-field data-feedback-categories="report,bug">
+                                            <label for="feedback-coordinates" class="block text-sm text-slate-300">坐标（可选）</label>
+                                            <input id="feedback-coordinates" name="coordinates" type="text" maxlength="64" placeholder="例如：X:123 Y:64 Z:-12" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                        </div>
+                                        <div data-feedback-optional-field data-feedback-categories="report,bug,account,other">
+                                            <label for="feedback-evidence-url" class="block text-sm text-slate-300">证据链接（可选）</label>
+                                            <input id="feedback-evidence-url" name="evidence_url" type="url" maxlength="500" placeholder="https://..." class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label for="feedback-title" class="block text-sm text-slate-300">标题</label>
+                                        <input id="feedback-title" name="title" type="text" minlength="3" maxlength="120" required class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                    </div>
+
+                                    <div>
+                                        <label for="feedback-content" class="block text-sm text-slate-300">详细内容</label>
+                                        <textarea id="feedback-content" name="content" rows="5" minlength="10" maxlength="5000" required class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400"></textarea>
+                                    </div>
+
+                                    <div>
+                                        <label for="feedback-attachments" class="block text-sm text-slate-300">图片上传（可选）</label>
+                                        <input id="feedback-attachments" name="attachments[]" type="file" multiple accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                        <p id="feedback-attachments-hint" class="mt-1 text-xs text-slate-400">最多 3 张，仅支持 jpg/jpeg/png/webp，单张最大 5MB。</p>
+                                    </div>
+
+                                    <button type="submit" class="rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-blue-600 hover:shadow-md">提交反馈</button>
+                                </form>
+                            </article>
+                        </div>
+
+                        <article class="mt-5 rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                            <h4 class="text-base font-semibold text-slate-100">我的反馈记录</h4>
+                            <?php if (empty($feedbackList)): ?>
+                                <p class="mt-3 text-sm text-slate-400">暂时没有反馈记录，提交后会在这里显示处理状态。</p>
+                            <?php else: ?>
+                                <div class="profile-feedback-table-wrap mt-3">
+                                    <table class="profile-feedback-table">
+                                        <thead>
+                                        <tr>
+                                            <th>编号</th>
+                                            <th>类型</th>
+                                            <th>标题</th>
+                                            <th>状态</th>
+                                            <th>管理员回复</th>
+                                            <th>创建时间</th>
+                                            <th>更新时间</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        <?php foreach ($feedbackList as $feedbackItem): ?>
+                                            <?php
+                                            $feedbackId = (int)($feedbackItem['id'] ?? 0);
+                                            $feedbackCategory = strtolower(trim((string)($feedbackItem['category'] ?? 'other')));
+                                            $feedbackCategoryLabel = $feedbackCategoryLabels[$feedbackCategory] ?? $feedbackCategory;
+                                            $feedbackTitle = (string)($feedbackItem['title'] ?? '');
+                                            $feedbackStatus = strtolower(trim((string)($feedbackItem['status'] ?? 'pending')));
+                                            $feedbackStatusLabel = $feedbackStatusLabels[$feedbackStatus] ?? $feedbackStatus;
+                                            $feedbackStatusClass = 'profile-feedback-status--' . (preg_match('/^[a-z_]+$/', $feedbackStatus) === 1 ? $feedbackStatus : 'pending');
+                                            $feedbackReply = trim((string)($feedbackItem['admin_reply'] ?? ''));
+                                            ?>
+                                            <tr>
+                                                <td>#<?= $feedbackId ?></td>
+                                                <td><?= htmlspecialchars($feedbackCategoryLabel, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= htmlspecialchars($feedbackTitle, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td>
+                                                    <span class="profile-feedback-status <?= htmlspecialchars($feedbackStatusClass, ENT_QUOTES, 'UTF-8') ?>">
+                                                        <?= htmlspecialchars($feedbackStatusLabel, ENT_QUOTES, 'UTF-8') ?>
+                                                    </span>
+                                                </td>
+                                                <td><?= $feedbackReply === '' ? '<span class="text-slate-500">--</span>' : nl2br(htmlspecialchars($feedbackReply, ENT_QUOTES, 'UTF-8')) ?></td>
+                                                <td><?= $formatFeedbackTime($feedbackItem['created_at'] ?? '') ?></td>
+                                                <td><?= $formatFeedbackTime($feedbackItem['updated_at'] ?? '') ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php endif; ?>
+                        </article>
                     </section>
                 </div>
             </main>
@@ -1304,7 +1560,15 @@ document.addEventListener('DOMContentLoaded', () => {
     panels.forEach((panel) => {
         panel.style.display = 'none';
     });
-    setActiveTab('panel-game');
+    const tabParam = String(new URLSearchParams(window.location.search).get('tab') || '').toLowerCase();
+    const tabMap = {
+        game: 'panel-game',
+        bind: 'panel-bind',
+        security: 'panel-security',
+        player: 'panel-player',
+        feedback: 'panel-feedback'
+    };
+    setActiveTab(tabMap[tabParam] || 'panel-game');
 })();
 </script>
 <?php if (false): ?>
@@ -1447,6 +1711,120 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(() => {
                     quickResetBtn.disabled = false;
                 }, 800);
+            }
+        });
+    }
+
+    const feedbackForm = document.getElementById('profile-feedback-form');
+    const feedbackCategory = document.getElementById('feedback-category');
+    const feedbackAttachments = document.getElementById('feedback-attachments');
+    const feedbackAttachmentsHint = document.getElementById('feedback-attachments-hint');
+    const feedbackOptionalFields = Array.from(document.querySelectorAll('[data-feedback-optional-field]'));
+    const feedbackAllowedExt = ['jpg', 'jpeg', 'png', 'webp'];
+    const feedbackAllowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+
+    const normalizeFeedbackCategory = (value) => String(value || '').trim().toLowerCase();
+
+    const shouldShowFeedbackField = (field, category) => {
+        const categoriesRaw = String(field.getAttribute('data-feedback-categories') || '').trim();
+        if (categoriesRaw === '' || categoriesRaw === '*') {
+            return true;
+        }
+
+        const categories = categoriesRaw
+            .split(',')
+            .map((item) => normalizeFeedbackCategory(item))
+            .filter((item) => item !== '');
+        return categories.includes(category);
+    };
+
+    const syncFeedbackOptionalFields = () => {
+        const category = normalizeFeedbackCategory(feedbackCategory ? feedbackCategory.value : 'other');
+        for (const field of feedbackOptionalFields) {
+            const visible = shouldShowFeedbackField(field, category);
+            field.hidden = !visible;
+            field.setAttribute('aria-hidden', visible ? 'false' : 'true');
+
+            const controls = field.querySelectorAll('input, select, textarea');
+            controls.forEach((control) => {
+                control.disabled = !visible;
+                if (!visible) {
+                    control.value = '';
+                }
+            });
+        }
+    };
+
+    if (feedbackCategory && feedbackOptionalFields.length > 0) {
+        syncFeedbackOptionalFields();
+        feedbackCategory.addEventListener('change', syncFeedbackOptionalFields);
+    }
+
+    const validateFeedbackFiles = () => {
+        if (!feedbackAttachments || !feedbackAttachments.files) {
+            return true;
+        }
+
+        const files = Array.from(feedbackAttachments.files);
+        if (files.length > 3) {
+            alert('最多只能上传 3 张图片');
+            feedbackAttachments.value = '';
+            if (feedbackAttachmentsHint) {
+                feedbackAttachmentsHint.textContent = '最多 3 张，仅支持 jpg/jpeg/png/webp，单张最大 5MB。';
+            }
+            return false;
+        }
+
+        for (const file of files) {
+            const size = Number(file.size || 0);
+            if (size > 5 * 1024 * 1024) {
+                alert('图片大小不能超过 5MB：' + (file.name || '未知文件'));
+                feedbackAttachments.value = '';
+                if (feedbackAttachmentsHint) {
+                    feedbackAttachmentsHint.textContent = '文件超出限制，请重新选择。';
+                }
+                return false;
+            }
+
+            const filename = String(file.name || '').toLowerCase();
+            const ext = filename.includes('.') ? filename.split('.').pop() : '';
+            const mime = String(file.type || '').toLowerCase();
+            if (!feedbackAllowedExt.includes(String(ext || '')) || !feedbackAllowedMime.includes(mime)) {
+                alert('仅支持 jpg/jpeg/png/webp 图片：' + (file.name || '未知文件'));
+                feedbackAttachments.value = '';
+                if (feedbackAttachmentsHint) {
+                    feedbackAttachmentsHint.textContent = '格式不支持，请重新选择。';
+                }
+                return false;
+            }
+        }
+
+        if (feedbackAttachmentsHint) {
+            feedbackAttachmentsHint.textContent = files.length > 0
+                ? ('已选择 ' + files.length + ' 张图片')
+                : '最多 3 张，仅支持 jpg/jpeg/png/webp，单张最大 5MB。';
+        }
+
+        return true;
+    };
+
+    if (feedbackAttachments) {
+        feedbackAttachments.addEventListener('change', () => {
+            validateFeedbackFiles();
+        });
+    }
+
+    if (feedbackForm) {
+        feedbackForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            if (!validateFeedbackFiles()) {
+                return;
+            }
+
+            const result = await submitForm(feedbackForm, '/profile/feedback/create');
+            alert(result.message || (result.success ? '反馈提交成功' : '反馈提交失败'));
+            if (result.success) {
+                window.location.href = '/profile?tab=feedback';
             }
         });
     }

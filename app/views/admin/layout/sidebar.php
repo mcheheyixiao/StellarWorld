@@ -114,6 +114,13 @@ $checkinExpanded = $checkinActiveTarget !== '' || strpos($adminCurrentPath, '/ad
             <span>玩家管理</span>
         </button>
 
+        <button type="button" class="admin-tab-btn ta-sidebar-item" data-tab-target="tab-feedback">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9A1.5 1.5 0 0 1 18.5 16H9l-4 4v-4H5.5A1.5 1.5 0 0 1 4 14.5v-9Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>举报反馈</span>
+        </button>
+
         <button type="button" class="admin-tab-btn ta-sidebar-item" data-tab-target="tab-announcements">
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M3 11.5 21 5v14l-18-6v-1.5ZM8 13v4.5a2.5 2.5 0 0 0 5 0V14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>

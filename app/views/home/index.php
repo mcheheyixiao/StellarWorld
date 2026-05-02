@@ -33,97 +33,86 @@ if (is_file($aboutConfigPath)) {
             <div class="mc-hero-stage-gradient bg-gradient-to-b from-transparent via-[#020617]/70 to-[#020617]"></div>
         </div>
         <div class="page-container mc-hero-stage-inner relative z-10 w-full max-w-full md:max-w-3xl lg:max-w-5xl xl:max-w-[1320px] 2xl:max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10">
-            <div class="mc-hero-float rounded-2xl border border-white/10 border-opacity-10 bg-slate-900/40 p-6 shadow-xl backdrop-blur-md dark:bg-slate-900/50 md:p-10">
-                <div class="mc-hero-layout flex flex-col gap-8 lg:flex-row">
-                    <div class="mc-hero-content flex-1 lg:w-[55%]">
-                        <p class="mc-hero-kicker mb-3 inline-flex items-center gap-2 rounded-full border border-slate-300/65 bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-800 dark:border-white/20 dark:bg-white/10 dark:text-white">
-                            <span>🏰</span>
-                            <span>Minecraft 公益服务器</span>
-                        </p>
-                        <h1 class="text-fusion-pixel text-3xl text-slate-900 dark:text-white md:text-5xl">繁星World</h1>
-                        <h1 class="text-fusion-pixel text-3xl text-slate-900 dark:text-white md:text-4xl">原版+中世纪冒险生存</h1>
-                        <p class="mt-3 max-w-[520px] text-sm leading-relaxed text-slate-600 dark:text-slate-300 md:text-base">
-                            用稳定、纯净、长期维护的方式做一个真正适合长期驻留的服务器。你可以慢慢建造，也可以和伙伴一起开荒探索。
-                        </p>
+            <div class="hero-container mc-hero-reference-container">
+                <div class="hero-content mc-hero-reference-content">
+                    <div class="hero-badge">
+                        <i class="mdi mdi-lightning-bolt-outline"></i>
+                        <span>Minecraft 公益服务器</span>
+                    </div>
 
-                        <div class="mt-4 flex flex-wrap items-center gap-2">
-                            <span class="mc-badge bg-slate-200 text-slate-800 dark:bg-white/10 dark:text-white">Vanilla+</span>
-                            <span class="mc-badge bg-slate-200 text-slate-800 dark:bg-white/10 dark:text-white">中世纪</span>
-                            <span class="mc-badge bg-slate-200 text-slate-800 dark:bg-white/10 dark:text-white">轻RPG</span>
+                    <div class="server-status">
+                        <span class="status-dot" id="serverStatusDot"></span>
+                        <span class="status-text">
+                            <span id="serverStatusText">连接中...</span>
+                            <span class="highlight-green" id="onlinePlayers"><?= htmlspecialchars((string)($serverInfo['players_online'] ?? '--'), ENT_QUOTES, 'UTF-8') ?></span>
+                        </span>
+                    </div>
+
+                    <h1 class="text-fusion-pixel">
+                        欢迎来到<br>
+                        <span class="highlight">繁星World</span>
+                    </h1>
+
+                    <p class="hero-subtitle">
+                        原版 + 中世纪冒险生存。稳定、纯净、长期维护，支持长期定居与团队协作，适合慢节奏发展与持续探索。
+                    </p>
+
+                    <div class="hero-features">
+                        <div class="h-feature"><i class="mdi mdi-check-circle-outline"></i>纯净生存</div>
+                        <div class="h-feature"><i class="mdi mdi-check-circle-outline"></i>轻 RPG</div>
+                        <div class="h-feature"><i class="mdi mdi-check-circle-outline"></i>长期运营</div>
+                    </div>
+
+                    <div class="hero-buttons">
+                        <button id="copyAddressBtn" class="copy-btn mc-btn mc-hero-cta js-copy-ip" type="button">
+                            <i class="mdi mdi-content-copy"></i>
+                            <span>复制 IP 地址</span>
+                        </button>
+                        <a href="<?= htmlspecialchars($qqGroupUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="mc-btn mc-hero-ghost">
+                            <i class="mdi mdi-qqchat"></i>
+                            <span>加入 QQ 社区</span>
+                        </a>
+                        <button id="refreshStatusBtn" class="status-refresh-btn mc-btn mc-hero-refresh" type="button" aria-label="刷新服务器状态">
+                            <i class="mdi mdi-refresh"></i>
+                            <span>刷新状态</span>
+                        </button>
+                    </div>
+
+                    <div class="mc-hero-address mt-4 inline-flex max-w-full flex-wrap items-center gap-2 rounded-2xl border border-slate-300/65 border-opacity-10 bg-slate-200/90 px-3 py-2 text-sm text-slate-700 shadow-xl backdrop-blur-xl dark:border-white/15 dark:bg-slate-900/72 dark:text-slate-300">
+                        <span class="mc-hero-address-label text-xs uppercase tracking-widest text-slate-600 dark:text-slate-300">服务器地址</span>
+                        <code id="serverAddress" class="break-all font-mono text-sm text-slate-700 dark:text-slate-300"><?= htmlspecialchars($serverDisplayAddress, ENT_QUOTES, 'UTF-8') ?></code>
+                    </div>
+
+                    <div class="mc-hero-stats-grid">
+                        <div class="mc-status-line">
+                            <span>版本</span>
+                            <strong id="versionDisplay"><?= htmlspecialchars($serverVersion, ENT_QUOTES, 'UTF-8') ?></strong>
                         </div>
-
-                        <div class="mt-6 flex flex-wrap items-center gap-3">
-                            <button id="copyAddressBtn" class="copy-btn mc-btn mc-btn-primary js-copy-ip inline-flex w-full sm:w-auto items-center gap-2 rounded-2xl border border-cyan-200/45 border-opacity-10 px-5 py-3 text-sm font-semibold shadow-xl backdrop-blur-xl">
-                                <i class="mdi mdi-content-copy"></i>
-                                <span>📋 复制 IP</span>
-                            </button>
+                        <div class="mc-status-line">
+                            <span>在线/上限</span>
+                            <strong id="playersDisplay">--</strong>
                         </div>
-
-                        <div class="mc-hero-address mt-4 inline-flex max-w-full flex-wrap items-center gap-2 rounded-2xl border border-slate-300/65 border-opacity-10 bg-slate-200/90 px-3 py-2 text-sm text-slate-700 shadow-xl backdrop-blur-xl dark:border-white/15 dark:bg-slate-900/72 dark:text-slate-300">
-                            <span class="mc-hero-address-label text-xs uppercase tracking-widest text-slate-600 dark:text-slate-300">服务器地址</span>
-                            <code id="serverAddress" class="break-all font-mono text-sm text-slate-700 dark:text-slate-300"><?= htmlspecialchars($serverDisplayAddress, ENT_QUOTES, 'UTF-8') ?></code>
-                        </div>
-
-                        <div class="mt-5 flex flex-col gap-4 text-sm text-slate-600 dark:text-slate-300">
-                            <div class="mc-hero-chip transition-colors duration-300 rounded-2xl border border-slate-300/60 border-opacity-10 bg-white/80 px-3 py-2 shadow-xl backdrop-blur-xl dark:border-white/15 dark:bg-slate-900/58">🌍 世界：持续更新生存地图</div>
-                            <div class="mc-hero-chip transition-colors duration-300 rounded-2xl border border-slate-300/60 border-opacity-10 bg-white/80 px-3 py-2 shadow-xl backdrop-blur-xl dark:border-white/15 dark:bg-slate-900/58">🧭 探索：任务、遗迹与秘境</div>
+                        <div class="mc-status-line">
+                            <span>TPS</span>
+                            <strong id="tpsDisplay">--</strong>
                         </div>
                     </div>
 
-                    <aside class="mc-glass-card mc-card-tier-1 mc-hover-lift w-full max-w-none lg:w-[45%] rounded-2xl border border-white/10 border-opacity-10 p-5 shadow-xl backdrop-blur-xl">
-                        <div class="mb-4 flex items-start justify-between gap-3">
-                            <div>
-                                <p class="text-xs uppercase tracking-widest text-cyan-700 dark:text-cyan-300">📊 数据快览</p>
-                                <h2 class="mt-2 text-fusion-pixel text-xl text-slate-900 dark:text-white">🖥️ 服务器状态</h2>
-                            </div>
-                            <button id="refreshStatusBtn" class="status-refresh-btn mc-btn mc-btn-ghost inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-300/45 border-opacity-10 p-0 text-slate-700 dark:text-cyan-100 shadow-xl backdrop-blur-xl" aria-label="刷新服务器状态">
-                                <i class="mdi mdi-refresh text-base"></i>
-                            </button>
-                        </div>
+                    <div class="mc-hero-motd rounded-2xl border border-slate-300/60 border-opacity-10 bg-white/80 p-4 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/68">
+                        <div class="mb-2 text-xs uppercase tracking-widest text-slate-600 dark:text-slate-300">MOTD</div>
+                        <div class="detail-value motd text-sm text-slate-700 dark:text-slate-300" id="motdDisplay">--</div>
+                    </div>
 
-                        <div class="space-y-3">
-                            <div class="mc-status-line">
-                                <span>🟢 状态</span>
-                                <div class="inline-flex items-center gap-2">
-                                    <span class="status-dot" id="serverStatusDot"></span>
-                                    <span id="serverStatusText">正在连接...</span>
-                                </div>
-                            </div>
-                            <div class="mc-status-line">
-                                <span>👥 在线人数</span>
-                                <strong id="onlinePlayers"><?= htmlspecialchars((string)($serverInfo['players_online'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></strong>
-                            </div>
-                            <div class="mc-status-line">
-                                <span>⚙️ 版本</span>
-                                <strong id="versionDisplay"><?= htmlspecialchars($serverVersion, ENT_QUOTES, 'UTF-8') ?></strong>
-                            </div>
-                            <div class="mc-status-line">
-                                <span>📈 当前/上限</span>
-                                <strong id="playersDisplay">—</strong>
-                            </div>
-                            <div class="mc-status-line">
-                                <span>TPS</span>
-                                <strong id="tpsDisplay">--</strong>
-                            </div>
+                    <div class="mt-4 players-section" id="playersSection">
+                        <h3 class="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">当前在线玩家</h3>
+                        <div class="players-list grid max-h-52 grid-cols-2 gap-2 overflow-y-auto rounded-2xl border border-slate-300/60 border-opacity-10 bg-white/80 p-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/72" id="playersList">
+                            <div class="loading-players col-span-full text-center text-slate-500 dark:text-slate-300">加载中...</div>
                         </div>
-
-                        <div class="mt-4 rounded-2xl border border-slate-300/60 border-opacity-10 bg-white/80 p-4 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/68">
-                            <div class="mb-2 text-xs uppercase tracking-widest text-slate-600 dark:text-slate-300">⭐ MOTD</div>
-                            <div class="detail-value motd text-sm text-slate-700 dark:text-slate-300" id="motdDisplay">—</div>
-                        </div>
-
-                        <div class="mt-4 players-section" id="playersSection">
-                            <h3 class="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">当前在线玩家</h3>
-                            <div class="players-list grid max-h-52 grid-cols-2 gap-2 overflow-y-auto rounded-2xl border border-slate-300/60 border-opacity-10 bg-white/80 p-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/72" id="playersList">
-                                <div class="loading-players col-span-full text-center text-slate-500 dark:text-slate-300">加载中...</div>
-                            </div>
-                        </div>
-                    </aside>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
-
     <div class="page-container flex flex-col gap-6">
         <section class="mc-glass-card mc-card-tier-2 reveal-on-scroll rounded-2xl border border-white/10 border-opacity-10 p-6 shadow-xl backdrop-blur-xl md:p-8">
             <div class="mb-5">
@@ -334,14 +323,191 @@ if (is_file($aboutConfigPath)) {
     align-items: center;
 }
 
-.mc-hero-float {
+.mc-hero-reference-container.hero-container {
     width: 100%;
-    background: rgba(15, 23, 42, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    padding-top: 4.2rem;
+    position: relative;
+    z-index: 2;
 }
 
-html.dark .mc-hero-float {
+.mc-hero-reference-content.hero-content {
+    max-width: 44rem;
+}
+
+.mc-hero-reference-content .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.02));
+    border-left: 3px solid rgba(255, 255, 255, 0.9);
+    padding: 0.42rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.84rem;
+    color: #f8fafc;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.mc-hero-reference-content .server-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
     background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    padding: 0.48rem 0.9rem;
+    margin-bottom: 1.25rem;
+    color: #ffffff;
+    font-size: 0.92rem;
+}
+
+.mc-hero-reference-content .status-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.mc-hero-reference-content .highlight-green {
+    display: inline-block;
+    font-weight: 800;
+    background: linear-gradient(90deg, #22c55e, #86efac, #4ade80);
+    background-size: 220% 220%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: rainbow-flow 4s ease infinite;
+}
+
+.mc-hero-reference-content h1 {
+    font-size: clamp(2.3rem, 6vw, 4.1rem);
+    line-height: 1.08;
+    font-weight: 900;
+    margin-bottom: 1rem;
+    letter-spacing: -0.02em;
+    text-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+    color: #ffffff;
+}
+
+.mc-hero-reference-content h1 .highlight {
+    background: linear-gradient(90deg, #22c55e, #4ade80, #86efac, #22c55e);
+    background-size: 320% 320%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: inline-block;
+    animation: rainbow-flow 5s ease infinite;
+}
+
+.mc-hero-reference-content .hero-subtitle {
+    font-size: 1.02rem;
+    color: rgba(241, 245, 249, 0.9);
+    margin-bottom: 1.5rem;
+    max-width: 37rem;
+    border-left: 2px solid rgba(255, 255, 255, 0.5);
+    padding-left: 1rem;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
+}
+
+.mc-hero-reference-content .hero-features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.mc-hero-reference-content .h-feature {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #e2e8f0;
+    font-size: 0.88rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0.45rem 0.75rem;
+    border-radius: 0.65rem;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(10px);
+}
+
+.mc-hero-reference-content .h-feature i {
+    color: #4ade80;
+}
+
+.mc-hero-reference-content .hero-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.mc-hero-cta,
+.mc-hero-ghost,
+.mc-hero-refresh {
+    border-radius: 0.9rem;
+    padding: 0.74rem 1rem;
+    min-height: 2.85rem;
+    font-size: 0.88rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+}
+
+.mc-hero-cta {
+    background: rgba(255, 255, 255, 0.92);
+    color: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.mc-hero-ghost,
+.mc-hero-refresh {
+    background: rgba(15, 23, 42, 0.62);
+    color: #e2e8f0;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.mc-hero-refresh i {
+    transition: transform 0.3s ease;
+}
+
+.mc-hero-refresh:hover i {
+    transform: rotate(180deg);
+}
+
+.mc-hero-stats-grid {
+    margin-top: 1rem;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+.mc-hero-stats-grid .mc-status-line {
+    padding: 0.58rem 0.68rem;
+    font-size: 0.84rem;
+}
+
+.mc-hero-motd {
+    margin-top: 0.75rem;
+}
+
+:is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-reference-content .hero-badge {
+    color: #0f172a;
+    border-left-color: rgba(15, 23, 42, 0.85);
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.45));
+}
+
+:is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-reference-content .server-status {
+    color: #0f172a;
+    border-color: rgba(148, 163, 184, 0.42);
+    background: rgba(248, 250, 252, 0.84);
+}
+
+:is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-reference-content .hero-subtitle {
+    border-left-color: rgba(255, 255, 255, 0.75);
 }
 
 .mc-badge {
@@ -549,6 +715,43 @@ html.dark .loading-players {
         gap: 1rem;
     }
 
+    .mc-hero-reference-container.hero-container {
+        padding-top: 3.45rem;
+    }
+
+    .mc-hero-reference-content .hero-badge {
+        font-size: 0.76rem;
+        padding: 0.34rem 0.78rem;
+    }
+
+    .mc-hero-reference-content .server-status {
+        font-size: 0.84rem;
+    }
+
+    .mc-hero-reference-content h1 {
+        line-height: 1.18;
+    }
+
+    .mc-hero-reference-content .hero-subtitle {
+        font-size: 0.95rem;
+        margin-bottom: 1.15rem;
+    }
+
+    .mc-hero-reference-content .hero-buttons {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .mc-hero-cta,
+    .mc-hero-ghost,
+    .mc-hero-refresh {
+        width: 100%;
+    }
+
+    .mc-hero-stats-grid {
+        grid-template-columns: 1fr;
+    }
+
     .mc-btn,
     .mc-btn-primary,
     .mc-btn-secondary,
@@ -562,6 +765,12 @@ html.dark .loading-players {
     .players-list {
         grid-template-columns: 1fr !important;
     }
+}
+
+@keyframes rainbow-flow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
 
 @keyframes pulse {

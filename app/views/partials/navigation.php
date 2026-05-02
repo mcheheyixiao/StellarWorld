@@ -83,7 +83,7 @@ $navFallbackAvatar = '/images/owner_avatar.png';
         <div class="mc-nav-actions">
             <?php if (!$isLoggedIn): ?>
                 <a href="/auth/login" class="mc-nav-auth-link mc-nav-auth-ghost">登录</a>
-                <a href="/auth/register" class="mc-nav-auth-link mc-nav-auth-primary">登录/注册</a>
+                <a href="/auth/register" class="mc-nav-auth-link mc-nav-auth-primary">注册</a>
             <?php else: ?>
                 <div class="user-menu-wrap" id="userMenuWrap">
                     <button

@@ -40,12 +40,12 @@ if (is_file($aboutConfigPath)) {
                         <span>Minecraft 公益服务器</span>
                     </div>
 
-                    <h1 class="text-fusion-pixel">
-                        欢迎来到<br>
+                    <h1 class="text-fusion-pixel hero-title">
+                        <span class="hero-pretitle">欢迎来到</span>
                         <span class="highlight">繁星World</span>
                     </h1>
 
-                    <p class="hero-subtitle">
+                    <p class="hero-subtitle" id="heroSubtitle">
                         原版 + 中世纪冒险生存。稳定、纯净、长期维护，支持长期定居与团队协作，适合慢节奏发展与持续探索。
                     </p>
 
@@ -315,7 +315,10 @@ if (is_file($aboutConfigPath)) {
 }
 
 .mc-hero-reference-content.hero-content {
-    max-width: 44rem;
+    max-width: 40.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.95rem;
 }
 
 .mc-hero-reference-content .hero-badge {
@@ -324,13 +327,13 @@ if (is_file($aboutConfigPath)) {
     gap: 0.5rem;
     background: linear-gradient(90deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.02));
     border-left: 3px solid rgba(255, 255, 255, 0.9);
-    padding: 0.42rem 1rem;
-    margin-bottom: 1rem;
-    font-size: 0.84rem;
+    padding: 0.34rem 0.86rem;
+    margin-bottom: 0;
+    font-size: 0.78rem;
     color: #f8fafc;
-    font-weight: 700;
+    font-weight: 650;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.05em;
 }
 
 .mc-hero-reference-content .server-status {
@@ -341,21 +344,39 @@ if (is_file($aboutConfigPath)) {
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 999px;
-    padding: 0.48rem 0.9rem;
-    margin-bottom: 1.25rem;
+    padding: 0.44rem 0.84rem;
+    margin-bottom: 0;
     color: #ffffff;
-    font-size: 0.92rem;
+    font-size: 0.88rem;
 }
 
 .mc-hero-reference-content .server-status--inline {
     margin-bottom: 0;
-    margin-left: 0.15rem;
-    padding: 0.34rem 0.72rem;
-    font-size: 0.86rem;
+    margin-left: auto;
+    padding: 0.26rem 0.62rem;
+    font-size: 0.79rem;
+    border-color: rgba(148, 163, 184, 0.36);
+    background: rgba(15, 23, 42, 0.45);
 }
 
 .mc-hero-reference-content .server-status--inline .status-text {
     gap: 0.4rem;
+}
+
+.mc-hero-reference-content .hero-title {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.08rem;
+}
+
+.mc-hero-reference-content .hero-pretitle {
+    display: inline-block;
+    font-size: clamp(1.03rem, 2.1vw, 1.36rem);
+    line-height: 1.25;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    color: rgba(241, 245, 249, 0.92);
 }
 
 .mc-hero-reference-content .status-text {
@@ -376,53 +397,57 @@ if (is_file($aboutConfigPath)) {
 }
 
 .mc-hero-reference-content h1 {
-    font-size: clamp(2.3rem, 6vw, 4.1rem);
-    line-height: 1.08;
-    font-weight: 900;
-    margin-bottom: 1rem;
-    letter-spacing: -0.02em;
+    font-size: clamp(2rem, 4.6vw, 3.2rem);
+    line-height: 1.12;
+    font-weight: 780;
+    margin: 0;
+    letter-spacing: -0.008em;
     text-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
     color: #ffffff;
 }
 
 .mc-hero-reference-content h1 .highlight {
+    font-size: clamp(2.85rem, 7vw, 4.9rem);
+    line-height: 0.98;
     background: linear-gradient(90deg, #22c55e, #4ade80, #86efac, #22c55e);
     background-size: 320% 320%;
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     display: inline-block;
+    letter-spacing: -0.02em;
     animation: rainbow-flow 5s ease infinite;
 }
 
 .mc-hero-reference-content .hero-subtitle {
-    font-size: 1.02rem;
+    font-size: 1rem;
+    line-height: 1.78;
     color: rgba(241, 245, 249, 0.9);
-    margin-bottom: 1.5rem;
-    max-width: 37rem;
+    margin: 0;
+    max-width: 33rem;
     border-left: 2px solid rgba(255, 255, 255, 0.5);
-    padding-left: 1rem;
+    padding-left: 0.9rem;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
 }
 
 .mc-hero-reference-content .hero-features {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-bottom: 1.25rem;
+    gap: 0.58rem;
+    margin: 0;
 }
 
 .mc-hero-reference-content .h-feature {
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    color: #e2e8f0;
-    font-size: 0.88rem;
+    color: rgba(226, 232, 240, 0.92);
+    font-size: 0.82rem;
     font-weight: 600;
-    background: rgba(255, 255, 255, 0.08);
-    padding: 0.45rem 0.75rem;
-    border-radius: 0.65rem;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    padding: 0.36rem 0.68rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.11);
     backdrop-filter: blur(10px);
 }
 
@@ -433,17 +458,17 @@ if (is_file($aboutConfigPath)) {
 .mc-hero-reference-content .hero-buttons {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
+    gap: 0.62rem;
+    margin: 0.12rem 0 0;
 }
 
 .mc-hero-cta,
 .mc-hero-ghost,
 .mc-hero-refresh {
     border-radius: 0.9rem;
-    padding: 0.74rem 1rem;
-    min-height: 2.85rem;
-    font-size: 0.88rem;
+    padding: 0.7rem 0.96rem;
+    min-height: 2.72rem;
+    font-size: 0.86rem;
     font-weight: 700;
     display: inline-flex;
     align-items: center;
@@ -455,13 +480,43 @@ if (is_file($aboutConfigPath)) {
     background: rgba(255, 255, 255, 0.92);
     color: #0f172a;
     border: 1px solid rgba(255, 255, 255, 0.7);
+    font-weight: 760;
+    box-shadow: 0 12px 24px -18px rgba(255, 255, 255, 0.8);
 }
 
 .mc-hero-ghost,
 .mc-hero-refresh {
-    background: rgba(15, 23, 42, 0.62);
-    color: #e2e8f0;
+    background: rgba(15, 23, 42, 0.52);
+    color: rgba(226, 232, 240, 0.94);
     border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.mc-hero-reference-content .mc-hero-address {
+    margin-top: 0.34rem !important;
+    gap: 0.55rem;
+    padding: 0.5rem 0.78rem;
+}
+
+.mc-hero-reference-content .mc-hero-motd {
+    margin-top: 0.5rem;
+}
+
+.mc-hero-reference-content .players-section {
+    margin-top: 0.62rem !important;
+}
+
+.mc-hero-reference-content .players-section h3 {
+    margin-bottom: 0.45rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+    color: rgba(226, 232, 240, 0.88);
+}
+
+.mc-hero-reference-content .players-list {
+    background: rgba(255, 255, 255, 0.76);
+    border-color: rgba(148, 163, 184, 0.42);
 }
 
 .mc-hero-refresh i {
@@ -494,6 +549,10 @@ if (is_file($aboutConfigPath)) {
     background: linear-gradient(90deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.45));
 }
 
+:is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-reference-content .hero-pretitle {
+    color: rgba(15, 23, 42, 0.84);
+}
+
 :is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-reference-content .server-status {
     color: #0f172a;
     border-color: rgba(148, 163, 184, 0.42);
@@ -501,7 +560,37 @@ if (is_file($aboutConfigPath)) {
 }
 
 :is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-reference-content .hero-subtitle {
-    border-left-color: rgba(255, 255, 255, 0.75);
+    color: rgba(248, 250, 252, 0.97);
+    border-left-color: rgba(248, 250, 252, 0.72);
+    text-shadow: 0 2px 8px rgba(2, 6, 23, 0.72);
+}
+
+:is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-reference-content .h-feature {
+    color: #334155;
+    background: rgba(255, 255, 255, 0.58);
+    border-color: rgba(148, 163, 184, 0.34);
+}
+
+:is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-reference-content .mc-hero-ghost,
+:is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-reference-content .mc-hero-refresh {
+    background: rgba(241, 245, 249, 0.74);
+    color: #1e293b;
+    border-color: rgba(148, 163, 184, 0.42);
+}
+
+:is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-reference-content .server-status--inline {
+    background: rgba(255, 255, 255, 0.76);
+    border-color: rgba(148, 163, 184, 0.5);
+}
+
+:is(html.light, html[data-theme="light"]) .mc-home-page .mc-hero-reference-content .players-section h3 {
+    color: rgba(248, 250, 252, 0.95);
+    text-shadow: 0 2px 8px rgba(2, 6, 23, 0.72);
+}
+
+html.dark .mc-home-page .mc-hero-reference-content .players-list {
+    background: rgba(15, 23, 42, 0.74);
+    border-color: rgba(148, 163, 184, 0.24);
 }
 
 .mc-badge {
@@ -715,11 +804,15 @@ html.dark .loading-players {
 
     .mc-hero-reference-content .hero-badge {
         font-size: 0.76rem;
-        padding: 0.34rem 0.78rem;
+        padding: 0.32rem 0.72rem;
     }
 
     .mc-hero-reference-content .server-status {
-        font-size: 0.84rem;
+        font-size: 0.8rem;
+    }
+
+    .mc-hero-reference-content .hero-pretitle {
+        font-size: 0.98rem;
     }
 
     .mc-hero-reference-content h1 {
@@ -727,13 +820,14 @@ html.dark .loading-players {
     }
 
     .mc-hero-reference-content .hero-subtitle {
-        font-size: 0.95rem;
-        margin-bottom: 1.15rem;
+        font-size: 0.92rem;
+        line-height: 1.68;
     }
 
     .mc-hero-reference-content .hero-buttons {
         flex-direction: column;
         align-items: stretch;
+        margin-top: 0.25rem;
     }
 
     .mc-hero-cta,

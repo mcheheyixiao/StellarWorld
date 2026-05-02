@@ -1,0 +1,24 @@
+/storage/audit/
+/storage/cache/
+/storage/tmp_*.php
+/public/debug_*.txt
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+/storage/logs/
+
+# OS/editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Keep verification/public challenge files tracked
+!/public/.well-known/acme-challenge/
+!/public/baidu_verify*.html
+!/public/BingSiteAuth.xml

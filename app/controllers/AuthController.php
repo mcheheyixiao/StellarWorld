@@ -273,13 +273,11 @@ class AuthController extends Controller
         } catch (\Throwable $e) {
             error_log('MUA OAuth callback error: ' . $e->getMessage());
             $isDevelopment = strtolower((string)(defined('APP_ENV') ? APP_ENV : 'production')) === 'development';
-            $safeMessage = $isDevelopment
-                ? $e->getMessage()
-                : 'OAuth 回调处理失败，请稍后重试或联系管理员';
-            $e = new \RuntimeException($safeMessage);
             $this->json([
                 'success' => false,
-                'message' => 'OAuth回调处理失败: ' . $e->getMessage(),
+                'message' => $isDevelopment
+                    ? 'OAuth回调处理失败: ' . $e->getMessage()
+                    : 'OAuth 回调处理失败，请稍后重试或联系管理员',
             ], 500);
         }
     }

@@ -372,15 +372,16 @@ document.addEventListener('DOMContentLoaded', function () {
 }
 
 .mc-nav-auth-primary {
-    border: 1px solid rgba(134, 239, 172, 0.5);
-    color: #f0fdf4;
-    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-    box-shadow: 0 8px 22px -12px rgba(22, 163, 74, 0.86);
+    border: 1px solid rgba(125, 211, 252, 0.65);
+    color: #eff6ff;
+    background: linear-gradient(135deg, #60a5fa 0%, #38bdf8 100%);
+    box-shadow: 0 8px 22px -12px rgba(56, 189, 248, 0.88);
 }
 
 .mc-nav-auth-primary:hover {
     transform: translateY(-1px);
-    box-shadow: 0 12px 26px -12px rgba(22, 163, 74, 0.96);
+    background: linear-gradient(135deg, #3b82f6 0%, #0ea5e9 100%);
+    box-shadow: 0 12px 26px -12px rgba(14, 165, 233, 0.96);
 }
 
 .user-menu-wrap {

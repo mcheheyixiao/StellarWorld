@@ -621,6 +621,8 @@ CREATE TABLE IF NOT EXISTS player_feedback (
     evidence_url VARCHAR(500) NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'pending',
     admin_reply TEXT NULL,
+    user_supplement TEXT NULL,
+    supplemented_at DATETIME NULL,
     handled_by INT UNSIGNED NULL,
     handled_at DATETIME NULL,
     created_ip VARCHAR(64) NULL,
@@ -646,3 +648,40 @@ CREATE TABLE IF NOT EXISTS player_feedback_attachments (
     INDEX idx_feedback_attachments_feedback_id (feedback_id),
     CONSTRAINT fk_feedback_attachments_feedback FOREIGN KEY (feedback_id) REFERENCES player_feedback(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Feedback compatibility patch (idempotent)
+SET @has_feedback_user_supplement := (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'player_feedback'
+      AND COLUMN_NAME = 'user_supplement'
+);
+SET @sql_add_feedback_user_supplement := IF(
+    @has_feedback_user_supplement = 0,
+    'ALTER TABLE player_feedback ADD COLUMN user_supplement TEXT NULL AFTER admin_reply',
+    'SELECT 1'
+);
+PREPARE stmt_add_feedback_user_supplement FROM @sql_add_feedback_user_supplement;
+EXECUTE stmt_add_feedback_user_supplement;
+DEALLOCATE PREPARE stmt_add_feedback_user_supplement;
+
+SET @has_feedback_supplemented_at := (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'player_feedback'
+      AND COLUMN_NAME = 'supplemented_at'
+);
+SET @sql_add_feedback_supplemented_at := IF(
+    @has_feedback_supplemented_at = 0,
+    'ALTER TABLE player_feedback ADD COLUMN supplemented_at DATETIME NULL AFTER user_supplement',
+    'SELECT 1'
+);
+PREPARE stmt_add_feedback_supplemented_at FROM @sql_add_feedback_supplemented_at;
+EXECUTE stmt_add_feedback_supplemented_at;
+DEALLOCATE PREPARE stmt_add_feedback_supplemented_at;
+
+UPDATE player_feedback
+SET status = 'resolved'
+WHERE status = 'closed';

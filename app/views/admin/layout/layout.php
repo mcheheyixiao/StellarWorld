@@ -57,7 +57,6 @@ $feedbackStatusLabels = [
     'need_more_info' => '需要补充',
     'resolved' => '已处理',
     'rejected' => '已驳回',
-    'closed' => '已关闭',
 ];
 $feedbackStatusClassMap = [
     'pending' => 'ta-feedback-status--pending',
@@ -65,7 +64,6 @@ $feedbackStatusClassMap = [
     'need_more_info' => 'ta-feedback-status--need-more-info',
     'resolved' => 'ta-feedback-status--resolved',
     'rejected' => 'ta-feedback-status--rejected',
-    'closed' => 'ta-feedback-status--closed',
 ];
 $feedbackCategoryLabels = [
     'report' => '举报玩家',
@@ -294,6 +292,7 @@ $feedbackCategoryLabels = [
                             'feedback_id' => '反馈编号无效。',
                             'status' => '状态参数不合法。',
                             'reply_len' => '管理员回复过长（最多 5000 字）。',
+                            'reply_required' => '当状态为“需要补充”时，请填写管理员回复，说明需要补充哪些材料。',
                             'not_found' => '反馈记录不存在或已变更。',
                             'auth' => '权限验证失败。',
                             'save' => '保存失败，请稍后重试。',
@@ -382,6 +381,7 @@ $feedbackCategoryLabels = [
                                 $feedbackCoordinates = trim((string)($feedbackItem['coordinates'] ?? ''));
                                 $feedbackContent = trim((string)($feedbackItem['content'] ?? ''));
                                 $feedbackEvidence = trim((string)($feedbackItem['evidence_url'] ?? ''));
+                                $feedbackUserSupplement = trim((string)($feedbackItem['user_supplement'] ?? ''));
                                 $feedbackAttachments = is_array($feedbackItem['attachments'] ?? null) ? $feedbackItem['attachments'] : [];
                                 ?>
                                 <tr>
@@ -403,6 +403,10 @@ $feedbackCategoryLabels = [
                                                 <p><strong>坐标：</strong><?= htmlspecialchars($feedbackCoordinates !== '' ? $feedbackCoordinates : '--', ENT_QUOTES, 'UTF-8') ?></p>
                                                 <p><strong>详细内容：</strong></p>
                                                 <div class="ta-feedback-content"><?= nl2br(htmlspecialchars($feedbackContent, ENT_QUOTES, 'UTF-8')) ?></div>
+                                                <?php if ($feedbackUserSupplement !== ''): ?>
+                                                    <p><strong>玩家补充内容：</strong></p>
+                                                    <div class="ta-feedback-content"><?= nl2br(htmlspecialchars($feedbackUserSupplement, ENT_QUOTES, 'UTF-8')) ?></div>
+                                                <?php endif; ?>
                                                 <p>
                                                     <strong>证据链接：</strong>
                                                     <?php if ($feedbackEvidence !== ''): ?>
@@ -432,11 +436,11 @@ $feedbackCategoryLabels = [
                                             </div>
                                         </details>
 
-                                        <form method="post" action="/admin/feedback/update" class="ta-feedback-update-form">
+                                        <form method="post" action="/admin/feedback/update" class="ta-feedback-update-form" data-feedback-admin-form>
                                             <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
                                             <input type="hidden" name="feedback_id" value="<?= $feedbackId ?>">
                                             <label for="feedback-status-<?= $feedbackId ?>">状态</label>
-                                            <select id="feedback-status-<?= $feedbackId ?>" name="status">
+                                            <select id="feedback-status-<?= $feedbackId ?>" name="status" data-feedback-admin-status>
                                                 <?php foreach ($feedbackStatusLabels as $statusKey => $statusLabel): ?>
                                                     <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>" <?= $feedbackStatus === $statusKey ? 'selected' : '' ?>>
                                                         <?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?>
@@ -444,7 +448,8 @@ $feedbackCategoryLabels = [
                                                 <?php endforeach; ?>
                                             </select>
                                             <label for="feedback-reply-<?= $feedbackId ?>">管理员回复</label>
-                                            <textarea id="feedback-reply-<?= $feedbackId ?>" name="admin_reply" rows="3" maxlength="5000" placeholder="可填写处理说明或补充要求"><?= htmlspecialchars($feedbackReply, ENT_QUOTES, 'UTF-8') ?></textarea>
+                                            <textarea id="feedback-reply-<?= $feedbackId ?>" name="admin_reply" rows="3" maxlength="5000" placeholder="可填写处理说明或补充要求" data-feedback-admin-reply><?= htmlspecialchars($feedbackReply, ENT_QUOTES, 'UTF-8') ?></textarea>
+                                            <p class="ta-help-text" data-feedback-admin-hint>当状态选择“需要补充”时，建议填写需要玩家补充的具体材料。</p>
                                             <button type="submit" class="ta-btn ta-btn-primary">保存</button>
                                         </form>
                                     </td>

@@ -54,6 +54,7 @@ $router->post('/profile/password/update', [ProfileController::class, 'updatePass
 $router->post('/profile/password/quick-reset', [ProfileController::class, 'sendQuickResetEmail']);
 $router->post('/profile/mc-character/update', [ProfileController::class, 'updateMinecraftCharacter']);
 $router->post('/profile/feedback/create', [ProfileController::class, 'feedbackCreate']);
+$router->post('/profile/feedback/supplement', [ProfileController::class, 'feedbackSupplement']);
 
 // Content pages
 $router->get('/gallery', [PageController::class, 'gallery']);

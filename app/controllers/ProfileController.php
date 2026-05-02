@@ -231,6 +231,73 @@ class ProfileController extends Controller
         }
     }
 
+    public function feedbackSupplement(): void
+    {
+        $isAjax = $this->isAjaxRequest() || array_key_exists('ajax', $_GET) || array_key_exists('ajax', $_POST);
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0) {
+            $this->completeFeedbackCreate(false, '请先登录后再补充反馈。', 401, $isAjax);
+            return;
+        }
+
+        $this->generateCsrfToken();
+        $token = (string)($_POST['csrf_token'] ?? '');
+        $sessionToken = (string)($_SESSION['csrf_token'] ?? '');
+        if ($token === '' || $sessionToken === '' || !hash_equals($sessionToken, $token)) {
+            $this->completeFeedbackCreate(false, 'CSRF 校验失败，请刷新后重试。', 403, $isAjax);
+            return;
+        }
+
+        $feedbackId = (int)($_POST['feedback_id'] ?? 0);
+        if ($feedbackId <= 0) {
+            $this->completeFeedbackCreate(false, '反馈编号无效。', 400, $isAjax);
+            return;
+        }
+
+        $supplementContent = trim((string)($_POST['supplement_content'] ?? ''));
+        $supplementLength = mb_strlen($supplementContent, 'UTF-8');
+        if ($supplementLength < 10 || $supplementLength > 5000) {
+            $this->completeFeedbackCreate(false, '补充说明长度需在 10-5000 字之间。', 400, $isAjax);
+            return;
+        }
+
+        try {
+            $feedback = $this->feedbacks->getUserFeedbackById($feedbackId, $userId);
+            if (!$feedback) {
+                $this->completeFeedbackCreate(false, '反馈不存在或无权限补充。', 404, $isAjax);
+                return;
+            }
+
+            $status = strtolower(trim((string)($feedback['status'] ?? '')));
+            if ($status !== 'need_more_info') {
+                $this->completeFeedbackCreate(false, '仅“需要补充”状态的反馈可提交补充材料。', 400, $isAjax);
+                return;
+            }
+
+            $updated = $this->feedbacks->appendUserSupplement(
+                $feedbackId,
+                $userId,
+                $supplementContent,
+                $_FILES['attachments'] ?? []
+            );
+            if (!$updated) {
+                $this->completeFeedbackCreate(false, '补充提交失败，请稍后重试。', 400, $isAjax);
+                return;
+            }
+
+            $this->completeFeedbackCreate(
+                true,
+                '补充材料已提交，状态已更新为处理中。',
+                200,
+                $isAjax,
+                ['feedback_id' => $feedbackId, 'status' => 'reviewing']
+            );
+        } catch (\Throwable $e) {
+            $message = $e->getMessage() !== '' ? $e->getMessage() : '补充提交失败，请稍后重试。';
+            $this->completeFeedbackCreate(false, $message, 400, $isAjax);
+        }
+    }
+
     public function updatePassword(): void
     {
         $this->validateCsrfToken();

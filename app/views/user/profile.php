@@ -20,7 +20,6 @@ $feedbackStatusLabels = [
     'need_more_info' => '需要补充',
     'resolved' => '已处理',
     'rejected' => '已驳回',
-    'closed' => '已关闭',
 ];
 $feedbackCategoryLabels = [
     'report' => '举报玩家',
@@ -609,10 +608,68 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
     border-color: rgba(239, 68, 68, 0.5);
     background: rgba(239, 68, 68, 0.12);
 }
-#panel-feedback .profile-feedback-status--closed {
-    color: #94a3b8;
-    border-color: rgba(148, 163, 184, 0.5);
-    background: rgba(148, 163, 184, 0.12);
+#panel-feedback .profile-feedback-file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+#panel-feedback .profile-feedback-upload {
+    border: 1px dashed var(--border-color-strong);
+    border-radius: 0.75rem;
+    padding: 0.7rem;
+    background: rgba(15, 23, 42, 0.36);
+}
+#panel-feedback .profile-feedback-upload-list {
+    margin-top: 0.6rem;
+    display: grid;
+    gap: 0.55rem;
+}
+#panel-feedback .profile-feedback-upload-item {
+    display: grid;
+    grid-template-columns: 52px 1fr auto;
+    gap: 0.55rem;
+    align-items: center;
+    border: 1px solid var(--border-color);
+    border-radius: 0.65rem;
+    padding: 0.45rem;
+    background: rgba(15, 23, 42, 0.45);
+}
+#panel-feedback .profile-feedback-upload-thumb {
+    width: 52px;
+    height: 52px;
+    border-radius: 0.5rem;
+    object-fit: cover;
+    border: 1px solid var(--border-color);
+}
+#panel-feedback .profile-feedback-upload-meta {
+    min-width: 0;
+}
+#panel-feedback .profile-feedback-upload-name {
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#panel-feedback .profile-feedback-upload-size {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+}
+#panel-feedback .profile-feedback-supplement-row td {
+    background: rgba(15, 23, 42, 0.3);
+}
+#panel-feedback .profile-feedback-supplement-form {
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    padding: 0.8rem;
+    background: rgba(15, 23, 42, 0.35);
 }
 @media (min-width: 768px) {
     #panel-feedback .profile-feedback-grid {
@@ -1059,7 +1116,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                     <li>标题尽量具体，建议包含场景、时间和对象。</li>
                                     <li>举报玩家时请填写对方游戏名，便于管理员快速核查。</li>
                                     <li>证据支持外链与图片上传，图片最多 3 张，每张不超过 5MB。</li>
-                                    <li>状态说明：待处理、处理中、需要补充、已处理、已驳回、已关闭。</li>
+                                    <li>状态说明：待处理、处理中、需要补充、已处理、已驳回。</li>
                                 </ul>
                             </article>
 
@@ -1113,8 +1170,19 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 
                                     <div>
                                         <label for="feedback-attachments" class="block text-sm text-slate-300">图片上传（可选）</label>
-                                        <input id="feedback-attachments" name="attachments[]" type="file" multiple accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400">
-                                        <p id="feedback-attachments-hint" class="mt-1 text-xs text-slate-400">最多 3 张，仅支持 jpg/jpeg/png/webp，单张最大 5MB。</p>
+                                        <div data-feedback-upload class="profile-feedback-upload mt-1">
+                                            <input
+                                                id="feedback-attachments"
+                                                name="attachments[]"
+                                                type="file"
+                                                multiple
+                                                accept="image/jpeg,image/png,image/webp"
+                                                class="profile-feedback-file-input"
+                                            >
+                                            <button type="button" class="rounded-lg border border-slate-600 bg-slate-800/80 px-3 py-2 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:border-slate-500 hover:bg-slate-700/80" data-feedback-upload-trigger>点击上传图片</button>
+                                            <p class="mt-1 text-xs text-slate-400" data-feedback-upload-hint>最多 3 张，仅支持 jpg/jpeg/png/webp，单张最大 5MB。</p>
+                                            <div class="profile-feedback-upload-list" data-feedback-upload-list hidden></div>
+                                        </div>
                                     </div>
 
                                     <button type="submit" class="rounded-lg bg-blue-500 px-4 py-2 font-medium text-white transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-blue-600 hover:shadow-md">提交反馈</button>
@@ -1138,6 +1206,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                             <th>管理员回复</th>
                                             <th>创建时间</th>
                                             <th>更新时间</th>
+                                            <th>操作</th>
                                         </tr>
                                         </thead>
                                         <tbody>
@@ -1151,6 +1220,8 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                             $feedbackStatusLabel = $feedbackStatusLabels[$feedbackStatus] ?? $feedbackStatus;
                                             $feedbackStatusClass = 'profile-feedback-status--' . (preg_match('/^[a-z_]+$/', $feedbackStatus) === 1 ? $feedbackStatus : 'pending');
                                             $feedbackReply = trim((string)($feedbackItem['admin_reply'] ?? ''));
+                                            $feedbackUserSupplement = trim((string)($feedbackItem['user_supplement'] ?? ''));
+                                            $canSupplement = $feedbackStatus === 'need_more_info';
                                             ?>
                                             <tr>
                                                 <td>#<?= $feedbackId ?></td>
@@ -1161,10 +1232,68 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                                         <?= htmlspecialchars($feedbackStatusLabel, ENT_QUOTES, 'UTF-8') ?>
                                                     </span>
                                                 </td>
-                                                <td><?= $feedbackReply === '' ? '<span class="text-slate-500">--</span>' : nl2br(htmlspecialchars($feedbackReply, ENT_QUOTES, 'UTF-8')) ?></td>
+                                                <td>
+                                                    <div>
+                                                        <div class="text-xs text-slate-400">管理员回复：</div>
+                                                        <div><?= $feedbackReply === '' ? '<span class="text-slate-500">--</span>' : nl2br(htmlspecialchars($feedbackReply, ENT_QUOTES, 'UTF-8')) ?></div>
+                                                    </div>
+                                                    <?php if ($feedbackUserSupplement !== ''): ?>
+                                                        <div class="mt-2">
+                                                            <div class="text-xs text-slate-400">我的补充：</div>
+                                                            <div><?= nl2br(htmlspecialchars($feedbackUserSupplement, ENT_QUOTES, 'UTF-8')) ?></div>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                </td>
                                                 <td><?= $formatFeedbackTime($feedbackItem['created_at'] ?? '') ?></td>
                                                 <td><?= $formatFeedbackTime($feedbackItem['updated_at'] ?? '') ?></td>
+                                                <td>
+                                                    <?php if ($canSupplement): ?>
+                                                        <button
+                                                            type="button"
+                                                            class="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-slate-900 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-amber-400 hover:shadow-md"
+                                                            data-feedback-supplement-toggle
+                                                            data-feedback-supplement-target="feedback-supplement-row-<?= $feedbackId ?>"
+                                                            aria-expanded="false"
+                                                        >补充材料</button>
+                                                    <?php else: ?>
+                                                        <span class="text-slate-500">--</span>
+                                                    <?php endif; ?>
+                                                </td>
                                             </tr>
+                                            <?php if ($canSupplement): ?>
+                                                <tr id="feedback-supplement-row-<?= $feedbackId ?>" class="profile-feedback-supplement-row" hidden>
+                                                    <td colspan="8">
+                                                        <form method="post" action="/profile/feedback/supplement" enctype="multipart/form-data" class="profile-feedback-supplement-form space-y-3">
+                                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                                            <input type="hidden" name="feedback_id" value="<?= $feedbackId ?>">
+                                                            <div>
+                                                                <label for="feedback-supplement-content-<?= $feedbackId ?>" class="block text-sm text-slate-300">补充说明</label>
+                                                                <textarea id="feedback-supplement-content-<?= $feedbackId ?>" name="supplement_content" rows="4" minlength="10" maxlength="5000" required class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400"></textarea>
+                                                            </div>
+                                                            <div>
+                                                                <label for="feedback-supplement-attachments-<?= $feedbackId ?>" class="block text-sm text-slate-300">补充图片（可选）</label>
+                                                                <div data-feedback-upload class="profile-feedback-upload mt-1">
+                                                                    <input
+                                                                        id="feedback-supplement-attachments-<?= $feedbackId ?>"
+                                                                        name="attachments[]"
+                                                                        type="file"
+                                                                        multiple
+                                                                        accept="image/jpeg,image/png,image/webp"
+                                                                        class="profile-feedback-file-input"
+                                                                    >
+                                                                    <button type="button" class="rounded-lg border border-slate-600 bg-slate-800/80 px-3 py-2 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:border-slate-500 hover:bg-slate-700/80" data-feedback-upload-trigger>点击上传图片</button>
+                                                                    <p class="mt-1 text-xs text-slate-400" data-feedback-upload-hint>最多 3 张，仅支持 jpg/jpeg/png/webp，单张最大 5MB。</p>
+                                                                    <div class="profile-feedback-upload-list" data-feedback-upload-list hidden></div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="flex flex-wrap gap-2">
+                                                                <button type="submit" class="rounded-lg bg-blue-500 px-3 py-2 text-sm font-medium text-white transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-blue-600 hover:shadow-md">提交补充</button>
+                                                                <button type="button" class="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200 transition-all duration-200 ease-in-out hover:border-slate-500 hover:bg-slate-700/60" data-feedback-supplement-cancel data-feedback-supplement-target="feedback-supplement-row-<?= $feedbackId ?>">取消</button>
+                                                            </div>
+                                                        </form>
+                                                    </td>
+                                                </tr>
+                                            <?php endif; ?>
                                         <?php endforeach; ?>
                                         </tbody>
                                     </table>
@@ -1717,11 +1846,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const feedbackForm = document.getElementById('profile-feedback-form');
     const feedbackCategory = document.getElementById('feedback-category');
-    const feedbackAttachments = document.getElementById('feedback-attachments');
-    const feedbackAttachmentsHint = document.getElementById('feedback-attachments-hint');
     const feedbackOptionalFields = Array.from(document.querySelectorAll('[data-feedback-optional-field]'));
-    const feedbackAllowedExt = ['jpg', 'jpeg', 'png', 'webp'];
-    const feedbackAllowedMime = ['image/jpeg', 'image/png', 'image/webp'];
 
     const normalizeFeedbackCategory = (value) => String(value || '').trim().toLowerCase();
 
@@ -1760,67 +1885,206 @@ document.addEventListener('DOMContentLoaded', () => {
         feedbackCategory.addEventListener('change', syncFeedbackOptionalFields);
     }
 
-    const validateFeedbackFiles = () => {
-        if (!feedbackAttachments || !feedbackAttachments.files) {
-            return true;
+    const formatFileSize = (bytes) => {
+        const size = Math.max(0, Number(bytes || 0));
+        if (size >= 1024 * 1024) {
+            return (size / (1024 * 1024)).toFixed(2) + ' MB';
         }
-
-        const files = Array.from(feedbackAttachments.files);
-        if (files.length > 3) {
-            alert('最多只能上传 3 张图片');
-            feedbackAttachments.value = '';
-            if (feedbackAttachmentsHint) {
-                feedbackAttachmentsHint.textContent = '最多 3 张，仅支持 jpg/jpeg/png/webp，单张最大 5MB。';
-            }
-            return false;
+        if (size >= 1024) {
+            return (size / 1024).toFixed(1) + ' KB';
         }
-
-        for (const file of files) {
-            const size = Number(file.size || 0);
-            if (size > 5 * 1024 * 1024) {
-                alert('图片大小不能超过 5MB：' + (file.name || '未知文件'));
-                feedbackAttachments.value = '';
-                if (feedbackAttachmentsHint) {
-                    feedbackAttachmentsHint.textContent = '文件超出限制，请重新选择。';
-                }
-                return false;
-            }
-
-            const filename = String(file.name || '').toLowerCase();
-            const ext = filename.includes('.') ? filename.split('.').pop() : '';
-            const mime = String(file.type || '').toLowerCase();
-            if (!feedbackAllowedExt.includes(String(ext || '')) || !feedbackAllowedMime.includes(mime)) {
-                alert('仅支持 jpg/jpeg/png/webp 图片：' + (file.name || '未知文件'));
-                feedbackAttachments.value = '';
-                if (feedbackAttachmentsHint) {
-                    feedbackAttachmentsHint.textContent = '格式不支持，请重新选择。';
-                }
-                return false;
-            }
-        }
-
-        if (feedbackAttachmentsHint) {
-            feedbackAttachmentsHint.textContent = files.length > 0
-                ? ('已选择 ' + files.length + ' 张图片')
-                : '最多 3 张，仅支持 jpg/jpeg/png/webp，单张最大 5MB。';
-        }
-
-        return true;
+        return size + ' B';
     };
 
-    if (feedbackAttachments) {
-        feedbackAttachments.addEventListener('change', () => {
-            validateFeedbackFiles();
+    const updateFileInput = (input, files) => {
+        if (!(input instanceof HTMLInputElement)) return;
+        if (typeof DataTransfer === 'undefined') {
+            return;
+        }
+        const transfer = new DataTransfer();
+        files.forEach((file) => {
+            transfer.items.add(file);
         });
-    }
+        input.files = transfer.files;
+    };
+
+    const initFeedbackUploadWidget = (root) => {
+        if (!(root instanceof HTMLElement)) return;
+
+        const input = root.querySelector('input[type="file"][name="attachments[]"]');
+        const trigger = root.querySelector('[data-feedback-upload-trigger]');
+        const listNode = root.querySelector('[data-feedback-upload-list]');
+        const hintNode = root.querySelector('[data-feedback-upload-hint]');
+        if (!(input instanceof HTMLInputElement) || !(trigger instanceof HTMLElement) || !(listNode instanceof HTMLElement)) {
+            return;
+        }
+
+        const maxCount = 3;
+        const maxBytes = 5 * 1024 * 1024;
+        const allowedExt = ['jpg', 'jpeg', 'png', 'webp'];
+        const allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+        const defaultHint = '最多 3 张，仅支持 jpg/jpeg/png/webp，单张最大 5MB。';
+        const selectedFiles = [];
+        let previewUrls = [];
+
+        const setHint = (text) => {
+            if (!hintNode) return;
+            hintNode.textContent = text || defaultHint;
+        };
+
+        const syncFiles = () => {
+            updateFileInput(input, selectedFiles);
+        };
+
+        const cleanupPreviewUrls = () => {
+            previewUrls.forEach((url) => URL.revokeObjectURL(url));
+            previewUrls = [];
+        };
+
+        const renderList = () => {
+            cleanupPreviewUrls();
+            listNode.innerHTML = '';
+            if (selectedFiles.length === 0) {
+                listNode.hidden = true;
+                setHint(defaultHint);
+                return;
+            }
+
+            listNode.hidden = false;
+            selectedFiles.forEach((file, index) => {
+                const item = document.createElement('div');
+                item.className = 'profile-feedback-upload-item';
+
+                const thumb = document.createElement('img');
+                thumb.className = 'profile-feedback-upload-thumb';
+                thumb.alt = '已选图片预览';
+                const previewUrl = URL.createObjectURL(file);
+                previewUrls.push(previewUrl);
+                thumb.src = previewUrl;
+
+                const meta = document.createElement('div');
+                meta.className = 'profile-feedback-upload-meta';
+                const name = document.createElement('div');
+                name.className = 'profile-feedback-upload-name';
+                name.textContent = String(file.name || '未命名文件');
+                const size = document.createElement('div');
+                size.className = 'profile-feedback-upload-size';
+                size.textContent = formatFileSize(file.size || 0);
+                meta.appendChild(name);
+                meta.appendChild(size);
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'rounded-lg border border-red-500/50 bg-red-500/10 px-2 py-1 text-xs text-red-300 transition hover:bg-red-500/20';
+                removeBtn.textContent = '移除';
+                removeBtn.addEventListener('click', () => {
+                    selectedFiles.splice(index, 1);
+                    syncFiles();
+                    renderList();
+                });
+
+                item.appendChild(thumb);
+                item.appendChild(meta);
+                item.appendChild(removeBtn);
+                listNode.appendChild(item);
+            });
+
+            setHint('已选择 ' + selectedFiles.length + ' 张图片');
+        };
+
+        const addFiles = (incomingFiles) => {
+            incomingFiles.forEach((file) => {
+                if (selectedFiles.length >= maxCount) {
+                    return;
+                }
+
+                const size = Number(file.size || 0);
+                if (size > maxBytes) {
+                    alert('图片大小不能超过 5MB：' + (file.name || '未知文件'));
+                    return;
+                }
+
+                const filename = String(file.name || '').toLowerCase();
+                const ext = filename.includes('.') ? String(filename.split('.').pop() || '') : '';
+                const mime = String(file.type || '').toLowerCase();
+                if (!allowedExt.includes(ext) || !allowedMime.includes(mime)) {
+                    alert('仅支持 jpg/jpeg/png/webp 图片：' + (file.name || '未知文件'));
+                    return;
+                }
+
+                selectedFiles.push(file);
+            });
+        };
+
+        trigger.addEventListener('click', () => {
+            input.click();
+        });
+
+        input.addEventListener('change', () => {
+            const incoming = Array.from(input.files || []);
+            if (incoming.length === 0) {
+                return;
+            }
+
+            const availableSlots = maxCount - selectedFiles.length;
+            if (availableSlots <= 0) {
+                alert('最多只能上传 3 张图片');
+                input.value = '';
+                return;
+            }
+            if (incoming.length > availableSlots) {
+                alert('最多只能上传 3 张图片，超出部分已忽略。');
+            }
+
+            addFiles(incoming.slice(0, availableSlots));
+            syncFiles();
+            renderList();
+            input.value = '';
+        });
+
+        root.addEventListener('submit', () => {
+            syncFiles();
+        });
+
+        renderList();
+    };
+
+    const uploadWidgets = Array.from(document.querySelectorAll('[data-feedback-upload]'));
+    uploadWidgets.forEach((widget) => {
+        initFeedbackUploadWidget(widget);
+    });
+
+    const supplementToggles = Array.from(document.querySelectorAll('[data-feedback-supplement-toggle]'));
+    const supplementCancelButtons = Array.from(document.querySelectorAll('[data-feedback-supplement-cancel]'));
+    supplementToggles.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const targetId = String(btn.getAttribute('data-feedback-supplement-target') || '');
+            if (targetId === '') return;
+            const row = document.getElementById(targetId);
+            if (!row) return;
+            const willShow = row.hidden;
+            row.hidden = !willShow;
+            btn.setAttribute('aria-expanded', String(willShow));
+        });
+    });
+    supplementCancelButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const targetId = String(btn.getAttribute('data-feedback-supplement-target') || '');
+            if (targetId === '') return;
+            const row = document.getElementById(targetId);
+            if (row) {
+                row.hidden = true;
+            }
+            const toggleBtn = document.querySelector('[data-feedback-supplement-toggle][data-feedback-supplement-target="' + targetId + '"]');
+            if (toggleBtn) {
+                toggleBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+    });
 
     if (feedbackForm) {
         feedbackForm.addEventListener('submit', async (event) => {
             event.preventDefault();
-            if (!validateFeedbackFiles()) {
-                return;
-            }
-
             const result = await submitForm(feedbackForm, '/profile/feedback/create');
             alert(result.message || (result.success ? '反馈提交成功' : '反馈提交失败'));
             if (result.success) {

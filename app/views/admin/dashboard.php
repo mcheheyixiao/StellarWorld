@@ -432,11 +432,6 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
     border-color: rgba(248, 113, 113, 0.45);
     background: rgba(248, 113, 113, 0.12);
 }
-.ta-feedback-status--closed {
-    color: #cbd5e1;
-    border-color: rgba(203, 213, 225, 0.45);
-    background: rgba(203, 213, 225, 0.12);
-}
 [data-theme="light"] .ta-feedback-status--pending {
     color: #92400e;
 }
@@ -451,9 +446,6 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
 }
 [data-theme="light"] .ta-feedback-status--rejected {
     color: #b91c1c;
-}
-[data-theme="light"] .ta-feedback-status--closed {
-    color: #334155;
 }
 .ta-feedback-cell-actions {
     min-width: 320px;
@@ -1819,6 +1811,40 @@ function editTeamMember(id, username, role) {
     });
 
     activateTab(initialId);
+})();
+
+(function () {
+    var feedbackForms = document.querySelectorAll('[data-feedback-admin-form]');
+    if (!feedbackForms.length) return;
+
+    feedbackForms.forEach(function (form) {
+        var statusSelect = form.querySelector('[data-feedback-admin-status]');
+        var replyInput = form.querySelector('[data-feedback-admin-reply]');
+        var hintNode = form.querySelector('[data-feedback-admin-hint]');
+        if (!statusSelect || !replyInput) return;
+
+        var defaultPlaceholder = replyInput.getAttribute('placeholder') || '';
+        var requiredPlaceholder = '状态为“需要补充”时，此项必填，请写明需要玩家补充哪些材料。';
+
+        var syncState = function () {
+            var needReply = String(statusSelect.value || '') === 'need_more_info';
+            replyInput.placeholder = needReply ? requiredPlaceholder : defaultPlaceholder;
+            if (hintNode) {
+                hintNode.style.color = needReply ? '#f97316' : '';
+            }
+        };
+
+        statusSelect.addEventListener('change', syncState);
+        form.addEventListener('submit', function (event) {
+            if (String(statusSelect.value || '') === 'need_more_info' && String(replyInput.value || '').trim() === '') {
+                event.preventDefault();
+                alert('当状态为“需要补充”时，请填写管理员回复，说明需要玩家补充的内容。');
+                replyInput.focus();
+            }
+        });
+
+        syncState();
+    });
 })();
 
 (function () {

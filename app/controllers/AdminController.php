@@ -473,6 +473,14 @@ class AdminController extends Controller
             $this->completeAdminAction('/admin?tab=feedback&err=reply_len', [], 'Admin reply is too long');
             return;
         }
+        if ($status === 'need_more_info' && $adminReply === '') {
+            $this->completeAdminAction(
+                '/admin?tab=feedback&err=reply_required',
+                [],
+                'Admin reply is required when status is need_more_info'
+            );
+            return;
+        }
 
         $adminId = (int)($_SESSION['user_id'] ?? 0);
         if ($adminId <= 0) {

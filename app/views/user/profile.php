@@ -28,6 +28,20 @@ $feedbackCategoryLabels = [
     'suggestion' => '玩法建议',
     'other' => '其他',
 ];
+$feedbackStatusCounters = [
+    'pending' => 0,
+    'need_more_info' => 0,
+    'resolved' => 0,
+];
+foreach ($feedbackList as $feedbackItem) {
+    $statusKey = strtolower(trim((string)($feedbackItem['status'] ?? 'pending')));
+    if (array_key_exists($statusKey, $feedbackStatusCounters)) {
+        $feedbackStatusCounters[$statusKey]++;
+    }
+}
+$feedbackPendingCount = (string)$feedbackStatusCounters['pending'];
+$feedbackNeedMoreInfoCount = (string)$feedbackStatusCounters['need_more_info'];
+$feedbackResolvedCount = (string)$feedbackStatusCounters['resolved'];
 $formatFeedbackTime = static function ($value): string {
     $text = trim((string)$value);
     if ($text === '') {
@@ -102,19 +116,48 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 
 <style>
 .profile-page-root {
+    position: relative;
     color: var(--text-primary);
+    isolation: isolate;
+}
+.profile-page-root::before {
+    content: "";
+    position: absolute;
+    inset: -80px -40px auto;
+    height: 360px;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--primary) 26%, transparent) 0%, transparent 38%),
+        radial-gradient(circle at 80% 28%, color-mix(in srgb, var(--primary-strong) 22%, transparent) 0%, transparent 36%),
+        radial-gradient(circle at 50% 82%, color-mix(in srgb, var(--primary) 16%, transparent) 0%, transparent 42%);
+    filter: blur(12px);
+    z-index: 0;
 }
 .profile-shell {
     display: grid;
     grid-template-columns: 1fr;
-    --profile-surface: var(--card-bg-soft);
-    --profile-surface-muted: var(--card-bg-muted);
-    --profile-border: var(--border-color-strong);
+    position: relative;
+    z-index: 1;
+    --profile-glass-bg: color-mix(in srgb, var(--card-bg) 86%, transparent);
+    --profile-panel-bg: color-mix(in srgb, var(--card-bg) 94%, transparent);
+    --profile-soft-bg: color-mix(in srgb, var(--card-bg-muted) 82%, transparent);
+    --profile-blue-soft: color-mix(in srgb, var(--primary) 16%, transparent);
+    --profile-blue-border: color-mix(in srgb, var(--primary) 35%, transparent);
+    --profile-shadow: 0 22px 56px -40px rgba(15, 23, 42, 0.45);
     --profile-text: var(--text-primary);
     --profile-muted: var(--text-muted);
+    --profile-border: color-mix(in srgb, var(--border-color-strong) 78%, transparent);
+}
+[data-theme="dark"] .profile-shell {
+    --profile-glass-bg: rgba(15, 23, 42, 0.78);
+    --profile-panel-bg: rgba(15, 23, 42, 0.72);
+    --profile-soft-bg: rgba(30, 41, 59, 0.72);
+    --profile-blue-soft: rgba(59, 130, 246, 0.22);
+    --profile-blue-border: rgba(59, 130, 246, 0.4);
 }
 .profile-sidebar {
     border-bottom: 1px solid var(--profile-border);
+    background: var(--profile-soft-bg);
 }
 .duration-200 {
     transition-duration: 200ms;
@@ -163,48 +206,362 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 }
 
 .profile-page-shell {
-    background: var(--profile-surface) !important;
-    border-color: var(--profile-border) !important;
+    position: relative;
+    overflow: hidden;
+    border-radius: 28px;
+    background: var(--profile-glass-bg) !important;
+    border: 1px solid var(--profile-border) !important;
+    box-shadow: var(--profile-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+    backdrop-filter: blur(12px);
 }
-
-.profile-page-root .profile-nav-btn.bg-slate-800\/70 {
-    background: var(--card-bg-muted) !important;
-    border: 1px solid var(--border-color);
-    color: var(--profile-text) !important;
+[data-theme="dark"] .profile-page-shell {
+    box-shadow: 0 24px 70px -42px rgba(2, 6, 23, 0.78), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
-
-.profile-page-root .profile-nav-btn.bg-blue-500 {
-    background: var(--primary) !important;
-    color: var(--on-primary) !important;
-    border: 1px solid color-mix(in srgb, var(--primary-strong) 75%, transparent);
-}
-
-.profile-page-root .profile-sidebar,
-.profile-page-root main > div,
-.profile-page-root [data-profile-panel] {
+.profile-page-root .profile-sidebar {
     color: var(--profile-text);
     border-color: var(--profile-border) !important;
-    background: var(--profile-surface-muted) !important;
 }
-
+.profile-page-root [data-profile-panel] {
+    border-radius: 24px;
+    background: var(--profile-panel-bg) !important;
+    border: 1px solid var(--profile-border) !important;
+    box-shadow: 0 18px 40px -34px rgba(15, 23, 42, 0.36);
+}
 .profile-page-root [data-profile-panel] p,
-.profile-page-root [data-profile-panel] span,
-.profile-page-root [data-profile-panel] label {
+.profile-page-root [data-profile-panel] label,
+.profile-page-root [data-profile-panel] li {
     color: var(--profile-muted);
 }
-
 .profile-page-root [data-profile-panel] h3,
 .profile-page-root [data-profile-panel] h4,
 .profile-page-root [data-profile-panel] strong {
     color: var(--profile-text);
 }
-
-.profile-shell button:not(:disabled) {
-    transition: all 0.2s ease;
+.profile-identity-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: linear-gradient(146deg, rgba(37, 99, 235, 0.96), rgba(79, 70, 229, 0.94));
+    box-shadow: 0 20px 48px -30px rgba(30, 64, 175, 0.7);
 }
-
-.profile-shell button:not(:disabled):hover {
-    transform: translateY(-2px);
+.profile-identity-card::before,
+.profile-identity-card::after {
+    content: "";
+    position: absolute;
+    border-radius: 999px;
+    pointer-events: none;
+}
+.profile-identity-card::before {
+    width: 180px;
+    height: 180px;
+    right: -60px;
+    top: -85px;
+    background: rgba(255, 255, 255, 0.22);
+}
+.profile-identity-card::after {
+    width: 128px;
+    height: 128px;
+    left: -38px;
+    bottom: -56px;
+    background: rgba(255, 255, 255, 0.14);
+}
+.profile-identity-content {
+    position: relative;
+    z-index: 1;
+}
+.profile-nav-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-align: left;
+    border-radius: 0.95rem;
+    border: 1px solid var(--profile-border);
+    background: var(--profile-soft-bg) !important;
+    color: var(--profile-text) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+.profile-nav-btn::before {
+    content: "";
+    position: absolute;
+    left: 0.45rem;
+    top: 0.65rem;
+    bottom: 0.65rem;
+    width: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.75);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+.profile-nav-icon {
+    flex: 0 0 auto;
+    width: 1.2rem;
+    text-align: center;
+    line-height: 1;
+}
+.profile-page-root .profile-nav-btn.bg-slate-800\/70 {
+    background: var(--profile-soft-bg) !important;
+    border-color: var(--profile-border);
+    color: var(--profile-text) !important;
+}
+.profile-page-root .profile-nav-btn.bg-blue-500,
+.profile-page-root .profile-nav-btn.is-active {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 88%, white 12%), color-mix(in srgb, var(--primary-strong) 84%, white 16%)) !important;
+    color: #ffffff !important;
+    border-color: color-mix(in srgb, var(--primary-strong) 75%, transparent);
+    box-shadow: 0 14px 28px -22px color-mix(in srgb, var(--primary) 72%, transparent);
+}
+.profile-page-root .profile-nav-btn.bg-blue-500::before,
+.profile-page-root .profile-nav-btn.is-active::before {
+    opacity: 1;
+}
+.profile-sidebar-status {
+    border-radius: 0.95rem;
+    border: 1px solid var(--profile-border);
+    background: var(--profile-soft-bg);
+}
+.profile-sidebar-status-label {
+    font-size: 0.73rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--profile-muted);
+}
+.profile-sidebar-status-value {
+    margin-top: 0.25rem;
+    font-size: 0.82rem;
+    color: var(--profile-text);
+}
+.profile-hero-card {
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-radius: 1.35rem;
+    border: 1px solid var(--profile-blue-border);
+    background: linear-gradient(112deg, color-mix(in srgb, var(--primary) 12%, var(--card-bg) 88%), color-mix(in srgb, var(--card-bg) 95%, white 5%));
+    box-shadow: 0 18px 40px -32px rgba(15, 23, 42, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    padding: 1.2rem 1.4rem;
+}
+[data-theme="dark"] .profile-hero-card {
+    background: linear-gradient(112deg, rgba(30, 64, 175, 0.35), rgba(15, 23, 42, 0.9));
+    box-shadow: 0 18px 42px -32px rgba(2, 6, 23, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.profile-hero-eyebrow {
+    margin: 0;
+    font-size: 0.73rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--primary) 60%, var(--text-muted) 40%);
+}
+.profile-hero-title {
+    margin-top: 0.35rem;
+    font-size: clamp(1.22rem, 2.5vw, 1.62rem);
+    font-weight: 700;
+    color: var(--profile-text);
+}
+.profile-hero-subtitle {
+    margin-top: 0.35rem;
+    font-size: 0.93rem;
+    line-height: 1.6;
+    color: var(--profile-muted);
+}
+.profile-hero-badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+.profile-hero-badges span {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid var(--profile-blue-border);
+    background: var(--profile-blue-soft);
+    color: var(--profile-text);
+    padding: 0.35rem 0.72rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.profile-status-strip {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    text-align: left;
+    border-radius: 0.95rem;
+    border: 1px solid var(--profile-blue-border);
+    background: color-mix(in srgb, var(--card-bg-muted) 86%, transparent);
+    color: var(--profile-text);
+    padding: 0.75rem 0.9rem;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.profile-status-strip-title {
+    font-size: 0.83rem;
+    font-weight: 600;
+}
+.profile-status-strip-meta {
+    font-size: 0.78rem;
+    color: var(--profile-muted);
+}
+.profile-kpi-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.8rem;
+}
+.profile-kpi-card {
+    border-radius: 1rem;
+    border: 1px solid var(--profile-border);
+    background: color-mix(in srgb, var(--card-bg) 92%, transparent);
+    padding: 1rem;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.profile-kpi-header {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+}
+.profile-kpi-icon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.72rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--profile-blue-soft);
+    border: 1px solid var(--profile-blue-border);
+    font-size: 1rem;
+}
+.profile-kpi-title {
+    font-size: 0.86rem;
+    color: var(--profile-muted);
+}
+.profile-kpi-value {
+    margin-top: 0.65rem;
+    font-size: clamp(1.52rem, 3.2vw, 1.9rem);
+    font-weight: 700;
+    color: var(--profile-text);
+}
+.profile-kpi-note {
+    margin-top: 0.3rem;
+    font-size: 0.8rem;
+    color: var(--profile-muted);
+}
+.profile-player-archive {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+.profile-player-card {
+    border-radius: 1rem;
+    border: 1px solid var(--profile-border);
+    background: color-mix(in srgb, var(--card-bg) 92%, transparent);
+    padding: 1rem;
+}
+.profile-player-stat-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+}
+.profile-player-stat {
+    border-radius: 0.9rem;
+    border: 1px solid var(--profile-border);
+    background: color-mix(in srgb, var(--card-bg-muted) 86%, transparent);
+    padding: 0.78rem 0.9rem;
+}
+.profile-skin-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1rem;
+    border: 1px solid var(--profile-border);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 8%, var(--card-bg) 92%), color-mix(in srgb, var(--card-bg) 96%, transparent));
+    padding: 1rem;
+}
+.profile-skin-card::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 0.6rem;
+    width: 58%;
+    height: 12px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary) 30%, transparent);
+    filter: blur(10px);
+    opacity: 0.46;
+    pointer-events: none;
+}
+.profile-page-root [data-profile-panel] input:not([type="file"]),
+.profile-page-root [data-profile-panel] select,
+.profile-page-root [data-profile-panel] textarea {
+    border-color: var(--profile-border) !important;
+    background: color-mix(in srgb, var(--card-bg-muted) 88%, transparent) !important;
+    color: var(--profile-text) !important;
+}
+.profile-page-root [data-profile-panel] input:not([type="file"]):focus,
+.profile-page-root [data-profile-panel] select:focus,
+.profile-page-root [data-profile-panel] textarea:focus {
+    border-color: var(--profile-blue-border) !important;
+}
+.profile-page-root [data-profile-panel] button:not(:disabled),
+.profile-page-root [data-profile-panel] a {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+@media (hover: hover) {
+    .profile-nav-btn:hover {
+        transform: translateY(-1px);
+        border-color: var(--profile-blue-border);
+        box-shadow: var(--profile-shadow);
+    }
+    .profile-kpi-card:hover,
+    .profile-status-strip:hover {
+        transform: translateY(-2px);
+        border-color: var(--profile-blue-border);
+        box-shadow: var(--profile-shadow);
+    }
+}
+@media (min-width: 768px) {
+    .profile-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .profile-player-stat-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+@media (min-width: 1280px) {
+    .profile-kpi-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .profile-player-archive {
+        grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    }
+}
+@media (max-width: 1023px) {
+    .profile-sidebar {
+        border-right: 0;
+    }
+}
+@media (max-width: 767px) {
+    .profile-hero-card {
+        flex-direction: column;
+    }
+    .profile-hero-badges {
+        justify-content: flex-start;
+    }
+    .profile-status-strip {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .profile-page-root *,
+    .profile-page-root *::before,
+    .profile-page-root *::after {
+        transition: none !important;
+        animation: none !important;
+    }
 }
 
 #panel-player .checkin-card {
@@ -701,77 +1058,109 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
     <div class="profile-page-shell overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/85 shadow-2xl backdrop-blur">
         <div class="profile-shell">
             <aside class="profile-sidebar p-4 md:p-5 flex flex-col gap-4">
-                <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-center text-white">
-                    <img
-                        src="<?= htmlspecialchars($minotarAvatarUrl, ENT_QUOTES, 'UTF-8') ?>"
-                        alt="用户头像"
-                        width="96"
-                        height="96"
-                        class="rounded-full w-24 h-24 mx-auto border-4 border-white/40 object-cover"
-                        loading="eager"
-                        decoding="async"
-                    >
-                    <h1 class="mt-3 text-2xl font-bold"><?= htmlspecialchars((string)($profile['username'] ?? ''), ENT_QUOTES, 'UTF-8') ?></h1>
-                    <p class="mt-1 text-blue-100"><?= htmlspecialchars($qqOrUidDisplay, ENT_QUOTES, 'UTF-8') ?></p>
-                    <span class="mt-3 inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-semibold"><?= htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') ?></span>
-                    <p class="mt-3 text-sm text-blue-50">注册时间：<?= htmlspecialchars($createdAtDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                <div class="profile-identity-card p-6 text-center text-white">
+                    <div class="profile-identity-content">
+                        <img
+                            src="<?= htmlspecialchars($minotarAvatarUrl, ENT_QUOTES, 'UTF-8') ?>"
+                            alt="用户头像"
+                            width="96"
+                            height="96"
+                            class="rounded-full w-24 h-24 mx-auto border-4 border-white/50 object-cover"
+                            loading="eager"
+                            decoding="async"
+                        >
+                        <h1 class="mt-3 text-2xl font-bold"><?= htmlspecialchars((string)($profile['username'] ?? ''), ENT_QUOTES, 'UTF-8') ?></h1>
+                        <p class="mt-1 text-blue-100"><?= htmlspecialchars($qqOrUidDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                        <span class="mt-3 inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-semibold"><?= htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                        <p class="mt-3 text-sm text-blue-50">注册时间：<?= htmlspecialchars($createdAtDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                        <p class="mt-2 text-xs text-blue-100/95"><?= $hasMcName ? '已绑定 Minecraft 角色' : '暂未绑定 Minecraft 角色' ?></p>
+                    </div>
                 </div>
 
                 <nav class="grid grid-cols-1 gap-2">
-                    <button type="button" data-profile-tab-btn data-target="panel-game" class="profile-nav-btn rounded-xl bg-blue-500 px-4 py-3 text-base font-medium text-white shadow transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-blue-600 hover:shadow-md">游戏数据</button>
-                    <button type="button" data-profile-tab-btn data-target="panel-bind" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">账号绑定</button>
-                    <button type="button" data-profile-tab-btn data-target="panel-security" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">安全中心</button>
-                    <button type="button" data-profile-tab-btn data-target="panel-player" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">玩家功能</button>
-                    <button type="button" data-profile-tab-btn data-target="panel-feedback" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md">举报反馈</button>
+                    <button type="button" data-profile-tab-btn data-target="panel-game" class="profile-nav-btn rounded-xl bg-blue-500 px-4 py-3 text-base font-medium text-white shadow transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-blue-600 hover:shadow-md"><span class="profile-nav-icon" aria-hidden="true">🎮</span><span>游戏数据</span></button>
+                    <button type="button" data-profile-tab-btn data-target="panel-bind" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md"><span class="profile-nav-icon" aria-hidden="true">🔗</span><span>账号绑定</span></button>
+                    <button type="button" data-profile-tab-btn data-target="panel-security" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md"><span class="profile-nav-icon" aria-hidden="true">🛡</span><span>安全中心</span></button>
+                    <button type="button" data-profile-tab-btn data-target="panel-player" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md"><span class="profile-nav-icon" aria-hidden="true">🎁</span><span>玩家功能</span></button>
+                    <button type="button" data-profile-tab-btn data-target="panel-feedback" class="profile-nav-btn rounded-xl bg-slate-800/70 px-4 py-3 text-base font-medium text-slate-200 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:bg-slate-700/80 hover:shadow-md"><span class="profile-nav-icon" aria-hidden="true">📮</span><span>举报反馈</span></button>
                 </nav>
 
-                <div class="mt-auto rounded-xl border border-slate-700/80 bg-slate-800/60 p-3 text-xs text-slate-300">
-                     
+                <div class="profile-sidebar-status mt-auto p-3 text-xs">
+                    <p class="profile-sidebar-status-label">账号状态</p>
+                    <p class="profile-sidebar-status-value">正常 · <?= $hasMcName ? '已绑定 Minecraft' : '未绑定 Minecraft' ?></p>
+                    <p class="profile-sidebar-status-label mt-3">服务器身份</p>
+                    <p class="profile-sidebar-status-value"><?= htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') ?> · 已认证</p>
                 </div>
             </aside>
 
             <main class="flex min-w-0 flex-col gap-4 p-4 md:p-6">
-                <div class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-4">
-                    <h2 class="text-lg font-semibold text-slate-100">个人仪表盘</h2>
+                <div class="profile-hero-card">
+                    <div>
+                        <p class="profile-hero-eyebrow">Stellar Player Hub</p>
+                        <h2 class="profile-hero-title">欢迎回来，<?= htmlspecialchars((string)($profile['username'] ?? ''), ENT_QUOTES, 'UTF-8') ?></h2>
+                        <p class="profile-hero-subtitle">这里是你的繁星World个人中心，管理游戏数据、账号安全、签到与反馈工单。</p>
+                    </div>
+                    <div class="profile-hero-badges">
+                        <span><?= htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                        <span>账号正常</span>
+                        <span><?= $hasMcName ? '已绑定 Minecraft' : '未绑定 Minecraft' ?></span>
+                    </div>
                 </div>
 
-                <section class="grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <div class="rounded-xl border border-slate-700/80 bg-slate-800/70 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
-                        <p class="text-sm text-slate-400">游戏账号数量</p>
-                        <p class="mt-1 text-2xl font-bold text-slate-100"><?= htmlspecialchars($gameAccountCountDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                <button type="button" class="profile-status-strip" data-profile-status-target="panel-feedback">
+                    <span class="profile-status-strip-title">📮 举报反馈状态</span>
+                    <span class="profile-status-strip-meta">待处理 <?= htmlspecialchars($feedbackPendingCount, ENT_QUOTES, 'UTF-8') ?> · 需要补充 <?= htmlspecialchars($feedbackNeedMoreInfoCount, ENT_QUOTES, 'UTF-8') ?> · 已处理 <?= htmlspecialchars($feedbackResolvedCount, ENT_QUOTES, 'UTF-8') ?></span>
+                </button>
+
+                <section class="profile-kpi-grid">
+                    <div class="profile-kpi-card">
+                        <div class="profile-kpi-header">
+                            <span class="profile-kpi-icon" aria-hidden="true">🎮</span>
+                            <p class="profile-kpi-title">游戏账号</p>
+                        </div>
+                        <p class="profile-kpi-value"><?= htmlspecialchars($gameAccountCountDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                        <p class="profile-kpi-note"><?= $hasMcName ? ('已绑定 ' . htmlspecialchars($mcUsername, ENT_QUOTES, 'UTF-8')) : '尚未绑定 Minecraft 角色' ?></p>
                     </div>
-                    <div class="rounded-xl border border-slate-700/80 bg-slate-800/70 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
-                        <p class="text-sm text-slate-400">当前在线</p>
-                        <p class="mt-1 text-2xl font-bold text-slate-100"><?= htmlspecialchars($onlineDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                    <div class="profile-kpi-card">
+                        <div class="profile-kpi-header">
+                            <span class="profile-kpi-icon" aria-hidden="true">🟢</span>
+                            <p class="profile-kpi-title">在线状态</p>
+                        </div>
+                        <p class="profile-kpi-value"><?= htmlspecialchars($onlineDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                        <p class="profile-kpi-note">等待服务器同步</p>
                     </div>
-                    <div class="rounded-xl border border-slate-700/80 bg-slate-800/70 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
-                        <p class="text-sm text-slate-400">累计时长</p>
-                        <p class="mt-1 text-2xl font-bold text-slate-100"><?= htmlspecialchars($durationDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                    <div class="profile-kpi-card">
+                        <div class="profile-kpi-header">
+                            <span class="profile-kpi-icon" aria-hidden="true">⏱</span>
+                            <p class="profile-kpi-title">累计时长</p>
+                        </div>
+                        <p class="profile-kpi-value"><?= htmlspecialchars($durationDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                        <p class="profile-kpi-note">插件数据同步后显示</p>
                     </div>
                 </section>
 
                 <div class="min-h-0 flex-1">
-                    <section id="panel-game" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
-                        <h3 class="text-lg font-semibold text-slate-100">游戏数据</h3>
+                    <section id="panel-game" data-profile-panel class="profile-panel-card rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
+                        <h3 class="text-lg font-semibold text-slate-100">玩家档案</h3>
                         <p class="mt-1 text-sm text-slate-400">游戏账号信息、在线状态、累计时长与死亡次数。</p>
 
-                        <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_1fr]">
+                        <div class="profile-player-archive mt-5">
                             <div class="space-y-3">
-                                <div class="rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
-                                    <p class="text-sm text-slate-400">游戏账号信息</p>
+                                <div class="profile-player-card">
+                                    <p class="text-sm text-slate-400">玩家身份信息</p>
                                     <p class="mt-1 font-semibold text-slate-100"><?= htmlspecialchars((string)($profile['mc_username'] ?? '未绑定'), ENT_QUOTES, 'UTF-8') ?></p>
                                     <p class="mt-1 text-xs text-slate-400">UUID：<?= htmlspecialchars((string)($profile['mc_uuid'] ?? '--'), ENT_QUOTES, 'UTF-8') ?></p>
                                 </div>
-                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                    <div class="rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                                <div class="profile-player-stat-grid">
+                                    <div class="profile-player-stat">
                                         <p class="text-xs text-slate-400">在线状态</p>
                                         <p class="mt-1 text-lg font-semibold text-slate-100"><?= htmlspecialchars($onlineDisplay, ENT_QUOTES, 'UTF-8') ?></p>
                                     </div>
-                                    <div class="rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                                    <div class="profile-player-stat">
                                         <p class="text-xs text-slate-400">累计时长</p>
                                         <p class="mt-1 text-lg font-semibold text-slate-100"><?= htmlspecialchars($durationDisplay, ENT_QUOTES, 'UTF-8') ?></p>
                                     </div>
-                                    <div class="rounded-xl border border-slate-700/80 bg-slate-900/50 p-4">
+                                    <div class="profile-player-stat">
                                         <p class="text-xs text-slate-400">死亡次数</p>
                                         <p class="mt-1 text-lg font-semibold text-slate-100"><?= htmlspecialchars($deathDisplay, ENT_QUOTES, 'UTF-8') ?></p>
                                     </div>
@@ -781,14 +1170,15 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                 <?php endif; ?>
                             </div>
 
-                            <div class="rounded-xl border border-slate-700/80 bg-slate-900/50 p-4 flex flex-col items-center justify-center">
+                            <div class="profile-skin-card flex flex-col items-center justify-center">
+                                <p class="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Skin Preview</p>
                                 <canvas id="skin_container_3d" class="w-full max-w-xs mx-auto"></canvas>
                                 <img id="skin_container_2d" src="<?= htmlspecialchars($minotarBodyUrl, ENT_QUOTES, 'UTF-8') ?>" alt="玩家角色" class="w-full max-w-xs mx-auto" width="220" height="293" loading="eager" decoding="async">
                             </div>
                         </div>
                     </section>
 
-                    <section id="panel-bind" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
+                    <section id="panel-bind" data-profile-panel class="profile-panel-card rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
                         <h3 class="text-lg font-semibold text-slate-100">账号绑定</h3>
                         <p class="mt-1 text-sm text-slate-400">Minecraft 与 Union 绑定管理。</p>
 
@@ -839,7 +1229,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                         </div>
                     </section>
 
-                    <section id="panel-security" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
+                    <section id="panel-security" data-profile-panel class="profile-panel-card rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
                         <h3 class="text-lg font-semibold text-slate-100">安全中心</h3>
                         <p class="mt-1 text-sm text-slate-400">修改密码与邮箱快速重置。</p>
 
@@ -877,7 +1267,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                     </section>
 
                     <?php if (false): ?>
-                    <section id="panel-player" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
+                    <section id="panel-player" data-profile-panel class="profile-panel-card rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
                         <h3 class="text-lg font-semibold text-slate-100">玩家签到系统</h3>
                         <p class="mt-1 text-sm text-slate-400">展示静态签到界面与交互，不涉及真实数据写入。</p>
 
@@ -1093,7 +1483,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                         </div>
                     </section>
 
-                    <section id="panel-feedback" data-profile-panel class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
+                    <section id="panel-feedback" data-profile-panel class="profile-panel-card rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
                         <h3 class="text-lg font-semibold text-slate-100">举报反馈</h3>
                         <p class="mt-1 text-sm text-slate-400">提交举报、漏洞反馈或建议，并在站内追踪处理状态。</p>
 
@@ -1655,6 +2045,7 @@ document.addEventListener('DOMContentLoaded', () => {
 (() => {
     const navButtons = document.querySelectorAll('[data-profile-tab-btn]');
     const panels = document.querySelectorAll('[data-profile-panel]');
+    const statusStripButtons = document.querySelectorAll('[data-profile-status-target]');
 
     const setActiveTab = (targetId) => {
         panels.forEach((panel) => {
@@ -1674,12 +2065,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.classList.remove('bg-blue-500', 'text-white', 'shadow');
                 btn.classList.add('bg-slate-800/70', 'text-slate-200');
             }
+            btn.classList.toggle('is-active', isActive);
+            btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
         });
     };
 
     navButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
             const targetId = btn.getAttribute('data-target');
+            if (targetId) {
+                setActiveTab(targetId);
+            }
+        });
+    });
+    statusStripButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-profile-status-target');
             if (targetId) {
                 setActiveTab(targetId);
             }

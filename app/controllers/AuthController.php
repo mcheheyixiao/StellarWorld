@@ -272,6 +272,11 @@ class AuthController extends Controller
             exit;
         } catch (\Throwable $e) {
             error_log('MUA OAuth callback error: ' . $e->getMessage());
+            $isDevelopment = strtolower((string)(defined('APP_ENV') ? APP_ENV : 'production')) === 'development';
+            $safeMessage = $isDevelopment
+                ? $e->getMessage()
+                : 'OAuth 回调处理失败，请稍后重试或联系管理员';
+            $e = new \RuntimeException($safeMessage);
             $this->json([
                 'success' => false,
                 'message' => 'OAuth回调处理失败: ' . $e->getMessage(),
@@ -345,6 +350,7 @@ class AuthController extends Controller
             }
         }
 
+        $genericResetMessage = '如果该邮箱已注册，我们会发送重置链接，请查收邮箱。';
         $user = $this->users->findByEmail($email);
         if (!$user) {
             try {
@@ -354,7 +360,8 @@ class AuthController extends Controller
                 ]);
             } catch (\Throwable $e) {
             }
-            $this->json(['success' => false, 'message' => '该邮箱未注册'], 404);
+            $_SESSION['last_auth_action'] = time();
+            $this->json(['success' => true, 'message' => $genericResetMessage], 200);
             return;
         }
 
@@ -453,7 +460,7 @@ class AuthController extends Controller
 
             // === 新增：找回密码成功后写入冷却时间 ===
             $_SESSION['last_auth_action'] = time();
-            $this->json(['success' => true, 'message' => '重置链接已发送，请查收邮箱']);
+            $this->json(['success' => true, 'message' => $genericResetMessage]);
         } catch (\Throwable $e) {
             try {
                 $this->audit->logAction((int)($user['id'] ?? 0) ?: null, 'PASSWORD_RESET_LINK_ERROR', $ip, [

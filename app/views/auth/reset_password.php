@@ -3,7 +3,7 @@
         <h1 class="text-fusion-pixel mb-4 text-2xl text-white">重置密码</h1>
 
         <?php if (!empty($valid)): ?>
-            <form id="resetForm" method="post" action="/reset-password">
+            <form id="resetForm" method="post" action="/reset-password" data-async-form="true">
                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="token" value="<?= htmlspecialchars((string)($token ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                 <div style="margin-bottom:1rem;">
@@ -32,12 +32,43 @@
 </div>
 
 <script>
+function hideGlobalLoadingIfPresent() {
+    if (window.loadingManager && typeof window.loadingManager.cancelPendingNavigationLoading === 'function') {
+        window.loadingManager.cancelPendingNavigationLoading();
+        return;
+    }
+    if (window.loadingManager && typeof window.loadingManager.hideLoading === 'function') {
+        if (typeof window.loadingManager.clearNavigationTimer === 'function') {
+            window.loadingManager.clearNavigationTimer();
+        }
+        window.loadingManager.hideLoading();
+    }
+}
+
+async function readJsonSafe(resp) {
+    try {
+        return await resp.json();
+    } catch (err) {
+        return {
+            success: false,
+            message: '响应异常，请稍后重试'
+        };
+    }
+}
+
 const resetForm = document.getElementById('resetForm');
 if (resetForm) {
     resetForm.addEventListener('submit', async function (e) {
         e.preventDefault();
         const form = this;
         const msgBox = document.getElementById('resetMessage');
+        const btn = form.querySelector('button[type="submit"]');
+        const originalText = btn ? btn.textContent.trim() : '更新密码';
+        hideGlobalLoadingIfPresent();
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '正在提交...';
+        }
         msgBox.textContent = '正在更新密码...';
         try {
             const formData = new FormData(form);
@@ -45,16 +76,26 @@ if (resetForm) {
                 method: 'POST',
                 body: formData
             });
-            const data = await resp.json();
+            const data = await readJsonSafe(resp);
             msgBox.textContent = data.message || (data.success ? '更新成功' : '更新失败');
             if (data.success) {
                 setTimeout(function () { window.location.href = '/auth/login'; }, 800);
+                return;
+            }
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = originalText;
             }
         } catch (err) {
             console.error(err);
             msgBox.textContent = '网络错误，请稍后重试';
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        } finally {
+            hideGlobalLoadingIfPresent();
         }
     });
 }
 </script>
-

@@ -58,10 +58,14 @@ class LoadingManager {
         document.addEventListener('submit', (e) => {
             const form = e.target;
             if (!(form instanceof HTMLFormElement)) return;
-            const action = form.getAttribute('action') || window.location.href;
-            if (!this.isInternalUrl(action)) return;
-            this.scheduleSlowLoading();
-        }, true);
+            window.setTimeout(() => {
+                if (e.defaultPrevented) return;
+                if (form.dataset.noGlobalLoading === 'true' || form.dataset.asyncForm === 'true') return;
+                const action = form.getAttribute('action') || window.location.href;
+                if (!this.isInternalUrl(action)) return;
+                this.scheduleSlowLoading();
+            }, 0);
+        });
 
         window.addEventListener('beforeunload', () => {
             this.scheduleSlowLoading();
@@ -125,6 +129,26 @@ class LoadingManager {
         if (this.navigationTimer !== null) {
             clearTimeout(this.navigationTimer);
             this.navigationTimer = null;
+        }
+    }
+
+    cancelPendingNavigationLoading() {
+        this.clearNavigationTimer();
+        this.stopProgress();
+        if (!this.loadingSpinner) {
+            document.body.style.overflow = '';
+            return;
+        }
+        if (this.isLoading) {
+            this.hideLoading();
+            return;
+        }
+
+        this.loadingSpinner.classList.remove('show');
+        this.loadingSpinner.style.display = 'none';
+        document.body.style.overflow = '';
+        if (this.progressFill) {
+            this.progressFill.style.width = '0%';
         }
     }
 

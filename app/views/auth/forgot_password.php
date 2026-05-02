@@ -1,7 +1,7 @@
 <div class="page-container">
     <div class="mc-glass-card fade-in w-full p-6 md:p-8">
         <h1 class="text-fusion-pixel mb-4 text-2xl text-white">找回密码</h1>
-        <form id="forgotForm" method="post" action="/forgot-password">
+        <form id="forgotForm" method="post" action="/forgot-password" data-async-form="true">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
             <div style="margin-bottom:1rem;">
                 <label for="email">邮箱</label>
@@ -63,6 +63,30 @@ function startButtonCooldown(btn, originalText, seconds) {
     }, 1000);
 }
 
+function hideGlobalLoadingIfPresent() {
+    if (window.loadingManager && typeof window.loadingManager.cancelPendingNavigationLoading === 'function') {
+        window.loadingManager.cancelPendingNavigationLoading();
+        return;
+    }
+    if (window.loadingManager && typeof window.loadingManager.hideLoading === 'function') {
+        if (typeof window.loadingManager.clearNavigationTimer === 'function') {
+            window.loadingManager.clearNavigationTimer();
+        }
+        window.loadingManager.hideLoading();
+    }
+}
+
+async function readJsonSafe(resp) {
+    try {
+        return await resp.json();
+    } catch (err) {
+        return {
+            success: false,
+            message: '响应异常，请稍后重试'
+        };
+    }
+}
+
 document.getElementById('forgotCaptchaRefresh').addEventListener('click', refreshForgotCaptcha);
 
 document.getElementById('forgotForm').addEventListener('submit', async function (e) {
@@ -71,6 +95,7 @@ document.getElementById('forgotForm').addEventListener('submit', async function 
     const msgBox = document.getElementById('forgotMessage');
     const btn = form.querySelector('button[type="submit"]');
     const originalText = btn ? btn.textContent.trim() : '发送重置链接';
+    hideGlobalLoadingIfPresent();
 
     if (btn) {
         btn.disabled = true;
@@ -83,11 +108,12 @@ document.getElementById('forgotForm').addEventListener('submit', async function 
             method: 'POST',
             body: formData
         });
-        const data = await resp.json();
+        const data = await readJsonSafe(resp);
         msgBox.textContent = data.message || (data.success ? '发送成功' : '发送失败');
 
         if (resp.status === 429 || data.success) {
             form.reset();
+            refreshForgotCaptcha();
             if (btn) {
                 startButtonCooldown(btn, originalText, AUTH_COOLDOWN_SECONDS);
             }
@@ -107,7 +133,8 @@ document.getElementById('forgotForm').addEventListener('submit', async function 
             btn.textContent = originalText;
         }
         refreshForgotCaptcha();
+    } finally {
+        hideGlobalLoadingIfPresent();
     }
 });
 </script>
-

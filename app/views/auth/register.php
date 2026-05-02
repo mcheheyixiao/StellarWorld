@@ -3,7 +3,7 @@
     <?php $registerRequiresEmailCode = !empty($registerRequiresEmailCode); ?>
     <div class="mc-glass-card fade-in w-full p-6 md:p-8">
         <h1 class="text-fusion-pixel mb-4 text-2xl text-white">玩家注册</h1>
-        <form id="registerForm" method="post" action="/auth/register">
+        <form id="registerForm" method="post" action="/auth/register" data-async-form="true">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
             <div class="mb-4">
                 <label class="mb-1 block text-sm text-slate-300" for="username">用户名</label>
@@ -112,6 +112,30 @@ function startButtonCooldown(btn, originalText, seconds) {
     }, 1000);
 }
 
+function hideGlobalLoadingIfPresent() {
+    if (window.loadingManager && typeof window.loadingManager.cancelPendingNavigationLoading === 'function') {
+        window.loadingManager.cancelPendingNavigationLoading();
+        return;
+    }
+    if (window.loadingManager && typeof window.loadingManager.hideLoading === 'function') {
+        if (typeof window.loadingManager.clearNavigationTimer === 'function') {
+            window.loadingManager.clearNavigationTimer();
+        }
+        window.loadingManager.hideLoading();
+    }
+}
+
+async function readJsonSafe(resp) {
+    try {
+        return await resp.json();
+    } catch (err) {
+        return {
+            success: false,
+            message: '响应异常，请稍后重试'
+        };
+    }
+}
+
 document.getElementById('registerCaptchaRefresh').addEventListener('click', function () {
     refreshRegisterCaptcha();
 });
@@ -124,6 +148,7 @@ if (sendEmailCodeButton) {
         const captchaEl = document.getElementById('registerCaptchaAnswer');
         const csrfEl = document.querySelector('#registerForm input[name="csrf_token"]');
         const originalText = sendEmailCodeButton.textContent.trim();
+        hideGlobalLoadingIfPresent();
 
         if (!emailEl || !captchaEl || !csrfEl) {
             return;
@@ -152,7 +177,7 @@ if (sendEmailCodeButton) {
                 method: 'POST',
                 body: formData
             });
-            const data = await resp.json();
+            const data = await readJsonSafe(resp);
             msgBox.textContent = data.message || (data.success ? '验证码已发送' : '验证码发送失败');
 
             if (data.success) {
@@ -175,6 +200,8 @@ if (sendEmailCodeButton) {
             sendEmailCodeButton.disabled = false;
             sendEmailCodeButton.textContent = originalText;
             refreshRegisterCaptcha('email_code');
+        } finally {
+            hideGlobalLoadingIfPresent();
         }
     });
 }
@@ -185,6 +212,7 @@ document.getElementById('registerForm').addEventListener('submit', async functio
     const msgBox = document.getElementById('registerMessage');
     const btn = form.querySelector('button[type="submit"]');
     const originalText = btn ? btn.textContent.trim() : '注册';
+    hideGlobalLoadingIfPresent();
     if (btn) {
         btn.disabled = true;
         btn.textContent = '正在提交...';
@@ -204,10 +232,11 @@ document.getElementById('registerForm').addEventListener('submit', async functio
             method: 'POST',
             body: formData
         });
-        const data = await resp.json();
+        const data = await readJsonSafe(resp);
         msgBox.textContent = data.message || (data.success ? '注册成功' : '注册失败');
         if (resp.status === 429 || data.success) {
             form.reset();
+            refreshRegisterCaptcha('register');
             if (btn) {
                 startButtonCooldown(btn, originalText, AUTH_COOLDOWN_SECONDS);
             }
@@ -226,7 +255,8 @@ document.getElementById('registerForm').addEventListener('submit', async functio
             btn.textContent = originalText;
         }
         refreshRegisterCaptcha('register');
+    } finally {
+        hideGlobalLoadingIfPresent();
     }
 });
 </script>
-

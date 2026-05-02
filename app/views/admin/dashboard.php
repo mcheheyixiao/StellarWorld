@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $csrfToken = htmlspecialchars(
     $_SESSION['csrf_token'] ?? '',
     ENT_QUOTES,

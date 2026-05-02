@@ -1,4 +1,4 @@
-﻿# StellarWorld Realtime Observability
+# StellarWorld Realtime Observability
 
 ## 1. 系统架构
 

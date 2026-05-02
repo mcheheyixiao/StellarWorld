@@ -1,7 +1,7 @@
 <div class="page-container">
     <div class="mc-glass-card fade-in w-full p-6 md:p-8">
         <h1 class="text-fusion-pixel mb-4 text-2xl text-white">玩家登录</h1>
-        <form id="loginForm" method="post" action="/auth/login">
+        <form id="loginForm" method="post" action="/auth/login" data-async-form="true">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
             <div style="margin-bottom:1rem;">
                 <label for="username">用户名</label>
@@ -66,6 +66,30 @@ function refreshLoginCaptcha() {
     }
 }
 
+function hideGlobalLoadingIfPresent() {
+    if (window.loadingManager && typeof window.loadingManager.cancelPendingNavigationLoading === 'function') {
+        window.loadingManager.cancelPendingNavigationLoading();
+        return;
+    }
+    if (window.loadingManager && typeof window.loadingManager.hideLoading === 'function') {
+        if (typeof window.loadingManager.clearNavigationTimer === 'function') {
+            window.loadingManager.clearNavigationTimer();
+        }
+        window.loadingManager.hideLoading();
+    }
+}
+
+async function readJsonSafe(resp) {
+    try {
+        return await resp.json();
+    } catch (err) {
+        return {
+            success: false,
+            message: '响应异常，请稍后重试'
+        };
+    }
+}
+
 document.getElementById('loginCaptchaRefresh').addEventListener('click', refreshLoginCaptcha);
 
 document.getElementById('loginForm').addEventListener('submit', async function (e) {
@@ -74,6 +98,7 @@ document.getElementById('loginForm').addEventListener('submit', async function (
     const msgBox = document.getElementById('loginMessage');
     const btn = form.querySelector('button[type="submit"]');
     const originalText = btn ? btn.textContent.trim() : '登录';
+    hideGlobalLoadingIfPresent();
     if (btn) {
         btn.disabled = true;
         btn.textContent = '正在登录...';
@@ -85,7 +110,7 @@ document.getElementById('loginForm').addEventListener('submit', async function (
             method: 'POST',
             body: formData
         });
-        const data = await resp.json();
+        const data = await readJsonSafe(resp);
         msgBox.textContent = data.message || (data.success ? '登录成功' : '登录失败');
         if (data.success) {
             setTimeout(function () { window.location.href = '/'; }, 800);
@@ -104,7 +129,8 @@ document.getElementById('loginForm').addEventListener('submit', async function (
             btn.textContent = originalText;
         }
         refreshLoginCaptcha();
+    } finally {
+        hideGlobalLoadingIfPresent();
     }
 });
 </script>
-

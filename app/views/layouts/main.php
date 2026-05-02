@@ -9,6 +9,7 @@ $pageKeywords = $keywords ?? 'Minecraft, 公益服务器, MC服务器, 我的世
 
 $layoutRequestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $isAdminLayout = str_starts_with($layoutRequestPath, '/admin');
+$isHomeLayout = $layoutRequestPath === '/';
 
 // Background images：生成多宽度 WebP 变体（Intervention Image 未安装时仅使用原图）
 $backgroundImages = [
@@ -226,12 +227,21 @@ foreach ($backgroundImages as $rel) {
             min-height: calc(100vh - 120px);
             padding: 7rem 0 2.5rem;
         }
+        .main-content--home {
+            padding-top: 5.5rem;
+        }
         .main-content--admin {
             min-height: 100vh;
             padding: 0.75rem;
         }
         .main-content--admin .ta-admin-shell {
             height: calc(100vh - 1.5rem);
+        }
+
+        @media (max-width: 767.98px) {
+            .main-content--home {
+                padding-top: 5.75rem;
+            }
         }
 
         #navbar > div,
@@ -431,7 +441,7 @@ foreach ($backgroundImages as $rel) {
         </main>
     <?php else: ?>
         <?php include BASE_PATH . '/app/views/partials/navigation.php'; ?>
-        <main class="main-content">
+        <main class="main-content<?= $isHomeLayout ? ' main-content--home' : '' ?>">
             <div class="site-content-column">
                 <?= $content ?? '' ?>
             </div>

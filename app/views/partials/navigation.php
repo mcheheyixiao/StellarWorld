@@ -7,11 +7,11 @@ $navFallbackAvatar = '/images/owner_avatar.png';
 
 <nav id="navbar" class="mc-nav">
     <div class="mc-nav-shell">
-        <a href="/" class="mc-nav-logo" aria-label="繁星World服务器">
+        <a href="/" class="mc-nav-logo" aria-label="繁星World">
             <span class="mc-nav-logo-icon" aria-hidden="true">
-                <i class="mdi mdi-view-grid-outline"></i>
+                <img src="/images/logo.png" alt="" class="mc-nav-logo-image">
             </span>
-            <span class="mc-nav-logo-text">繁星World服务器</span>
+            <span class="mc-nav-logo-text">繁星World</span>
         </a>
 
         <button
@@ -256,15 +256,16 @@ document.addEventListener('DOMContentLoaded', function () {
 }
 
 .mc-nav-logo-icon {
-    width: 2.05rem;
-    height: 2.05rem;
-    border-radius: 0.5rem;
-    border: 1px solid rgba(148, 163, 184, 0.4);
-    background: rgba(15, 23, 42, 0.56);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    width: auto;
+    height: auto;
+    border: 0;
+    background: transparent;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
 }
 
 .mc-nav-logo-icon i {
@@ -272,11 +273,19 @@ document.addEventListener('DOMContentLoaded', function () {
     color: #e2e8f0;
 }
 
+.mc-nav-logo-image {
+    width: 2.55rem;
+    height: 2.55rem;
+    object-fit: contain;
+    display: block;
+    image-rendering: auto;
+}
+
 .mc-nav-logo-text {
-    font-size: 1.78rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    line-height: 1;
+    font-size: 0.98rem;
+    font-weight: 650;
+    letter-spacing: 0.015em;
+    line-height: 1.2;
     white-space: nowrap;
 }
 
@@ -586,7 +595,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     .mc-nav-logo-text {
-        font-size: 1rem;
+        font-size: 0.98rem;
     }
 
     .navbar-menu {
@@ -690,8 +699,9 @@ html.light #navbar.mc-nav .mc-nav-shell {
 }
 
 [data-theme="light"] .mc-nav-logo-icon {
-    background: rgba(255, 255, 255, 0.9);
-    border-color: rgba(148, 163, 184, 0.6);
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
 }
 
 [data-theme="light"] .mc-nav-logo-icon i {
@@ -715,10 +725,16 @@ html.light #navbar.mc-nav .mc-nav-shell {
     border-color: rgba(148, 163, 184, 0.5);
 }
 
-[data-theme="light"] .user-menu-dropdown,
-[data-theme="light"] .navbar-menu {
+[data-theme="light"] .user-menu-dropdown {
     background: rgba(255, 255, 255, 0.96);
     border-color: rgba(148, 163, 184, 0.4);
+}
+
+@media (max-width: 767.98px) {
+    [data-theme="light"] .navbar-menu {
+        background: rgba(255, 255, 255, 0.96);
+        border-color: rgba(148, 163, 184, 0.4);
+    }
 }
 
 [data-theme="light"] .user-menu-item {

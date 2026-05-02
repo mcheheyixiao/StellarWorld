@@ -40,14 +40,6 @@ if (is_file($aboutConfigPath)) {
                         <span>Minecraft 公益服务器</span>
                     </div>
 
-                    <div class="server-status">
-                        <span class="status-dot" id="serverStatusDot"></span>
-                        <span class="status-text">
-                            <span id="serverStatusText">连接中...</span>
-                            <span class="highlight-green" id="onlinePlayers"><?= htmlspecialchars((string)($serverInfo['players_online'] ?? '--'), ENT_QUOTES, 'UTF-8') ?></span>
-                        </span>
-                    </div>
-
                     <h1 class="text-fusion-pixel">
                         欢迎来到<br>
                         <span class="highlight">繁星World</span>
@@ -81,23 +73,14 @@ if (is_file($aboutConfigPath)) {
                     <div class="mc-hero-address mt-4 inline-flex max-w-full flex-wrap items-center gap-2 rounded-2xl border border-slate-300/65 border-opacity-10 bg-slate-200/90 px-3 py-2 text-sm text-slate-700 shadow-xl backdrop-blur-xl dark:border-white/15 dark:bg-slate-900/72 dark:text-slate-300">
                         <span class="mc-hero-address-label text-xs uppercase tracking-widest text-slate-600 dark:text-slate-300">服务器地址</span>
                         <code id="serverAddress" class="break-all font-mono text-sm text-slate-700 dark:text-slate-300"><?= htmlspecialchars($serverDisplayAddress, ENT_QUOTES, 'UTF-8') ?></code>
-                    </div>
-
-                    <div class="mc-hero-stats-grid">
-                        <div class="mc-status-line">
-                            <span>版本</span>
-                            <strong id="versionDisplay"><?= htmlspecialchars($serverVersion, ENT_QUOTES, 'UTF-8') ?></strong>
-                        </div>
-                        <div class="mc-status-line">
-                            <span>在线/上限</span>
-                            <strong id="playersDisplay">--</strong>
-                        </div>
-                        <div class="mc-status-line">
-                            <span>TPS</span>
-                            <strong id="tpsDisplay">--</strong>
+                        <div class="server-status server-status--inline">
+                            <span class="status-dot" id="serverStatusDot"></span>
+                            <span class="status-text">
+                                <span id="serverStatusText">连接中...</span>
+                                <span class="highlight-green" id="onlinePlayers"><?= htmlspecialchars((string)($serverInfo['players_online'] ?? '--'), ENT_QUOTES, 'UTF-8') ?></span>
+                            </span>
                         </div>
                     </div>
-
                     <div class="mc-hero-motd rounded-2xl border border-slate-300/60 border-opacity-10 bg-white/80 p-4 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/68">
                         <div class="mb-2 text-xs uppercase tracking-widest text-slate-600 dark:text-slate-300">MOTD</div>
                         <div class="detail-value motd text-sm text-slate-700 dark:text-slate-300" id="motdDisplay">--</div>
@@ -362,6 +345,17 @@ if (is_file($aboutConfigPath)) {
     margin-bottom: 1.25rem;
     color: #ffffff;
     font-size: 0.92rem;
+}
+
+.mc-hero-reference-content .server-status--inline {
+    margin-bottom: 0;
+    margin-left: 0.15rem;
+    padding: 0.34rem 0.72rem;
+    font-size: 0.86rem;
+}
+
+.mc-hero-reference-content .server-status--inline .status-text {
+    gap: 0.4rem;
 }
 
 .mc-hero-reference-content .status-text {

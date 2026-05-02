@@ -185,7 +185,7 @@
   }
 
   .modern-checkbox .custom-checkmark::after {
-    content: "✓";
+    content: "\2713";
     color: #fff;
     position: absolute;
     top: 50%;

@@ -30,8 +30,10 @@ $feedbackCategoryLabels = [
 ];
 $feedbackStatusCounters = [
     'pending' => 0,
+    'reviewing' => 0,
     'need_more_info' => 0,
     'resolved' => 0,
+    'rejected' => 0,
 ];
 foreach ($feedbackList as $feedbackItem) {
     $statusKey = strtolower(trim((string)($feedbackItem['status'] ?? 'pending')));
@@ -40,8 +42,9 @@ foreach ($feedbackList as $feedbackItem) {
     }
 }
 $feedbackPendingCount = (string)$feedbackStatusCounters['pending'];
+$feedbackReviewingCount = (string)$feedbackStatusCounters['reviewing'];
 $feedbackNeedMoreInfoCount = (string)$feedbackStatusCounters['need_more_info'];
-$feedbackResolvedCount = (string)$feedbackStatusCounters['resolved'];
+$feedbackCompletedCount = (string)($feedbackStatusCounters['resolved'] + $feedbackStatusCounters['rejected']);
 $formatFeedbackTime = static function ($value): string {
     $text = trim((string)$value);
     if ($text === '') {
@@ -67,6 +70,14 @@ $finalRawSkinUrl = $useMuaSkinRender ? (string)$muaSkinUrl : $craftheadSkinUrl;
 
 $roleRaw = (string)($profile['role'] ?? 'player');
 $roleLabel = $roleRaw === 'admin' ? '管理员' : '玩家';
+$profileStatusRaw = strtolower(trim((string)($profile['status'] ?? '')));
+$accountStatusLabelMap = [
+    'active' => '正常',
+    'banned' => '已封禁',
+    'disabled' => '已禁用',
+    'pending' => '待验证',
+];
+$accountStatusLabel = $accountStatusLabelMap[$profileStatusRaw] ?? '未知';
 
 $createdAtRaw = (string)($profile['created_at'] ?? '');
 $createdAtDisplay = '--';
@@ -1087,9 +1098,9 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 
                 <div class="profile-sidebar-status mt-auto p-3 text-xs">
                     <p class="profile-sidebar-status-label">账号状态</p>
-                    <p class="profile-sidebar-status-value">正常 · <?= $hasMcName ? '已绑定 Minecraft' : '未绑定 Minecraft' ?></p>
+                    <p class="profile-sidebar-status-value"><?= htmlspecialchars($accountStatusLabel, ENT_QUOTES, 'UTF-8') ?> · <?= $hasMcName ? '已绑定 Minecraft' : '未绑定 Minecraft' ?></p>
                     <p class="profile-sidebar-status-label mt-3">服务器身份</p>
-                    <p class="profile-sidebar-status-value"><?= htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') ?> · 已认证</p>
+                    <p class="profile-sidebar-status-value"><?= htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') ?> · <?= $hasMcName ? '已绑定 Minecraft' : '未绑定 Minecraft' ?></p>
                 </div>
             </aside>
 
@@ -1102,14 +1113,14 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                     </div>
                     <div class="profile-hero-badges">
                         <span><?= htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') ?></span>
-                        <span>账号正常</span>
+                        <span>账号<?= htmlspecialchars($accountStatusLabel, ENT_QUOTES, 'UTF-8') ?></span>
                         <span><?= $hasMcName ? '已绑定 Minecraft' : '未绑定 Minecraft' ?></span>
                     </div>
                 </div>
 
                 <button type="button" class="profile-status-strip" data-profile-status-target="panel-feedback">
                     <span class="profile-status-strip-title">📮 举报反馈状态</span>
-                    <span class="profile-status-strip-meta">待处理 <?= htmlspecialchars($feedbackPendingCount, ENT_QUOTES, 'UTF-8') ?> · 需要补充 <?= htmlspecialchars($feedbackNeedMoreInfoCount, ENT_QUOTES, 'UTF-8') ?> · 已处理 <?= htmlspecialchars($feedbackResolvedCount, ENT_QUOTES, 'UTF-8') ?></span>
+                    <span class="profile-status-strip-meta">待处理 <?= htmlspecialchars($feedbackPendingCount, ENT_QUOTES, 'UTF-8') ?> · 处理中 <?= htmlspecialchars($feedbackReviewingCount, ENT_QUOTES, 'UTF-8') ?> · 需补充 <?= htmlspecialchars($feedbackNeedMoreInfoCount, ENT_QUOTES, 'UTF-8') ?> · 已完成 <?= htmlspecialchars($feedbackCompletedCount, ENT_QUOTES, 'UTF-8') ?></span>
                 </button>
 
                 <section class="profile-kpi-grid">

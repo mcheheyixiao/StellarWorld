@@ -143,7 +143,10 @@ class Feedback extends Model
         $stmt->execute();
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-        return array_map(fn(array $row): array => $this->normalizeFeedbackRow($row), $rows);
+        $rows = array_map(fn(array $row): array => $this->normalizeFeedbackRow($row), $rows);
+        $this->appendAttachments($rows);
+
+        return $rows;
     }
 
     public function getUserFeedbackById(int $feedbackId, int $userId): ?array

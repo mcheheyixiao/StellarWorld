@@ -448,20 +448,63 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
     color: #b91c1c;
 }
 .ta-feedback-cell-actions {
-    min-width: 320px;
+    min-width: auto;
+    width: 1%;
+    white-space: nowrap;
 }
-.ta-feedback-details summary {
-    list-style: none;
+.ta-feedback-toggle-btn {
+    white-space: nowrap;
 }
-.ta-feedback-details summary::-webkit-details-marker {
-    display: none;
+.ta-feedback-detail-row td {
+    padding: 0;
+    background: transparent !important;
 }
-.ta-feedback-detail-body {
-    margin-top: 0.65rem;
-    border: 1px dashed var(--ta-border-strong);
-    border-radius: 0.72rem;
-    padding: 0.72rem;
+.ta-feedback-detail-panel {
+    margin: 0.75rem 0 1rem;
+    border: 1px solid var(--ta-border);
+    border-radius: 0.9rem;
+    background: var(--ta-surface-card);
+    box-shadow: 0 16px 36px -28px rgba(15, 23, 42, 0.32);
+    padding: 1rem;
+}
+.ta-feedback-detail-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    gap: 1rem;
+}
+.ta-feedback-detail-main {
+    min-width: 0;
+    display: grid;
+    gap: 0.85rem;
+}
+.ta-feedback-detail-action {
+    min-width: 0;
+}
+.ta-feedback-action-card {
+    border: 1px solid var(--ta-border);
+    border-radius: 0.75rem;
     background: rgba(148, 163, 184, 0.08);
+    padding: 0.8rem;
+}
+[data-theme="light"] .ta-feedback-action-card {
+    background: rgba(248, 250, 252, 0.88);
+}
+.ta-feedback-meta-grid {
+    display: grid;
+    gap: 0.6rem 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.ta-feedback-meta-item {
+    display: grid;
+    gap: 0.22rem;
+}
+.ta-feedback-meta-item strong {
+    color: var(--ta-text-strong);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+[data-theme="light"] .ta-feedback-meta-item strong {
+    color: #0f172a;
 }
 .ta-feedback-content {
     border-radius: 0.55rem;
@@ -499,8 +542,17 @@ $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
     font-size: 0.8rem;
     color: var(--ta-text-muted);
 }
+.ta-feedback-update-form select,
+.ta-feedback-update-form textarea {
+    width: 100%;
+}
 .ta-feedback-update-form textarea {
     min-height: 88px !important;
+}
+@media (max-width: 1023px) {
+    .ta-feedback-detail-grid {
+        grid-template-columns: 1fr;
+    }
 }
 .ta-gallery-grid {
     display: grid;
@@ -1817,6 +1869,40 @@ function editTeamMember(id, username, role) {
     var feedbackForms = document.querySelectorAll('[data-feedback-admin-form]');
     if (!feedbackForms.length) return;
 
+    var feedbackOpenLabel = '\u67e5\u770b\u8be6\u60c5';
+    var feedbackCloseLabel = '\u6536\u8d77\u8be6\u60c5';
+    var feedbackRequiredPlaceholder = '\u5f53\u72b6\u6001\u4e3a\u201c\u9700\u8981\u8865\u5145\u201d\u65f6\uff0c\u6b64\u9879\u5fc5\u586b\uff0c\u8bf7\u5199\u660e\u9700\u8981\u73a9\u5bb6\u8865\u5145\u54ea\u4e9b\u6750\u6599\u3002';
+    var feedbackRequiredAlert = '\u5f53\u72b6\u6001\u4e3a\u201c\u9700\u8981\u8865\u5145\u201d\u65f6\uff0c\u8bf7\u586b\u5199\u7ba1\u7406\u5458\u56de\u590d\uff0c\u8bf4\u660e\u9700\u8981\u73a9\u5bb6\u8865\u5145\u7684\u5185\u5bb9\u3002';
+
+    document.addEventListener('click', function (event) {
+        var target = event.target;
+        var toggleBtn = target && target.closest ? target.closest('[data-feedback-toggle]') : null;
+        if (!toggleBtn) return;
+
+        var feedbackId = String(toggleBtn.getAttribute('data-feedback-toggle') || '').trim();
+        if (feedbackId === '') return;
+
+        var detailRows = document.querySelectorAll('[data-feedback-detail]');
+        var detailRow = null;
+        for (var i = 0; i < detailRows.length; i++) {
+            var itemId = String(detailRows[i].getAttribute('data-feedback-detail') || '');
+            if (itemId === feedbackId) {
+                detailRow = detailRows[i];
+                break;
+            }
+        }
+        if (!detailRow) return;
+
+        var willOpen = detailRow.hasAttribute('hidden');
+        if (willOpen) {
+            detailRow.removeAttribute('hidden');
+        } else {
+            detailRow.setAttribute('hidden', 'hidden');
+        }
+        toggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        toggleBtn.textContent = willOpen ? feedbackCloseLabel : feedbackOpenLabel;
+    });
+
     feedbackForms.forEach(function (form) {
         var statusSelect = form.querySelector('[data-feedback-admin-status]');
         var replyInput = form.querySelector('[data-feedback-admin-reply]');
@@ -1824,11 +1910,10 @@ function editTeamMember(id, username, role) {
         if (!statusSelect || !replyInput) return;
 
         var defaultPlaceholder = replyInput.getAttribute('placeholder') || '';
-        var requiredPlaceholder = '状态为“需要补充”时，此项必填，请写明需要玩家补充哪些材料。';
 
         var syncState = function () {
             var needReply = String(statusSelect.value || '') === 'need_more_info';
-            replyInput.placeholder = needReply ? requiredPlaceholder : defaultPlaceholder;
+            replyInput.placeholder = needReply ? feedbackRequiredPlaceholder : defaultPlaceholder;
             if (hintNode) {
                 hintNode.style.color = needReply ? '#f97316' : '';
             }
@@ -1838,7 +1923,7 @@ function editTeamMember(id, username, role) {
         form.addEventListener('submit', function (event) {
             if (String(statusSelect.value || '') === 'need_more_info' && String(replyInput.value || '').trim() === '') {
                 event.preventDefault();
-                alert('当状态为“需要补充”时，请填写管理员回复，说明需要玩家补充的内容。');
+                alert(feedbackRequiredAlert);
                 replyInput.focus();
             }
         });
@@ -1900,4 +1985,3 @@ function editTeamMember(id, username, role) {
     });
 })();
 </script>
-

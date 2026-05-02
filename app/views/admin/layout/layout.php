@@ -342,6 +342,10 @@ $feedbackCategoryLabels = [
                     </div>
                 </form>
 
+                <?php
+                // Keep this value in sync with feedback table headers.
+                $feedbackTableColumnCount = 9;
+                ?>
                 <div class="ta-table-wrap">
                     <table class="ta-table ta-feedback-table">
                         <thead>
@@ -360,7 +364,7 @@ $feedbackCategoryLabels = [
                         <tbody>
                         <?php if (empty($feedbackList)): ?>
                             <tr>
-                                <td colspan="9" class="ta-help-text">暂无符合条件的反馈记录。</td>
+                                <td colspan="<?= $feedbackTableColumnCount ?>" class="ta-help-text">暂无符合条件的反馈记录。</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($feedbackList as $feedbackItem): ?>
@@ -383,6 +387,28 @@ $feedbackCategoryLabels = [
                                 $feedbackEvidence = trim((string)($feedbackItem['evidence_url'] ?? ''));
                                 $feedbackUserSupplement = trim((string)($feedbackItem['user_supplement'] ?? ''));
                                 $feedbackAttachments = is_array($feedbackItem['attachments'] ?? null) ? $feedbackItem['attachments'] : [];
+                                $feedbackEvidenceHref = '';
+                                if ($feedbackEvidence !== '' && preg_match('/^https?:\/\//i', $feedbackEvidence) === 1) {
+                                    $feedbackEvidenceHref = $feedbackEvidence;
+                                }
+                                $renderableAttachments = [];
+                                foreach ($feedbackAttachments as $attachment) {
+                                    $attachmentPath = trim((string)($attachment['file_path'] ?? ''));
+                                    if ($attachmentPath === '') {
+                                        continue;
+                                    }
+                                    if ($attachmentPath[0] !== '/') {
+                                        $attachmentPath = '/' . ltrim($attachmentPath, '/');
+                                    }
+                                    $attachmentAlt = trim((string)($attachment['original_name'] ?? ''));
+                                    if ($attachmentAlt === '') {
+                                        $attachmentAlt = '反馈附件';
+                                    }
+                                    $renderableAttachments[] = [
+                                        'path' => $attachmentPath,
+                                        'alt' => $attachmentAlt,
+                                    ];
+                                }
                                 ?>
                                 <tr>
                                     <td>#<?= $feedbackId ?></td>
@@ -394,64 +420,121 @@ $feedbackCategoryLabels = [
                                     <td><?= $formatFeedbackTime($feedbackItem['created_at'] ?? '') ?></td>
                                     <td><?= $formatFeedbackTime($feedbackItem['updated_at'] ?? '') ?></td>
                                     <td class="ta-feedback-cell-actions">
-                                        <details class="ta-feedback-details">
-                                            <summary class="ta-btn ta-btn-secondary">展开详情</summary>
-                                            <div class="ta-feedback-detail-body">
-                                                <p><strong>被举报玩家：</strong><?= htmlspecialchars($feedbackTargetPlayer !== '' ? $feedbackTargetPlayer : '--', ENT_QUOTES, 'UTF-8') ?></p>
-                                                <p><strong>发生时间：</strong><?= htmlspecialchars($feedbackOccurredAt !== '' ? $feedbackOccurredAt : '--', ENT_QUOTES, 'UTF-8') ?></p>
-                                                <p><strong>世界：</strong><?= htmlspecialchars($feedbackWorld !== '' ? $feedbackWorld : '--', ENT_QUOTES, 'UTF-8') ?></p>
-                                                <p><strong>坐标：</strong><?= htmlspecialchars($feedbackCoordinates !== '' ? $feedbackCoordinates : '--', ENT_QUOTES, 'UTF-8') ?></p>
-                                                <p><strong>详细内容：</strong></p>
-                                                <div class="ta-feedback-content"><?= nl2br(htmlspecialchars($feedbackContent, ENT_QUOTES, 'UTF-8')) ?></div>
-                                                <?php if ($feedbackUserSupplement !== ''): ?>
-                                                    <p><strong>玩家补充内容：</strong></p>
-                                                    <div class="ta-feedback-content"><?= nl2br(htmlspecialchars($feedbackUserSupplement, ENT_QUOTES, 'UTF-8')) ?></div>
-                                                <?php endif; ?>
-                                                <p>
-                                                    <strong>证据链接：</strong>
-                                                    <?php if ($feedbackEvidence !== ''): ?>
-                                                        <a href="<?= htmlspecialchars($feedbackEvidence, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer"><?= htmlspecialchars($feedbackEvidence, ENT_QUOTES, 'UTF-8') ?></a>
-                                                    <?php else: ?>
-                                                        --
-                                                    <?php endif; ?>
-                                                </p>
-                                                <?php if (!empty($feedbackAttachments)): ?>
-                                                    <div class="ta-feedback-attachments">
-                                                        <?php foreach ($feedbackAttachments as $attachment): ?>
-                                                            <?php
-                                                            $attachmentPath = trim((string)($attachment['file_path'] ?? ''));
-                                                            if ($attachmentPath === '') {
-                                                                continue;
-                                                            }
-                                                            if ($attachmentPath[0] !== '/') {
-                                                                $attachmentPath = '/' . ltrim($attachmentPath, '/');
-                                                            }
-                                                            ?>
-                                                            <a href="<?= htmlspecialchars($attachmentPath, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer">
-                                                                <img src="<?= htmlspecialchars($attachmentPath, ENT_QUOTES, 'UTF-8') ?>" alt="反馈附件" loading="lazy">
-                                                            </a>
-                                                        <?php endforeach; ?>
+                                        <button
+                                            type="button"
+                                            class="ta-btn ta-btn-secondary ta-feedback-toggle-btn"
+                                            data-feedback-toggle="<?= $feedbackId ?>"
+                                            aria-expanded="false"
+                                        >&#26597;&#30475;&#35814;&#24773;</button>
+                                    </td>
+                                </tr>
+                                <tr class="ta-feedback-detail-row" data-feedback-detail="<?= $feedbackId ?>" hidden>
+                                    <td colspan="<?= $feedbackTableColumnCount ?>">
+                                        <div class="ta-feedback-detail-panel">
+                                            <div class="ta-feedback-detail-grid">
+                                                <div class="ta-feedback-detail-main">
+                                                    <div class="ta-feedback-meta-grid">
+                                                        <div class="ta-feedback-meta-item">
+                                                            <span class="ta-help-text">反馈标题</span>
+                                                            <strong><?= htmlspecialchars($feedbackTitle !== '' ? $feedbackTitle : '--', ENT_QUOTES, 'UTF-8') ?></strong>
+                                                        </div>
+                                                        <div class="ta-feedback-meta-item">
+                                                            <span class="ta-help-text">反馈类型</span>
+                                                            <strong><?= htmlspecialchars($feedbackCategoryLabel !== '' ? $feedbackCategoryLabel : '--', ENT_QUOTES, 'UTF-8') ?></strong>
+                                                        </div>
+                                                        <div class="ta-feedback-meta-item">
+                                                            <span class="ta-help-text">提交玩家</span>
+                                                            <strong><?= htmlspecialchars($feedbackUsername !== '' ? $feedbackUsername : '--', ENT_QUOTES, 'UTF-8') ?></strong>
+                                                        </div>
+                                                        <div class="ta-feedback-meta-item">
+                                                            <span class="ta-help-text">游戏名</span>
+                                                            <strong><?= htmlspecialchars($feedbackMcUsername !== '' ? $feedbackMcUsername : '--', ENT_QUOTES, 'UTF-8') ?></strong>
+                                                        </div>
+                                                        <div class="ta-feedback-meta-item">
+                                                            <span class="ta-help-text">被举报玩家</span>
+                                                            <strong><?= htmlspecialchars($feedbackTargetPlayer !== '' ? $feedbackTargetPlayer : '--', ENT_QUOTES, 'UTF-8') ?></strong>
+                                                        </div>
+                                                        <div class="ta-feedback-meta-item">
+                                                            <span class="ta-help-text">发生时间</span>
+                                                            <strong><?= htmlspecialchars($feedbackOccurredAt !== '' ? $feedbackOccurredAt : '--', ENT_QUOTES, 'UTF-8') ?></strong>
+                                                        </div>
+                                                        <div class="ta-feedback-meta-item">
+                                                            <span class="ta-help-text">世界</span>
+                                                            <strong><?= htmlspecialchars($feedbackWorld !== '' ? $feedbackWorld : '--', ENT_QUOTES, 'UTF-8') ?></strong>
+                                                        </div>
+                                                        <div class="ta-feedback-meta-item">
+                                                            <span class="ta-help-text">坐标</span>
+                                                            <strong><?= htmlspecialchars($feedbackCoordinates !== '' ? $feedbackCoordinates : '--', ENT_QUOTES, 'UTF-8') ?></strong>
+                                                        </div>
+                                                        <div class="ta-feedback-meta-item">
+                                                            <span class="ta-help-text">创建时间</span>
+                                                            <strong><?= $formatFeedbackTime($feedbackItem['created_at'] ?? '') ?></strong>
+                                                        </div>
+                                                        <div class="ta-feedback-meta-item">
+                                                            <span class="ta-help-text">更新时间</span>
+                                                            <strong><?= $formatFeedbackTime($feedbackItem['updated_at'] ?? '') ?></strong>
+                                                        </div>
                                                     </div>
-                                                <?php endif; ?>
-                                            </div>
-                                        </details>
 
-                                        <form method="post" action="/admin/feedback/update" class="ta-feedback-update-form" data-feedback-admin-form>
-                                            <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
-                                            <input type="hidden" name="feedback_id" value="<?= $feedbackId ?>">
-                                            <label for="feedback-status-<?= $feedbackId ?>">状态</label>
-                                            <select id="feedback-status-<?= $feedbackId ?>" name="status" data-feedback-admin-status>
-                                                <?php foreach ($feedbackStatusLabels as $statusKey => $statusLabel): ?>
-                                                    <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>" <?= $feedbackStatus === $statusKey ? 'selected' : '' ?>>
-                                                        <?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <label for="feedback-reply-<?= $feedbackId ?>">管理员回复</label>
-                                            <textarea id="feedback-reply-<?= $feedbackId ?>" name="admin_reply" rows="3" maxlength="5000" placeholder="可填写处理说明或补充要求" data-feedback-admin-reply><?= htmlspecialchars($feedbackReply, ENT_QUOTES, 'UTF-8') ?></textarea>
-                                            <p class="ta-help-text" data-feedback-admin-hint>当状态选择“需要补充”时，建议填写需要玩家补充的具体材料。</p>
-                                            <button type="submit" class="ta-btn ta-btn-primary">保存</button>
-                                        </form>
+                                                    <div class="ta-stack ta-stack-sm">
+                                                        <p class="ta-help-text">证据链接</p>
+                                                        <?php if ($feedbackEvidenceHref !== ''): ?>
+                                                            <a href="<?= htmlspecialchars($feedbackEvidenceHref, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer"><?= htmlspecialchars($feedbackEvidenceHref, ENT_QUOTES, 'UTF-8') ?></a>
+                                                        <?php elseif ($feedbackEvidence !== ''): ?>
+                                                            <span><?= htmlspecialchars($feedbackEvidence, ENT_QUOTES, 'UTF-8') ?></span>
+                                                        <?php else: ?>
+                                                            <span>--</span>
+                                                        <?php endif; ?>
+                                                    </div>
+
+                                                    <div class="ta-stack ta-stack-sm">
+                                                        <p class="ta-help-text">详细内容</p>
+                                                        <div class="ta-feedback-content"><?= $feedbackContent === '' ? '--' : nl2br(htmlspecialchars($feedbackContent, ENT_QUOTES, 'UTF-8')) ?></div>
+                                                    </div>
+
+                                                    <div class="ta-stack ta-stack-sm">
+                                                        <p class="ta-help-text">玩家补充内容</p>
+                                                        <div class="ta-feedback-content"><?= $feedbackUserSupplement === '' ? '--' : nl2br(htmlspecialchars($feedbackUserSupplement, ENT_QUOTES, 'UTF-8')) ?></div>
+                                                    </div>
+
+                                                    <div class="ta-stack ta-stack-sm">
+                                                        <p class="ta-help-text">附件图片</p>
+                                                        <?php if (!empty($renderableAttachments)): ?>
+                                                            <div class="ta-feedback-attachments">
+                                                                <?php foreach ($renderableAttachments as $attachment): ?>
+                                                                    <a href="<?= htmlspecialchars((string)$attachment['path'], ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer">
+                                                                        <img src="<?= htmlspecialchars((string)$attachment['path'], ENT_QUOTES, 'UTF-8') ?>" alt="<?= htmlspecialchars((string)$attachment['alt'], ENT_QUOTES, 'UTF-8') ?>" loading="lazy">
+                                                                    </a>
+                                                                <?php endforeach; ?>
+                                                            </div>
+                                                        <?php else: ?>
+                                                            <span>--</span>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                </div>
+
+                                                <aside class="ta-feedback-detail-action">
+                                                    <div class="ta-feedback-action-card">
+                                                        <form method="post" action="/admin/feedback/update" class="ta-feedback-update-form" data-feedback-admin-form>
+                                                            <input type="hidden" name="csrf_token" value="<?= $csrfTokenEscaped ?>">
+                                                            <input type="hidden" name="feedback_id" value="<?= $feedbackId ?>">
+                                                            <label for="feedback-status-<?= $feedbackId ?>">状态</label>
+                                                            <select id="feedback-status-<?= $feedbackId ?>" name="status" data-feedback-admin-status>
+                                                                <?php foreach ($feedbackStatusLabels as $statusKey => $statusLabel): ?>
+                                                                    <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>" <?= $feedbackStatus === $statusKey ? 'selected' : '' ?>>
+                                                                        <?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?>
+                                                                    </option>
+                                                                <?php endforeach; ?>
+                                                            </select>
+                                                            <label for="feedback-reply-<?= $feedbackId ?>">管理员回复</label>
+                                                            <textarea id="feedback-reply-<?= $feedbackId ?>" name="admin_reply" rows="5" maxlength="5000" placeholder="可填写处理说明或补充要求" data-feedback-admin-reply><?= htmlspecialchars($feedbackReply, ENT_QUOTES, 'UTF-8') ?></textarea>
+                                                            <p class="ta-help-text" data-feedback-admin-hint>当状态选择“需要补充”时，请写清楚需要玩家补充的具体材料。</p>
+                                                            <button type="submit" class="ta-btn ta-btn-primary">保存处理结果</button>
+                                                        </form>
+                                                    </div>
+                                                </aside>
+                                            </div>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

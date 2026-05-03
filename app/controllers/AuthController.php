@@ -900,6 +900,21 @@ class AuthController extends Controller
                     } catch (\Throwable $ignored) {
                     }
                 }
+            } else {
+                $loginSuccessMessage = '登录成功，但授权账号与当前账号不匹配，未完成第三方账号绑定';
+
+                try {
+                    $this->audit->logAction(
+                        (int)$user['id'],
+                        'OAUTH_BIND_SKIPPED',
+                        $ip,
+                        [
+                            'provider' => $pendingOAuthProvider,
+                            'reason' => 'pending_oauth_email_mismatch',
+                        ]
+                    );
+                } catch (\Throwable $ignored) {
+                }
             }
 
             unset($_SESSION['oauth_pending_user']);

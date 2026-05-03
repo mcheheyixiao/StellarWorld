@@ -57,24 +57,29 @@ EXECUTE stmt_add_last_mc_bind;
 DEALLOCATE PREPARE stmt_add_last_mc_bind;
 
 -- Safe upgrade: ensure users.mc_uuid has a unique index for one-to-one Minecraft bindings.
--- If this migration fails on an old database, first manually inspect duplicate non-empty UUIDs.
--- Before adding unique index, manually check duplicates if migration fails:
+-- MySQL UNIQUE allows multiple NULL values, but duplicate empty strings ('') will still fail.
+-- If this migration fails on an old database, manually inspect duplicate UUID values including empty strings:
 -- SELECT mc_uuid, COUNT(*) AS c
 -- FROM users
--- WHERE mc_uuid IS NOT NULL AND mc_uuid <> ''
+-- WHERE mc_uuid IS NOT NULL
 -- GROUP BY mc_uuid
 -- HAVING c > 1;
-SET @has_uq_users_mc_uuid := (
+--
+-- If many legacy rows have mc_uuid = '', manually review them and convert empty strings to NULL before adding the unique index:
+-- UPDATE users SET mc_uuid = NULL WHERE mc_uuid = '';
+-- Do NOT run cleanup SQL blindly on production; back up the database first.
+SET @has_unique_users_mc_uuid := (
     SELECT COUNT(*)
     FROM INFORMATION_SCHEMA.STATISTICS
     WHERE TABLE_SCHEMA = DATABASE()
       AND TABLE_NAME = 'users'
-      AND INDEX_NAME = 'uq_users_mc_uuid'
+      AND COLUMN_NAME = 'mc_uuid'
+      AND NON_UNIQUE = 0
 );
 SET @add_uq_users_mc_uuid_sql := IF(
-    @has_uq_users_mc_uuid = 0,
+    @has_unique_users_mc_uuid = 0,
     'ALTER TABLE users ADD UNIQUE KEY uq_users_mc_uuid (mc_uuid)',
-    'SELECT ''uq_users_mc_uuid already exists'' AS message'
+    'SELECT ''users.mc_uuid already has a unique index'' AS message'
 );
 PREPARE stmt_add_uq_users_mc_uuid FROM @add_uq_users_mc_uuid_sql;
 EXECUTE stmt_add_uq_users_mc_uuid;

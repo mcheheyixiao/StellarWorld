@@ -1396,6 +1396,7 @@ SVG;
         );
 
         if ($response['http_code'] < 200 || $response['http_code'] >= 300) {
+            $this->logSafeOAuthStageFailure('xbox_live_authenticate', $response);
             throw new \RuntimeException('Xbox Live 认证失败，请确认该账号可正常使用 Xbox 服务');
         }
 
@@ -1403,6 +1404,7 @@ SVG;
         $token = trim((string)($data['Token'] ?? ''));
         $uhs = trim((string)($data['DisplayClaims']['xui'][0]['uhs'] ?? ''));
         if ($token === '' || $uhs === '') {
+            $this->logSafeOAuthStageFailure('xbox_live_authenticate_missing_token', $response);
             throw new \RuntimeException('Xbox Live 认证失败，请确认该账号可正常使用 Xbox 服务');
         }
 
@@ -1429,6 +1431,7 @@ SVG;
         );
 
         if ($response['http_code'] < 200 || $response['http_code'] >= 300) {
+            $this->logSafeOAuthStageFailure('xsts_authorize', $response);
             throw new \RuntimeException($this->resolveXstsAuthorizeErrorMessage($response['data']));
         }
 
@@ -1436,6 +1439,7 @@ SVG;
         $token = trim((string)($data['Token'] ?? ''));
         $uhs = trim((string)($data['DisplayClaims']['xui'][0]['uhs'] ?? ''));
         if ($token === '' || $uhs === '') {
+            $this->logSafeOAuthStageFailure('xsts_authorize_missing_token', $response);
             throw new \RuntimeException('XSTS 授权失败，请稍后重试');
         }
 
@@ -1457,11 +1461,13 @@ SVG;
         );
 
         if ($response['http_code'] < 200 || $response['http_code'] >= 300) {
+            $this->logSafeOAuthStageFailure('minecraft_login_with_xbox', $response);
             throw new \RuntimeException('Minecraft 服务登录失败，请稍后重试');
         }
 
         $data = $response['data'];
         if (trim((string)($data['access_token'] ?? '')) === '') {
+            $this->logSafeOAuthStageFailure('minecraft_login_with_xbox_missing_access_token', $response);
             throw new \RuntimeException('Minecraft 服务登录失败，请稍后重试');
         }
 
@@ -1482,18 +1488,51 @@ SVG;
         );
 
         if (in_array($response['http_code'], [403, 404], true)) {
+            $this->logSafeOAuthStageFailure('minecraft_profile', $response);
             throw new \RuntimeException('该 Microsoft 账号未拥有 Minecraft Java Edition，或暂时无法读取正版档案。');
         }
         if ($response['http_code'] < 200 || $response['http_code'] >= 300) {
+            $this->logSafeOAuthStageFailure('minecraft_profile', $response);
             throw new \RuntimeException('Minecraft 档案读取失败，请稍后重试');
         }
 
         $data = $response['data'];
         if (trim((string)($data['id'] ?? '')) === '' || trim((string)($data['name'] ?? '')) === '') {
+            $this->logSafeOAuthStageFailure('minecraft_profile_missing_identity', $response);
             throw new \RuntimeException('该 Microsoft 账号未拥有 Minecraft Java Edition，或暂时无法读取正版档案。');
         }
 
         return $data;
+    }
+
+    private function logSafeOAuthStageFailure(string $stage, array $response): void
+    {
+        $data = is_array($response['data'] ?? null) ? $response['data'] : [];
+
+        unset(
+            $data['access_token'],
+            $data['refresh_token'],
+            $data['id_token'],
+            $data['Token'],
+            $data['identityToken'],
+            $data['client_secret']
+        );
+
+        $safeLog = [
+            'stage' => $stage,
+            'http_code' => (int)($response['http_code'] ?? 0),
+            'error' => $data['error'] ?? null,
+            'errorMessage' => $data['errorMessage'] ?? null,
+            'message' => $data['message'] ?? null,
+            'path' => $data['path'] ?? null,
+            'details' => $data['details'] ?? null,
+            'XErr' => $data['XErr'] ?? null,
+        ];
+
+        error_log('Microsoft Minecraft OAuth stage failed: ' . json_encode(
+            $safeLog,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        ));
     }
 
     private function performFormRequest(string $url, array $payload, string $context): array

@@ -124,6 +124,10 @@
     --auth-mua-bg-hover: linear-gradient(135deg, rgba(37, 99, 235, 0.36) 0%, rgba(14, 116, 144, 0.3) 100%);
     --auth-mua-border: rgba(56, 189, 248, 0.4);
     --auth-mua-text: #dbeafe;
+    --auth-microsoft-bg: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+    --auth-microsoft-bg-hover: linear-gradient(135deg, #1d4ed8 0%, #0284c7 100%);
+    --auth-microsoft-border: rgba(59, 130, 246, 0.45);
+    --auth-microsoft-text: #ffffff;
 
     --auth-captcha-bg: rgba(2, 6, 23, 0.74);
     --auth-captcha-border: rgba(148, 163, 184, 0.28);
@@ -168,6 +172,10 @@
     --auth-mua-bg-hover: linear-gradient(135deg, rgba(59, 130, 246, 0.22) 0%, rgba(14, 165, 233, 0.2) 100%);
     --auth-mua-border: rgba(59, 130, 246, 0.3);
     --auth-mua-text: #1e3a8a;
+    --auth-microsoft-bg: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+    --auth-microsoft-bg-hover: linear-gradient(135deg, #1d4ed8 0%, #0284c7 100%);
+    --auth-microsoft-border: rgba(59, 130, 246, 0.45);
+    --auth-microsoft-text: #ffffff;
 
     --auth-captcha-bg: rgba(248, 250, 252, 0.94);
     --auth-captcha-border: rgba(148, 163, 184, 0.42);
@@ -480,6 +488,16 @@
 
   .auth-button--mua:hover:not(:disabled) {
     background: var(--auth-mua-bg-hover);
+  }
+
+  .auth-button--microsoft {
+    background: var(--auth-microsoft-bg);
+    border-color: var(--auth-microsoft-border);
+    color: var(--auth-microsoft-text);
+  }
+
+  .auth-button--microsoft:hover:not(:disabled) {
+    background: var(--auth-microsoft-bg-hover);
   }
 
   .auth-action-btn {

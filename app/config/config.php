@@ -50,6 +50,14 @@ define('MUA_CLIENT_ID', getenv('MUA_CLIENT_ID') ?: '');
 define('MUA_CLIENT_SECRET', getenv('MUA_CLIENT_SECRET') ?: '');
 define('MUA_REDIRECT_URI', getenv('MUA_REDIRECT_URI') ?: '');
 
+// Microsoft / Xbox / Minecraft OAuth
+define('MICROSOFT_CLIENT_ID', getenv('MICROSOFT_CLIENT_ID') ?: '');
+define('MICROSOFT_CLIENT_SECRET', getenv('MICROSOFT_CLIENT_SECRET') ?: '');
+define('MICROSOFT_REDIRECT_URI', getenv('MICROSOFT_REDIRECT_URI') ?: 'https://www.stellarvan.cn/auth/microsoft/callback');
+define('MICROSOFT_OAUTH_AUTHORIZE_URL', getenv('MICROSOFT_OAUTH_AUTHORIZE_URL') ?: 'https://login.live.com/oauth20_authorize.srf');
+define('MICROSOFT_OAUTH_TOKEN_URL', getenv('MICROSOFT_OAUTH_TOKEN_URL') ?: 'https://login.live.com/oauth20_token.srf');
+define('MICROSOFT_OAUTH_SCOPE', getenv('MICROSOFT_OAUTH_SCOPE') ?: 'XboxLive.signin offline_access');
+
 // Mod API shared secret
 define('SERVER_TOKEN', getenv('SERVER_TOKEN') ?: '');
 define('MC_SERVER_HOST', getenv('MC_SERVER_HOST') ?: '202.189.7.81');

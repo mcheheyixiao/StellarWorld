@@ -1,5 +1,8 @@
 <div class="page-container auth-page-shell">
     <?php $oauthPendingEmail = trim((string)($oauthPendingEmail ?? ($_SESSION['oauth_pending_user']['email'] ?? ''))); ?>
+    <?php $oauthPendingProvider = trim((string)($oauthPendingProvider ?? ($_SESSION['oauth_pending_user']['provider'] ?? ''))); ?>
+    <?php $oauthPendingMcUsername = trim((string)($oauthPendingMcUsername ?? ($_SESSION['oauth_pending_user']['mc_username'] ?? ''))); ?>
+    <?php $isMicrosoftMinecraftPending = $oauthPendingProvider === 'microsoft_minecraft'; ?>
     <?php $registerRequiresEmailCode = !empty($registerRequiresEmailCode); ?>
 
     <div class="auth-card auth-card--wide fade-in">
@@ -20,7 +23,12 @@
             <div class="auth-field">
                 <label class="auth-label" for="mc_username">绑定游戏名（可选）</label>
                 <input id="mc_username" name="mc_username" type="text" class="auth-input"
+                       value="<?= htmlspecialchars($isMicrosoftMinecraftPending ? $oauthPendingMcUsername : '', ENT_QUOTES, 'UTF-8') ?>"
+                       <?= $isMicrosoftMinecraftPending ? 'readonly' : '' ?>
                        placeholder="仅填写游戏名，网站将自动生成 UUID" autocomplete="off">
+                <?php if ($isMicrosoftMinecraftPending): ?>
+                    <p class="auth-help-text">已通过 Microsoft 正版账号验证</p>
+                <?php endif; ?>
             </div>
 
             <div class="auth-field">
@@ -69,6 +77,7 @@
 
             <button type="submit" class="auth-button auth-button--primary">注册</button>
             <a href="/auth/mua" class="auth-button auth-button--mua">使用 MUA 账号快速注册</a>
+            <a href="/auth/microsoft" class="auth-button auth-button--microsoft">使用 Microsoft 正版账号快速注册</a>
         </form>
 
         <div class="auth-divider">已有账号</div>

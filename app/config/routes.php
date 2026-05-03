@@ -20,6 +20,8 @@ $router->get('/auth/register', [AuthController::class, 'showRegister']);
 $router->get('/auth/captcha', [AuthController::class, 'captcha']);
 $router->get('/auth/mua', [AuthController::class, 'muaRedirect']);
 $router->get('/auth/mua/callback', [AuthController::class, 'muaCallback']);
+$router->get('/auth/microsoft', [AuthController::class, 'microsoftRedirect']);
+$router->get('/auth/microsoft/callback', [AuthController::class, 'microsoftCallback']);
 $router->post('/auth/email-code/send', [AuthController::class, 'sendEmailCode']);
 $router->post('/auth/login', [AuthController::class, 'login']);
 $router->post('/auth/register', [AuthController::class, 'register']);

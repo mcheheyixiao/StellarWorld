@@ -32,6 +32,22 @@ class User extends Model
         return $row ?: null;
     }
 
+    public function findByMicrosoftSub(string $sub): ?array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM users WHERE microsoft_sub = :microsoft_sub LIMIT 1');
+        $stmt->execute([':microsoft_sub' => $sub]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function findByMinecraftUuid(string $uuid): ?array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM users WHERE mc_uuid = :mc_uuid LIMIT 1');
+        $stmt->execute([':mc_uuid' => $uuid]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public function create(array $data): int
     {
         $stmt = $this->db->prepare('
@@ -55,6 +71,25 @@ class User extends Model
         $stmt = $this->db->prepare('UPDATE users SET mua_sub = :mua_sub, updated_at = NOW() WHERE id = :id');
         $stmt->execute([
             ':mua_sub' => $sub,
+            ':id' => $userId,
+        ]);
+    }
+
+    public function bindMicrosoftSub(int $userId, string $sub, ?string $email = null, ?string $name = null): void
+    {
+        $stmt = $this->db->prepare('
+            UPDATE users
+            SET microsoft_sub = :microsoft_sub,
+                microsoft_email = :microsoft_email,
+                microsoft_name = :microsoft_name,
+                microsoft_bound_at = NOW(),
+                updated_at = NOW()
+            WHERE id = :id
+        ');
+        $stmt->execute([
+            ':microsoft_sub' => $sub,
+            ':microsoft_email' => $email,
+            ':microsoft_name' => $name,
             ':id' => $userId,
         ]);
     }

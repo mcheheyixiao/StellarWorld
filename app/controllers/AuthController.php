@@ -53,10 +53,15 @@ class AuthController extends Controller
         }
 
         $this->generateCsrfToken();
-        $oauthPendingEmail = (string)($_SESSION['oauth_pending_user']['email'] ?? '');
+        $pendingOAuth = $this->getFreshPendingOAuth();
+        $oauthPendingEmail = is_array($pendingOAuth) ? trim((string)($pendingOAuth['email'] ?? '')) : '';
+        $oauthPendingProvider = is_array($pendingOAuth) ? trim((string)($pendingOAuth['provider'] ?? '')) : '';
+        $oauthPendingMcUsername = is_array($pendingOAuth) ? trim((string)($pendingOAuth['mc_username'] ?? '')) : '';
         return $this->render('auth/register', [
             'title' => '玩家注册',
             'oauthPendingEmail' => $oauthPendingEmail,
+            'oauthPendingProvider' => $oauthPendingProvider,
+            'oauthPendingMcUsername' => $oauthPendingMcUsername,
             'registerRequiresEmailCode' => $oauthPendingEmail === '',
             'registerEmailCodeCooldownSeconds' => max(30, (int)$this->getSiteSetting('email_code_send_cooldown_seconds', (string)DEFAULT_EMAIL_CODE_SEND_COOLDOWN_SECONDS)),
         ]);
@@ -279,6 +284,130 @@ class AuthController extends Controller
                     ? 'OAuth回调处理失败: ' . $e->getMessage()
                     : 'OAuth 回调处理失败，请稍后重试或联系管理员',
             ], 500);
+        }
+    }
+
+    public function microsoftRedirect(): void
+    {
+        $clientId = trim((string)MICROSOFT_CLIENT_ID);
+        $clientSecret = trim((string)MICROSOFT_CLIENT_SECRET);
+        $redirectUri = trim((string)MICROSOFT_REDIRECT_URI);
+        if ($clientId === '' || $clientSecret === '' || $redirectUri === '') {
+            $isDevelopment = $this->isDevelopmentEnvironment();
+            $this->json([
+                'success' => false,
+                'message' => $isDevelopment
+                    ? 'Microsoft 正版登录配置不完整，请检查 MICROSOFT_CLIENT_ID / MICROSOFT_CLIENT_SECRET / MICROSOFT_REDIRECT_URI'
+                    : 'Microsoft 正版登录暂未正确配置，请稍后再试',
+            ], 500);
+            return;
+        }
+
+        $state = bin2hex(random_bytes(16));
+        $_SESSION['microsoft_oauth_state'] = $state;
+        $query = http_build_query([
+            'client_id' => $clientId,
+            'response_type' => 'code',
+            'redirect_uri' => $redirectUri,
+            'scope' => (string)MICROSOFT_OAUTH_SCOPE,
+            'state' => $state,
+        ]);
+
+        header('Location: ' . (string)MICROSOFT_OAUTH_AUTHORIZE_URL . '?' . $query);
+        exit;
+    }
+
+    public function microsoftCallback(): void
+    {
+        try {
+            $state = trim((string)($_GET['state'] ?? ''));
+            $sessionState = (string)($_SESSION['microsoft_oauth_state'] ?? '');
+            unset($_SESSION['microsoft_oauth_state']);
+
+            if ($state === '' || $sessionState === '' || !hash_equals($sessionState, $state)) {
+                throw new \RuntimeException('登录状态校验失败，请重新尝试');
+            }
+
+            $code = trim((string)($_GET['code'] ?? ''));
+            if ($code === '') {
+                throw new \RuntimeException('Microsoft 授权失败，请重新尝试');
+            }
+
+            $tokenData = $this->microsoftRequestToken($code);
+            $accessToken = trim((string)($tokenData['access_token'] ?? ''));
+            if ($accessToken === '') {
+                throw new \RuntimeException('Microsoft 授权失败，请重新尝试');
+            }
+
+            $xblData = $this->xboxLiveAuthenticate($accessToken);
+            $xblToken = trim((string)($xblData['Token'] ?? ''));
+            if ($xblToken === '') {
+                throw new \RuntimeException('Xbox Live 认证失败，请确认该账号可正常使用 Xbox 服务');
+            }
+
+            $xstsData = $this->xstsAuthorize($xblToken);
+            $xstsToken = trim((string)($xstsData['Token'] ?? ''));
+            $uhs = trim((string)($xstsData['DisplayClaims']['xui'][0]['uhs'] ?? ''));
+            if ($xstsToken === '' || $uhs === '') {
+                throw new \RuntimeException('XSTS 授权失败，请稍后重试');
+            }
+
+            $minecraftLogin = $this->minecraftLoginWithXbox($uhs, $xstsToken);
+            $minecraftAccessToken = trim((string)($minecraftLogin['access_token'] ?? ''));
+            if ($minecraftAccessToken === '') {
+                throw new \RuntimeException('Minecraft 服务登录失败，请稍后重试');
+            }
+
+            $minecraftProfile = $this->minecraftRequestProfile($minecraftAccessToken);
+            $minecraftUuid = trim((string)($minecraftProfile['id'] ?? ''));
+            $minecraftName = trim((string)($minecraftProfile['name'] ?? ''));
+            if ($minecraftUuid === '' || $minecraftName === '') {
+                throw new \RuntimeException('该 Microsoft 账号未拥有 Minecraft Java Edition，或暂时无法读取正版档案。');
+            }
+
+            $currentUserId = (int)($_SESSION['user_id'] ?? 0);
+            if ($currentUserId > 0) {
+                $currentUser = $this->users->getProfile($currentUserId);
+                if (!$currentUser || (($currentUser['status'] ?? 'active') !== 'active')) {
+                    throw new \RuntimeException('当前账号状态异常，无法绑定正版账号');
+                }
+
+                $boundByUuid = $this->users->findByMinecraftUuid($minecraftUuid);
+                if ($boundByUuid && (int)$boundByUuid['id'] !== $currentUserId) {
+                    throw new \RuntimeException('该 Minecraft 正版账号已绑定其他网站账号，无法重复绑定');
+                }
+
+                $this->users->bindMinecraftAccount($currentUserId, $minecraftUuid, $minecraftName);
+                header('Location: /profile');
+                exit;
+            }
+
+            $boundByUuid = $this->users->findByMinecraftUuid($minecraftUuid);
+            if ($boundByUuid) {
+                $this->signInUser($boundByUuid);
+                header('Location: /');
+                exit;
+            }
+
+            $_SESSION['oauth_pending_user'] = [
+                'provider' => 'microsoft_minecraft',
+                'sub' => $minecraftUuid,
+                'mc_uuid' => $minecraftUuid,
+                'mc_username' => $minecraftName,
+                'nickname' => $minecraftName,
+                'issued_at' => time(),
+            ];
+            header('Location: /auth/register');
+            exit;
+        } catch (\Throwable $e) {
+            error_log('Microsoft Minecraft OAuth callback error: ' . $e->getMessage());
+            $isDevelopment = $this->isDevelopmentEnvironment();
+            $this->json([
+                'success' => false,
+                'message' => $isDevelopment
+                    ? $e->getMessage()
+                    : $this->resolveMicrosoftMinecraftProductionErrorMessage($e->getMessage()),
+            ], 400);
         }
     }
 
@@ -613,11 +742,15 @@ class AuthController extends Controller
         $mcUuid = trim((string)($_POST['mc_uuid'] ?? '')); // legacy support
         $mcName = trim((string)($_POST['mc_name'] ?? '')); // legacy support
         $mcUsername = trim((string)($_POST['mc_username'] ?? ''));
-        $pendingOAuth = $_SESSION['oauth_pending_user'] ?? null;
-        $isMuaPending = is_array($pendingOAuth)
-            && (($pendingOAuth['provider'] ?? '') === 'mua')
-            && !empty($pendingOAuth['sub'])
-            && !empty($pendingOAuth['email']);
+        $pendingOAuth = $this->getFreshPendingOAuth();
+        $pendingOAuthProvider = is_array($pendingOAuth) ? (string)($pendingOAuth['provider'] ?? '') : '';
+        $pendingOAuthSub = is_array($pendingOAuth) ? trim((string)($pendingOAuth['sub'] ?? '')) : '';
+        $pendingOAuthEmail = is_array($pendingOAuth) ? trim((string)($pendingOAuth['email'] ?? '')) : '';
+        $pendingOAuthMcUuid = is_array($pendingOAuth) ? trim((string)($pendingOAuth['mc_uuid'] ?? $pendingOAuthSub)) : '';
+        $pendingOAuthMcUsername = is_array($pendingOAuth) ? trim((string)($pendingOAuth['mc_username'] ?? $pendingOAuth['nickname'] ?? '')) : '';
+        $isFreshPendingOAuth = is_array($pendingOAuth)
+            && in_array($pendingOAuthProvider, ['mua', 'microsoft_minecraft'], true)
+            && $pendingOAuthSub !== '';
 
         if ($username === '' || $passwordRaw === '') {
             $this->json(['success' => false, 'message' => '参数不完整'], 400);
@@ -717,7 +850,38 @@ class AuthController extends Controller
             }
         }
 
-        $this->json(['success' => true, 'message' => '登录成功']);
+        $loginSuccessMessage = '登录成功';
+        if ($isFreshPendingOAuth) {
+            $canBindToCurrentUser = $pendingOAuthEmail === ''
+                || hash_equals(strtolower($pendingOAuthEmail), strtolower((string)($user['email'] ?? '')));
+
+            if ($canBindToCurrentUser) {
+                try {
+                    if ($pendingOAuthProvider === 'mua') {
+                        $this->users->bindMuaSub((int)$user['id'], $pendingOAuthSub);
+                        $this->syncMuaSkinToGameByUser((int)$user['id']);
+                    } elseif ($pendingOAuthProvider === 'microsoft_minecraft' && $pendingOAuthMcUuid !== '') {
+                        $boundByUuid = $this->users->findByMinecraftUuid($pendingOAuthMcUuid);
+                        if ($boundByUuid && (int)$boundByUuid['id'] !== (int)$user['id']) {
+                            $loginSuccessMessage = '登录成功，但该 Minecraft 正版账号已绑定其他网站账号';
+                        } else {
+                            $this->users->bindMinecraftAccount(
+                                (int)$user['id'],
+                                $pendingOAuthMcUuid,
+                                $pendingOAuthMcUsername !== '' ? $pendingOAuthMcUsername : $pendingOAuthMcUuid
+                            );
+                            $loginSuccessMessage = '登录成功，已绑定 Microsoft 正版账号';
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // Avoid breaking password login if OAuth binding fails.
+                }
+            }
+
+            unset($_SESSION['oauth_pending_user']);
+        }
+
+        $this->json(['success' => true, 'message' => $loginSuccessMessage]);
     }
 
     public function register(): void
@@ -753,11 +917,19 @@ class AuthController extends Controller
         $mcUuid = trim((string)($_POST['mc_uuid'] ?? '')); // legacy support
         $mcName = trim((string)($_POST['mc_name'] ?? '')); // legacy support
         $mcUsername = trim((string)($_POST['mc_username'] ?? ''));
-        $pendingOAuth = $_SESSION['oauth_pending_user'] ?? null;
-        $isMuaPending = is_array($pendingOAuth)
-            && (($pendingOAuth['provider'] ?? '') === 'mua')
-            && !empty($pendingOAuth['sub'])
-            && !empty($pendingOAuth['email']);
+        $pendingOAuth = $this->getFreshPendingOAuth();
+        $pendingOAuthProvider = is_array($pendingOAuth) ? (string)($pendingOAuth['provider'] ?? '') : '';
+        $pendingOAuthSub = is_array($pendingOAuth) ? trim((string)($pendingOAuth['sub'] ?? '')) : '';
+        $pendingOAuthEmail = is_array($pendingOAuth) ? trim((string)($pendingOAuth['email'] ?? '')) : '';
+        $pendingOAuthNickname = is_array($pendingOAuth) ? trim((string)($pendingOAuth['nickname'] ?? '')) : '';
+        $pendingOAuthMcUuid = is_array($pendingOAuth) ? trim((string)($pendingOAuth['mc_uuid'] ?? $pendingOAuthSub)) : '';
+        $pendingOAuthMcUsername = is_array($pendingOAuth) ? trim((string)($pendingOAuth['mc_username'] ?? $pendingOAuthNickname)) : '';
+        $isOAuthPending = is_array($pendingOAuth)
+            && in_array($pendingOAuthProvider, ['mua', 'microsoft_minecraft'], true)
+            && $pendingOAuthSub !== '';
+        $isOAuthPendingWithEmail = $isOAuthPending && $pendingOAuthEmail !== '';
+        $isMuaPending = $isOAuthPending && $pendingOAuthProvider === 'mua';
+        $isMicrosoftMinecraftPending = $isOAuthPending && $pendingOAuthProvider === 'microsoft_minecraft';
 
         if ($username === '' || $email === '' || $passwordRaw === '') {
             $this->json(['success' => false, 'message' => '参数不完整'], 400);
@@ -791,17 +963,36 @@ class AuthController extends Controller
             return;
         }
 
-        if (!$isMuaPending && !$this->isEmailAllowed($email)) {
+        if (!$isOAuthPendingWithEmail && !$this->isEmailAllowed($email)) {
             $this->json(['success' => false, 'message' => '暂不支持该邮箱域名'], 400);
             return;
         }
 
-        if ($isMuaPending) {
-            $pendingEmail = (string)$pendingOAuth['email'];
+        if ($isOAuthPendingWithEmail) {
+            $pendingEmail = $pendingOAuthEmail;
             if (!hash_equals(strtolower($pendingEmail), strtolower($email))) {
                 $this->json(['success' => false, 'message' => 'MUA 授权邮箱与注册邮箱不一致'], 400);
                 return;
             }
+        }
+
+        if ($isMicrosoftMinecraftPending) {
+            if ($pendingOAuthMcUuid === '' || $pendingOAuthMcUsername === '') {
+                unset($_SESSION['oauth_pending_user']);
+                $this->json(['success' => false, 'message' => 'Microsoft 正版登录状态已失效，请重新尝试'], 400);
+                return;
+            }
+
+            $boundByUuid = $this->users->findByMinecraftUuid($pendingOAuthMcUuid);
+            if ($boundByUuid) {
+                unset($_SESSION['oauth_pending_user']);
+                $this->json(['success' => false, 'message' => '该 Minecraft 正版账号已绑定其他网站账号'], 409);
+                return;
+            }
+
+            $mcUuid = $pendingOAuthMcUuid;
+            $mcName = $pendingOAuthMcUsername;
+            $mcUsername = $pendingOAuthMcUsername;
         }
 
         if ($this->isRegistrationLimited($ip, $isWhite)) {
@@ -815,7 +1006,7 @@ class AuthController extends Controller
             return;
         }
 
-        if (!$isMuaPending) {
+        if (!$isOAuthPendingWithEmail) {
             if ($emailCode === '') {
                 $this->json(['success' => false, 'message' => '请先发送并填写邮箱验证码'], 400);
                 return;
@@ -845,7 +1036,7 @@ class AuthController extends Controller
             'role' => 'player',
             'status' => 'active',
             'email_verified' => 1,
-            'mua_sub' => $isMuaPending ? (string)$pendingOAuth['sub'] : null,
+            'mua_sub' => $isMuaPending ? $pendingOAuthSub : null,
         ]);
 
         $this->recordRegistration($ip);
@@ -874,9 +1065,13 @@ class AuthController extends Controller
             }
         }
 
-        if ($isMuaPending) {
+        if ($isOAuthPending) {
             unset($_SESSION['oauth_pending_user']);
             $_SESSION['last_auth_action'] = time();
+            if ($isMicrosoftMinecraftPending) {
+                $this->json(['success' => true, 'message' => '注册成功，已完成 Microsoft 正版账号绑定']);
+                return;
+            }
             $this->json(['success' => true, 'message' => '注册成功，已完成 MUA 账号绑定']);
             return;
         }
@@ -1054,6 +1249,337 @@ class AuthController extends Controller
   <text x="120" y="48" text-anchor="middle" fill="#e2e8f0" font-size="12" font-family="Arial, Helvetica, sans-serif">{$escapedMessage}</text>
 </svg>
 SVG;
+    }
+
+    private function getFreshPendingOAuth(): ?array
+    {
+        $pendingOAuth = $_SESSION['oauth_pending_user'] ?? null;
+        if (!is_array($pendingOAuth)) {
+            return null;
+        }
+
+        $provider = trim((string)($pendingOAuth['provider'] ?? ''));
+        $sub = trim((string)($pendingOAuth['sub'] ?? ''));
+        $issuedAt = (int)($pendingOAuth['issued_at'] ?? 0);
+        $isFresh = $issuedAt > 0 && (time() - $issuedAt <= 900);
+
+        if (!in_array($provider, ['mua', 'microsoft_minecraft'], true) || $sub === '' || !$isFresh) {
+            unset($_SESSION['oauth_pending_user']);
+            return null;
+        }
+
+        return $pendingOAuth;
+    }
+
+    private function microsoftRequestToken(string $code): array
+    {
+        $clientId = trim((string)MICROSOFT_CLIENT_ID);
+        $clientSecret = trim((string)MICROSOFT_CLIENT_SECRET);
+        $redirectUri = trim((string)MICROSOFT_REDIRECT_URI);
+        if ($clientId === '' || $clientSecret === '' || $redirectUri === '') {
+            throw new \RuntimeException('Microsoft 授权失败，请重新尝试');
+        }
+
+        $payload = [
+            'client_id' => $clientId,
+            'client_secret' => $clientSecret,
+            'code' => $code,
+            'redirect_uri' => $redirectUri,
+            'grant_type' => 'authorization_code',
+        ];
+
+        $response = $this->performFormRequest(
+            (string)MICROSOFT_OAUTH_TOKEN_URL,
+            $payload,
+            'Microsoft token'
+        );
+        if ($response['http_code'] < 200 || $response['http_code'] >= 300) {
+            throw new \RuntimeException('Microsoft 授权失败，请重新尝试');
+        }
+
+        $data = $response['data'];
+        if (trim((string)($data['access_token'] ?? '')) === '') {
+            throw new \RuntimeException('Microsoft 授权失败，请重新尝试');
+        }
+
+        return $data;
+    }
+
+    private function xboxLiveAuthenticate(string $microsoftAccessToken): array
+    {
+        $response = $this->performJsonRequest(
+            'https://user.auth.xboxlive.com/user/authenticate',
+            'POST',
+            [
+                'Properties' => [
+                    'AuthMethod' => 'RPS',
+                    'SiteName' => 'user.auth.xboxlive.com',
+                    'RpsTicket' => 'd=' . $microsoftAccessToken,
+                ],
+                'RelyingParty' => 'http://auth.xboxlive.com',
+                'TokenType' => 'JWT',
+            ],
+            [
+                'Accept: application/json',
+            ],
+            'Xbox Live authenticate'
+        );
+
+        if ($response['http_code'] < 200 || $response['http_code'] >= 300) {
+            throw new \RuntimeException('Xbox Live 认证失败，请确认该账号可正常使用 Xbox 服务');
+        }
+
+        $data = $response['data'];
+        $token = trim((string)($data['Token'] ?? ''));
+        $uhs = trim((string)($data['DisplayClaims']['xui'][0]['uhs'] ?? ''));
+        if ($token === '' || $uhs === '') {
+            throw new \RuntimeException('Xbox Live 认证失败，请确认该账号可正常使用 Xbox 服务');
+        }
+
+        return $data;
+    }
+
+    private function xstsAuthorize(string $xblToken): array
+    {
+        $response = $this->performJsonRequest(
+            'https://xsts.auth.xboxlive.com/xsts/authorize',
+            'POST',
+            [
+                'Properties' => [
+                    'SandboxId' => 'RETAIL',
+                    'UserTokens' => [$xblToken],
+                ],
+                'RelyingParty' => 'rp://api.minecraftservices.com/',
+                'TokenType' => 'JWT',
+            ],
+            [
+                'Accept: application/json',
+            ],
+            'XSTS authorize'
+        );
+
+        if ($response['http_code'] < 200 || $response['http_code'] >= 300) {
+            throw new \RuntimeException($this->resolveXstsAuthorizeErrorMessage($response['data']));
+        }
+
+        $data = $response['data'];
+        $token = trim((string)($data['Token'] ?? ''));
+        $uhs = trim((string)($data['DisplayClaims']['xui'][0]['uhs'] ?? ''));
+        if ($token === '' || $uhs === '') {
+            throw new \RuntimeException('XSTS 授权失败，请稍后重试');
+        }
+
+        return $data;
+    }
+
+    private function minecraftLoginWithXbox(string $uhs, string $xstsToken): array
+    {
+        $response = $this->performJsonRequest(
+            'https://api.minecraftservices.com/authentication/login_with_xbox',
+            'POST',
+            [
+                'identityToken' => 'XBL3.0 x=' . $uhs . ';' . $xstsToken,
+            ],
+            [
+                'Accept: application/json',
+            ],
+            'Minecraft login_with_xbox'
+        );
+
+        if ($response['http_code'] < 200 || $response['http_code'] >= 300) {
+            throw new \RuntimeException('Minecraft 服务登录失败，请稍后重试');
+        }
+
+        $data = $response['data'];
+        if (trim((string)($data['access_token'] ?? '')) === '') {
+            throw new \RuntimeException('Minecraft 服务登录失败，请稍后重试');
+        }
+
+        return $data;
+    }
+
+    private function minecraftRequestProfile(string $minecraftAccessToken): array
+    {
+        $response = $this->performJsonRequest(
+            'https://api.minecraftservices.com/minecraft/profile',
+            'GET',
+            null,
+            [
+                'Accept: application/json',
+                'Authorization: Bearer ' . $minecraftAccessToken,
+            ],
+            'Minecraft profile'
+        );
+
+        if (in_array($response['http_code'], [403, 404], true)) {
+            throw new \RuntimeException('该 Microsoft 账号未拥有 Minecraft Java Edition，或暂时无法读取正版档案。');
+        }
+        if ($response['http_code'] < 200 || $response['http_code'] >= 300) {
+            throw new \RuntimeException('Minecraft 档案读取失败，请稍后重试');
+        }
+
+        $data = $response['data'];
+        if (trim((string)($data['id'] ?? '')) === '' || trim((string)($data['name'] ?? '')) === '') {
+            throw new \RuntimeException('该 Microsoft 账号未拥有 Minecraft Java Edition，或暂时无法读取正版档案。');
+        }
+
+        return $data;
+    }
+
+    private function performFormRequest(string $url, array $payload, string $context): array
+    {
+        $ch = curl_init($url);
+        if ($ch === false) {
+            throw new \RuntimeException($context . ' request initialization failed');
+        }
+
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query($payload),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/x-www-form-urlencoded',
+                'Accept: application/json',
+            ],
+        ]);
+
+        $resp = curl_exec($ch);
+        $errno = curl_errno($ch);
+        $error = curl_error($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($errno !== 0 || !is_string($resp)) {
+            throw new \RuntimeException($context . ' request failed: ' . $error);
+        }
+
+        $data = [];
+        if ($resp !== '') {
+            $data = json_decode($resp, true);
+            if (!is_array($data)) {
+                throw new \RuntimeException($context . ' response parse failed');
+            }
+        }
+
+        return [
+            'http_code' => $httpCode,
+            'data' => $data,
+        ];
+    }
+
+    private function performJsonRequest(string $url, string $method, ?array $payload, array $headers, string $context): array
+    {
+        $ch = curl_init($url);
+        if ($ch === false) {
+            throw new \RuntimeException($context . ' request initialization failed');
+        }
+
+        $requestHeaders = $headers;
+        $options = [
+            CURLOPT_CUSTOMREQUEST => strtoupper($method),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+        ];
+
+        if ($payload !== null) {
+            $encodedPayload = json_encode($payload, JSON_UNESCAPED_SLASHES);
+            if (!is_string($encodedPayload)) {
+                throw new \RuntimeException($context . ' request build failed');
+            }
+
+            $options[CURLOPT_POSTFIELDS] = $encodedPayload;
+            $requestHeaders[] = 'Content-Type: application/json';
+        }
+
+        if ($requestHeaders !== []) {
+            $options[CURLOPT_HTTPHEADER] = $requestHeaders;
+        }
+
+        curl_setopt_array($ch, $options);
+
+        $resp = curl_exec($ch);
+        $errno = curl_errno($ch);
+        $error = curl_error($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($errno !== 0 || !is_string($resp)) {
+            throw new \RuntimeException($context . ' request failed: ' . $error);
+        }
+
+        $data = [];
+        if ($resp !== '') {
+            $data = json_decode($resp, true);
+            if (!is_array($data)) {
+                throw new \RuntimeException($context . ' response parse failed');
+            }
+        }
+
+        return [
+            'http_code' => $httpCode,
+            'data' => $data,
+        ];
+    }
+
+    private function resolveXstsAuthorizeErrorMessage(array $data): string
+    {
+        $xerr = trim((string)($data['XErr'] ?? ''));
+        if ($xerr === '2148916233') {
+            return '该账号没有 Xbox 档案，可能需要先登录 Xbox 官网初始化资料。';
+        }
+        if ($xerr === '2148916235') {
+            return '该账号地区不可用或存在地区限制。';
+        }
+        if (in_array($xerr, ['2148916236', '2148916237'], true)) {
+            return '该账号受年龄或家长控制限制，暂时无法完成 Xbox 授权。';
+        }
+
+        return 'XSTS 授权失败，请稍后重试';
+    }
+
+    private function resolveMicrosoftMinecraftProductionErrorMessage(string $message): string
+    {
+        $safeMessages = [
+            '登录状态校验失败，请重新尝试',
+            'Microsoft 授权失败，请重新尝试',
+            'Xbox Live 认证失败，请确认该账号可正常使用 Xbox 服务',
+            '该账号没有 Xbox 档案，可能需要先登录 Xbox 官网初始化资料。',
+            '该账号地区不可用或存在地区限制。',
+            '该账号受年龄或家长控制限制，暂时无法完成 Xbox 授权。',
+            'XSTS 授权失败，请稍后重试',
+            'Minecraft 服务登录失败，请稍后重试',
+            'Minecraft 档案读取失败，请稍后重试',
+            '该 Microsoft 账号未拥有 Minecraft Java Edition，或暂时无法读取正版档案。',
+            '该 Minecraft 正版账号已绑定其他网站账号，无法重复绑定',
+            '该 Minecraft 正版账号已绑定其他网站账号',
+            '当前账号状态异常，无法绑定正版账号',
+        ];
+        if (in_array($message, $safeMessages, true)) {
+            return $message;
+        }
+        if (str_contains($message, 'Xbox Live')) {
+            return 'Xbox Live 认证失败，请确认该账号可正常使用 Xbox 服务';
+        }
+        if (str_contains($message, 'XSTS')) {
+            return 'XSTS 授权失败，请稍后重试';
+        }
+        if (str_contains($message, 'Minecraft')) {
+            return '该 Microsoft 账号未拥有 Minecraft Java Edition，或暂时无法读取正版档案。';
+        }
+
+        return 'Microsoft 正版登录失败，请稍后重试';
+    }
+
+    private function isDevelopmentEnvironment(): bool
+    {
+        return strtolower((string)(defined('APP_ENV') ? APP_ENV : 'production')) === 'development';
     }
 
     private function muaRequestToken(string $code): array

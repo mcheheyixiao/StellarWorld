@@ -1339,12 +1339,36 @@ SVG;
             $payload,
             'Microsoft token'
         );
+        $data = $response['data'];
+        $safeData = $data;
+        unset(
+            $safeData['access_token'],
+            $safeData['refresh_token'],
+            $safeData['id_token'],
+            $safeData['client_secret']
+        );
+
         if ($response['http_code'] < 200 || $response['http_code'] >= 300) {
+            $safeLog = [
+                'http_code' => $response['http_code'],
+                'error' => $safeData['error'] ?? null,
+                'error_description' => $safeData['error_description'] ?? null,
+                'correlation_id' => $safeData['correlation_id'] ?? null,
+                'trace_id' => $safeData['trace_id'] ?? null,
+            ];
+            error_log('Microsoft OAuth token exchange failed: ' . json_encode($safeLog, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
             throw new \RuntimeException('Microsoft 授权失败，请重新尝试');
         }
 
-        $data = $response['data'];
         if (trim((string)($data['access_token'] ?? '')) === '') {
+            $safeLog = [
+                'http_code' => $response['http_code'],
+                'error' => $safeData['error'] ?? null,
+                'error_description' => $safeData['error_description'] ?? null,
+                'correlation_id' => $safeData['correlation_id'] ?? null,
+                'trace_id' => $safeData['trace_id'] ?? null,
+            ];
+            error_log('Microsoft OAuth token response missing access_token: ' . json_encode($safeLog, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
             throw new \RuntimeException('Microsoft 授权失败，请重新尝试');
         }
 

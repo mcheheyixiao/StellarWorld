@@ -8,6 +8,11 @@ use PDO;
 
 class User extends Model
 {
+    private function normalizeMinecraftUuid(string $uuid): string
+    {
+        return strtolower(str_replace('-', '', trim($uuid)));
+    }
+
     public function findByUsername(string $username): ?array
     {
         $stmt = $this->db->prepare('SELECT * FROM users WHERE username = :username LIMIT 1');
@@ -32,16 +37,13 @@ class User extends Model
         return $row ?: null;
     }
 
-    public function findByMicrosoftSub(string $sub): ?array
-    {
-        $stmt = $this->db->prepare('SELECT * FROM users WHERE microsoft_sub = :microsoft_sub LIMIT 1');
-        $stmt->execute([':microsoft_sub' => $sub]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
-    }
-
     public function findByMinecraftUuid(string $uuid): ?array
     {
+        $uuid = $this->normalizeMinecraftUuid($uuid);
+        if ($uuid === '') {
+            return null;
+        }
+
         $stmt = $this->db->prepare('SELECT * FROM users WHERE mc_uuid = :mc_uuid LIMIT 1');
         $stmt->execute([':mc_uuid' => $uuid]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -71,25 +73,6 @@ class User extends Model
         $stmt = $this->db->prepare('UPDATE users SET mua_sub = :mua_sub, updated_at = NOW() WHERE id = :id');
         $stmt->execute([
             ':mua_sub' => $sub,
-            ':id' => $userId,
-        ]);
-    }
-
-    public function bindMicrosoftSub(int $userId, string $sub, ?string $email = null, ?string $name = null): void
-    {
-        $stmt = $this->db->prepare('
-            UPDATE users
-            SET microsoft_sub = :microsoft_sub,
-                microsoft_email = :microsoft_email,
-                microsoft_name = :microsoft_name,
-                microsoft_bound_at = NOW(),
-                updated_at = NOW()
-            WHERE id = :id
-        ');
-        $stmt->execute([
-            ':microsoft_sub' => $sub,
-            ':microsoft_email' => $email,
-            ':microsoft_name' => $name,
             ':id' => $userId,
         ]);
     }
@@ -129,6 +112,8 @@ class User extends Model
 
     public function bindCharacter(int $userId, string $mcUsername, string $mcUuid): void
     {
+        $mcUuid = $this->normalizeMinecraftUuid($mcUuid);
+
         $stmt = $this->db->prepare('
             UPDATE users
             SET mc_username = :mc_username, mc_uuid = :mc_uuid, updated_at = NOW()
@@ -153,6 +138,8 @@ class User extends Model
 
     public function bindMinecraftAccount(int $userId, string $uuid, string $name): void
     {
+        $uuid = $this->normalizeMinecraftUuid($uuid);
+
         $stmt = $this->db->prepare('
             UPDATE users
             SET mc_uuid = :uuid, mc_username = :name, updated_at = NOW()
@@ -193,6 +180,8 @@ class User extends Model
 
     public function updateMinecraftBindWithCooldown(int $userId, string $mcUuid, string $mcName): void
     {
+        $mcUuid = $this->normalizeMinecraftUuid($mcUuid);
+
         $stmt = $this->db->prepare('
             UPDATE users
             SET mc_uuid = :mc_uuid, mc_username = :mc_username, last_mc_bind_at = NOW(), updated_at = NOW()

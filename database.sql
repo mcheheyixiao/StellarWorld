@@ -56,6 +56,30 @@ PREPARE stmt_add_last_mc_bind FROM @add_last_mc_bind_sql;
 EXECUTE stmt_add_last_mc_bind;
 DEALLOCATE PREPARE stmt_add_last_mc_bind;
 
+-- Safe upgrade: ensure users.mc_uuid has a unique index for one-to-one Minecraft bindings.
+-- If this migration fails on an old database, first manually inspect duplicate non-empty UUIDs.
+-- Before adding unique index, manually check duplicates if migration fails:
+-- SELECT mc_uuid, COUNT(*) AS c
+-- FROM users
+-- WHERE mc_uuid IS NOT NULL AND mc_uuid <> ''
+-- GROUP BY mc_uuid
+-- HAVING c > 1;
+SET @has_uq_users_mc_uuid := (
+    SELECT COUNT(*)
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'users'
+      AND INDEX_NAME = 'uq_users_mc_uuid'
+);
+SET @add_uq_users_mc_uuid_sql := IF(
+    @has_uq_users_mc_uuid = 0,
+    'ALTER TABLE users ADD UNIQUE KEY uq_users_mc_uuid (mc_uuid)',
+    'SELECT ''uq_users_mc_uuid already exists'' AS message'
+);
+PREPARE stmt_add_uq_users_mc_uuid FROM @add_uq_users_mc_uuid_sql;
+EXECUTE stmt_add_uq_users_mc_uuid;
+DEALLOCATE PREPARE stmt_add_uq_users_mc_uuid;
+
 -- Safe upgrade for existing databases: add users.mua_sub if missing
 SET @has_mua_sub := (
     SELECT COUNT(*)
@@ -685,85 +709,3 @@ DEALLOCATE PREPARE stmt_add_feedback_supplemented_at;
 UPDATE player_feedback
 SET status = 'resolved'
 WHERE status = 'closed';
-
--- Microsoft OAuth users compatibility patch (idempotent)
-SET @has_users_microsoft_sub := (
-    SELECT COUNT(*)
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'users'
-      AND COLUMN_NAME = 'microsoft_sub'
-);
-SET @sql_add_users_microsoft_sub := IF(
-    @has_users_microsoft_sub = 0,
-    'ALTER TABLE users ADD COLUMN microsoft_sub VARCHAR(191) NULL AFTER mua_sub',
-    'SELECT 1'
-);
-PREPARE stmt_add_users_microsoft_sub FROM @sql_add_users_microsoft_sub;
-EXECUTE stmt_add_users_microsoft_sub;
-DEALLOCATE PREPARE stmt_add_users_microsoft_sub;
-
-SET @has_users_microsoft_email := (
-    SELECT COUNT(*)
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'users'
-      AND COLUMN_NAME = 'microsoft_email'
-);
-SET @sql_add_users_microsoft_email := IF(
-    @has_users_microsoft_email = 0,
-    'ALTER TABLE users ADD COLUMN microsoft_email VARCHAR(191) NULL AFTER microsoft_sub',
-    'SELECT 1'
-);
-PREPARE stmt_add_users_microsoft_email FROM @sql_add_users_microsoft_email;
-EXECUTE stmt_add_users_microsoft_email;
-DEALLOCATE PREPARE stmt_add_users_microsoft_email;
-
-SET @has_users_microsoft_name := (
-    SELECT COUNT(*)
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'users'
-      AND COLUMN_NAME = 'microsoft_name'
-);
-SET @sql_add_users_microsoft_name := IF(
-    @has_users_microsoft_name = 0,
-    'ALTER TABLE users ADD COLUMN microsoft_name VARCHAR(191) NULL AFTER microsoft_email',
-    'SELECT 1'
-);
-PREPARE stmt_add_users_microsoft_name FROM @sql_add_users_microsoft_name;
-EXECUTE stmt_add_users_microsoft_name;
-DEALLOCATE PREPARE stmt_add_users_microsoft_name;
-
-SET @has_users_microsoft_bound_at := (
-    SELECT COUNT(*)
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'users'
-      AND COLUMN_NAME = 'microsoft_bound_at'
-);
-SET @sql_add_users_microsoft_bound_at := IF(
-    @has_users_microsoft_bound_at = 0,
-    'ALTER TABLE users ADD COLUMN microsoft_bound_at DATETIME NULL AFTER microsoft_name',
-    'SELECT 1'
-);
-PREPARE stmt_add_users_microsoft_bound_at FROM @sql_add_users_microsoft_bound_at;
-EXECUTE stmt_add_users_microsoft_bound_at;
-DEALLOCATE PREPARE stmt_add_users_microsoft_bound_at;
-
-SET @has_users_microsoft_sub_unique := (
-    SELECT COUNT(*)
-    FROM INFORMATION_SCHEMA.STATISTICS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'users'
-      AND NON_UNIQUE = 0
-      AND COLUMN_NAME = 'microsoft_sub'
-);
-SET @sql_add_users_microsoft_sub_unique := IF(
-    @has_users_microsoft_sub_unique = 0,
-    'ALTER TABLE users ADD UNIQUE KEY uniq_users_microsoft_sub (microsoft_sub)',
-    'SELECT 1'
-);
-PREPARE stmt_add_users_microsoft_sub_unique FROM @sql_add_users_microsoft_sub_unique;
-EXECUTE stmt_add_users_microsoft_sub_unique;
-DEALLOCATE PREPARE stmt_add_users_microsoft_sub_unique;

@@ -68,7 +68,11 @@
                     <p class="auth-help-text">发送验证码会消耗当前图形验证码。发送成功后，页面会刷新一张新的注册验证码，请重新填写后再提交注册。</p>
                 </div>
             <?php else: ?>
-                <p class="auth-help-text">当前为 MUA 授权注册流程，邮箱验证码已豁免，但仍需完成图形验证码校验。</p>
+                <?php if ($oauthPendingProvider === 'mua'): ?>
+                    <p class="auth-help-text">当前为 MUA 授权注册流程，邮箱验证码已豁免，但仍需完成图形验证码校验。</p>
+                <?php else: ?>
+                    <p class="auth-help-text">当前为授权注册流程，邮箱验证码已豁免，但仍需完成图形验证码校验。</p>
+                <?php endif; ?>
             <?php endif; ?>
 
             <div style="display:none;">

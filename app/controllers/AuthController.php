@@ -359,7 +359,7 @@ class AuthController extends Controller
             }
 
             $minecraftProfile = $this->minecraftRequestProfile($minecraftAccessToken);
-            $minecraftUuid = trim((string)($minecraftProfile['id'] ?? ''));
+            $minecraftUuid = $this->normalizeMinecraftUuid((string)($minecraftProfile['id'] ?? ''));
             $minecraftName = trim((string)($minecraftProfile['name'] ?? ''));
             if ($minecraftUuid === '' || $minecraftName === '') {
                 throw new \RuntimeException('该 Microsoft 账号未拥有 Minecraft Java Edition，或暂时无法读取正版档案。');
@@ -384,6 +384,10 @@ class AuthController extends Controller
 
             $boundByUuid = $this->users->findByMinecraftUuid($minecraftUuid);
             if ($boundByUuid) {
+                if (($boundByUuid['status'] ?? '') !== 'active') {
+                    throw new \RuntimeException('账号已被冻结或封禁');
+                }
+
                 $this->signInUser($boundByUuid);
                 header('Location: /');
                 exit;
@@ -739,14 +743,16 @@ class AuthController extends Controller
 
         $username = trim((string)($_POST['username'] ?? ''));
         $passwordRaw = (string)($_POST['password'] ?? '');
-        $mcUuid = trim((string)($_POST['mc_uuid'] ?? '')); // legacy support
+        $mcUuid = $this->normalizeMinecraftUuid((string)($_POST['mc_uuid'] ?? '')); // legacy support
         $mcName = trim((string)($_POST['mc_name'] ?? '')); // legacy support
         $mcUsername = trim((string)($_POST['mc_username'] ?? ''));
         $pendingOAuth = $this->getFreshPendingOAuth();
         $pendingOAuthProvider = is_array($pendingOAuth) ? (string)($pendingOAuth['provider'] ?? '') : '';
         $pendingOAuthSub = is_array($pendingOAuth) ? trim((string)($pendingOAuth['sub'] ?? '')) : '';
         $pendingOAuthEmail = is_array($pendingOAuth) ? trim((string)($pendingOAuth['email'] ?? '')) : '';
-        $pendingOAuthMcUuid = is_array($pendingOAuth) ? trim((string)($pendingOAuth['mc_uuid'] ?? $pendingOAuthSub)) : '';
+        $pendingOAuthMcUuid = is_array($pendingOAuth)
+            ? $this->normalizeMinecraftUuid((string)($pendingOAuth['mc_uuid'] ?? $pendingOAuthSub))
+            : '';
         $pendingOAuthMcUsername = is_array($pendingOAuth) ? trim((string)($pendingOAuth['mc_username'] ?? $pendingOAuth['nickname'] ?? '')) : '';
         $isFreshPendingOAuth = is_array($pendingOAuth)
             && in_array($pendingOAuthProvider, ['mua', 'microsoft_minecraft'], true)
@@ -874,7 +880,25 @@ class AuthController extends Controller
                         }
                     }
                 } catch (\Throwable $e) {
-                    // Avoid breaking password login if OAuth binding fails.
+                    $loginSuccessMessage = '登录成功，但第三方账号绑定失败，请稍后在个人中心重新绑定';
+
+                    try {
+                        $details = [
+                            'provider' => $pendingOAuthProvider,
+                            'reason' => $e->getMessage(),
+                        ];
+                        if ($pendingOAuthProvider === 'microsoft_minecraft' && $pendingOAuthMcUuid !== '') {
+                            $details['mc_uuid_hash'] = hash('sha256', $pendingOAuthMcUuid);
+                        }
+
+                        $this->audit->logAction(
+                            (int)$user['id'],
+                            'OAUTH_BIND_FAILED',
+                            $ip,
+                            $details
+                        );
+                    } catch (\Throwable $ignored) {
+                    }
                 }
             }
 
@@ -914,7 +938,7 @@ class AuthController extends Controller
         $passwordRaw = (string)($_POST['password'] ?? '');
         $captchaAnswer = trim((string)($_POST['captcha_answer'] ?? ''));
         $emailCode = trim((string)($_POST['email_code'] ?? ''));
-        $mcUuid = trim((string)($_POST['mc_uuid'] ?? '')); // legacy support
+        $mcUuid = $this->normalizeMinecraftUuid((string)($_POST['mc_uuid'] ?? '')); // legacy support
         $mcName = trim((string)($_POST['mc_name'] ?? '')); // legacy support
         $mcUsername = trim((string)($_POST['mc_username'] ?? ''));
         $pendingOAuth = $this->getFreshPendingOAuth();
@@ -922,7 +946,9 @@ class AuthController extends Controller
         $pendingOAuthSub = is_array($pendingOAuth) ? trim((string)($pendingOAuth['sub'] ?? '')) : '';
         $pendingOAuthEmail = is_array($pendingOAuth) ? trim((string)($pendingOAuth['email'] ?? '')) : '';
         $pendingOAuthNickname = is_array($pendingOAuth) ? trim((string)($pendingOAuth['nickname'] ?? '')) : '';
-        $pendingOAuthMcUuid = is_array($pendingOAuth) ? trim((string)($pendingOAuth['mc_uuid'] ?? $pendingOAuthSub)) : '';
+        $pendingOAuthMcUuid = is_array($pendingOAuth)
+            ? $this->normalizeMinecraftUuid((string)($pendingOAuth['mc_uuid'] ?? $pendingOAuthSub))
+            : '';
         $pendingOAuthMcUsername = is_array($pendingOAuth) ? trim((string)($pendingOAuth['mc_username'] ?? $pendingOAuthNickname)) : '';
         $isOAuthPending = is_array($pendingOAuth)
             && in_array($pendingOAuthProvider, ['mua', 'microsoft_minecraft'], true)
@@ -1271,6 +1297,11 @@ SVG;
         return $pendingOAuth;
     }
 
+    private function normalizeMinecraftUuid(string $uuid): string
+    {
+        return strtolower(str_replace('-', '', trim($uuid)));
+    }
+
     private function microsoftRequestToken(string $code): array
     {
         $clientId = trim((string)MICROSOFT_CLIENT_ID);
@@ -1560,6 +1591,7 @@ SVG;
             '该 Minecraft 正版账号已绑定其他网站账号，无法重复绑定',
             '该 Minecraft 正版账号已绑定其他网站账号',
             '当前账号状态异常，无法绑定正版账号',
+            '账号已被冻结或封禁',
         ];
         if (in_array($message, $safeMessages, true)) {
             return $message;

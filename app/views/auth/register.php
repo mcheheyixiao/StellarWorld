@@ -81,7 +81,9 @@
 
             <button type="submit" class="auth-button auth-button--primary">注册</button>
             <a href="/auth/mua" class="auth-button auth-button--mua">使用 MUA 账号快速注册</a>
-            <a href="/auth/microsoft" class="auth-button auth-button--microsoft">使用 Microsoft 正版账号快速注册</a>
+            <?php if (defined('MICROSOFT_MINECRAFT_LOGIN_ENABLED') && MICROSOFT_MINECRAFT_LOGIN_ENABLED): ?>
+                <a href="/auth/microsoft" class="auth-button auth-button--microsoft">使用 Microsoft 正版账号快速注册</a>
+            <?php endif; ?>
         </form>
 
         <div class="auth-divider">已有账号</div>

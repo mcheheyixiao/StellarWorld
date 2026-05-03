@@ -289,6 +289,14 @@ class AuthController extends Controller
 
     public function microsoftRedirect(): void
     {
+        if (!defined('MICROSOFT_MINECRAFT_LOGIN_ENABLED') || !MICROSOFT_MINECRAFT_LOGIN_ENABLED) {
+            $this->json([
+                'success' => false,
+                'message' => 'Microsoft/Xbox 正版账号登录暂未开放，请使用账号密码或 MUA 登录',
+            ], 503);
+            return;
+        }
+
         $clientId = trim((string)MICROSOFT_CLIENT_ID);
         $clientSecret = trim((string)MICROSOFT_CLIENT_SECRET);
         $redirectUri = trim((string)MICROSOFT_REDIRECT_URI);
@@ -319,6 +327,14 @@ class AuthController extends Controller
 
     public function microsoftCallback(): void
     {
+        if (!defined('MICROSOFT_MINECRAFT_LOGIN_ENABLED') || !MICROSOFT_MINECRAFT_LOGIN_ENABLED) {
+            $this->json([
+                'success' => false,
+                'message' => 'Microsoft/Xbox 正版账号登录暂未开放，请使用账号密码或 MUA 登录',
+            ], 503);
+            return;
+        }
+
         try {
             $state = trim((string)($_GET['state'] ?? ''));
             $sessionState = (string)($_SESSION['microsoft_oauth_state'] ?? '');

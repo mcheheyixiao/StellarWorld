@@ -50,6 +50,12 @@ define('MUA_CLIENT_ID', getenv('MUA_CLIENT_ID') ?: '');
 define('MUA_CLIENT_SECRET', getenv('MUA_CLIENT_SECRET') ?: '');
 define('MUA_REDIRECT_URI', getenv('MUA_REDIRECT_URI') ?: '');
 
+// Microsoft / Xbox / Minecraft OAuth feature flag
+define('MICROSOFT_MINECRAFT_LOGIN_ENABLED', filter_var(
+    getenv('MICROSOFT_MINECRAFT_LOGIN_ENABLED') ?: '0',
+    FILTER_VALIDATE_BOOLEAN
+));
+
 // Microsoft / Xbox / Minecraft OAuth
 define('MICROSOFT_CLIENT_ID', getenv('MICROSOFT_CLIENT_ID') ?: '');
 define('MICROSOFT_CLIENT_SECRET', getenv('MICROSOFT_CLIENT_SECRET') ?: '');

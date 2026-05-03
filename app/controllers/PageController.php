@@ -49,6 +49,13 @@ class PageController extends Controller
         $mcUuid = '';
         $muaSub = '';
         $skinTextureUrl = 'https://crafatar.com/skins/8667ba7b-8a27-4e0d-a4d4-8ebcdd474334';
+        $playerFound = false;
+        $playerId = '—';
+        $mcUsername = '';
+        $skinRenderName = 'MHF_Steve';
+        $skinBodyUrl = 'https://minotar.net/armor/body/' . rawurlencode($skinRenderName) . '/300.png';
+        $skinRawUrl = 'https://crafthead.net/skin/' . rawurlencode($skinRenderName);
+        $skinUseProxy = false;
         $statsData = [
             'playTimeHours' => 0.0,
             'mined' => 0,
@@ -72,6 +79,11 @@ class PageController extends Controller
             $stmt->execute([':username' => $username]);
             $row = $stmt->fetch(\PDO::FETCH_ASSOC);
             if ($row) {
+                $playerFound = true;
+                $mcUsername = trim((string)($row['mc_username'] ?? ''));
+                $skinRenderName = $mcUsername !== '' ? $mcUsername : 'MHF_Steve';
+                $skinBodyUrl = 'https://minotar.net/armor/body/' . rawurlencode($skinRenderName) . '/300.png';
+                $skinRawUrl = 'https://crafthead.net/skin/' . rawurlencode($skinRenderName);
                 $playerId = (string)($row['id'] ?? '—');
                 $coins = (int)($row['coins'] ?? 0);
                 $mcUuid = (string)($row['mc_uuid'] ?? '');
@@ -96,6 +108,11 @@ class PageController extends Controller
                             // keep crafatar fallback on any MUA error
                         }
                     }
+                }
+
+                if ($skinTextureUrl !== '' && strpos($skinTextureUrl, 'https://crafatar.com/skins/') !== 0) {
+                    $skinRawUrl = $skinTextureUrl;
+                    $skinUseProxy = true;
                 }
             }
 
@@ -216,9 +233,14 @@ class PageController extends Controller
         return $this->render('pages/player_profile', [
             'title' => '玩家数据 - ' . $username,
             'username' => $username,
+            'playerFound' => $playerFound,
             'playerId' => $playerId,
             'coins' => $coins,
-            'skinTextureUrl' => $skinTextureUrl,
+            'mcUsername' => $mcUsername,
+            'skinRenderName' => $skinRenderName,
+            'skinBodyUrl' => $skinBodyUrl,
+            'skinRawUrl' => $skinRawUrl,
+            'skinUseProxy' => $skinUseProxy,
             'statsData' => $statsData,
             'radarData' => $radarData,
             'timelineEvents' => $timelineEvents,

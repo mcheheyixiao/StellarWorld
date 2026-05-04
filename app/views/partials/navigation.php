@@ -3,6 +3,15 @@ $isLoggedIn = !empty($_SESSION['user_id']);
 $navUsername = (string)($_SESSION['username'] ?? '');
 $navAvatarUrl = '/api/avatar?username=' . rawurlencode($navUsername !== '' ? $navUsername : 'MHF_Steve') . '&size=32';
 $navFallbackAvatar = '/images/owner_avatar.png';
+$navCsrfToken = (string)($_SESSION['csrf_token'] ?? '');
+if ($isLoggedIn && $navCsrfToken === '') {
+    try {
+        $navCsrfToken = bin2hex(random_bytes(32));
+    } catch (\Throwable $e) {
+        $navCsrfToken = hash('sha256', uniqid('csrf', true));
+    }
+    $_SESSION['csrf_token'] = $navCsrfToken;
+}
 ?>
 
 <nav id="navbar" class="mc-nav">
@@ -66,10 +75,13 @@ $navFallbackAvatar = '/images/owner_avatar.png';
                                 <span>后台</span>
                             </a>
                         <?php endif; ?>
-                        <a href="/auth/logout" class="user-menu-item logout" role="menuitem">
+                        <form method="post" action="/auth/logout" class="user-menu-logout-form" role="none">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($navCsrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                            <button type="submit" class="user-menu-item user-menu-item-button logout" role="menuitem">
                             <i class="mdi mdi-logout"></i>
                             <span>退出</span>
-                        </a>
+                            </button>
+                        </form>
                     </div>
                 </div>
             <?php else: ?>
@@ -116,10 +128,13 @@ $navFallbackAvatar = '/images/owner_avatar.png';
                                 <span>后台</span>
                             </a>
                         <?php endif; ?>
-                        <a href="/auth/logout" class="user-menu-item logout" role="menuitem">
-                            <i class="mdi mdi-logout"></i>
+                        <form method="post" action="/auth/logout" class="user-menu-logout-form" role="none">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($navCsrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                            <button type="submit" class="user-menu-item user-menu-item-button logout" role="menuitem">
+                                <i class="mdi mdi-logout"></i>
                             <span>退出</span>
-                        </a>
+                            </button>
+                        </form>
                     </div>
                 </div>
             <?php endif; ?>
@@ -458,6 +473,20 @@ document.addEventListener('DOMContentLoaded', function () {
     font-size: 0.92rem;
     text-decoration: none;
     transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.user-menu-logout-form {
+    margin: 0;
+    padding: 0;
+}
+
+.user-menu-item-button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
 }
 
 .user-menu-item i {

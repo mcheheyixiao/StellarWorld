@@ -26,6 +26,7 @@ $router->post('/auth/email-code/send', [AuthController::class, 'sendEmailCode'])
 $router->post('/auth/login', [AuthController::class, 'login']);
 $router->post('/auth/register', [AuthController::class, 'register']);
 $router->get('/auth/logout', [AuthController::class, 'logout']);
+$router->post('/auth/logout', [AuthController::class, 'logout']);
 $router->get('/auth/verify', [AuthController::class, 'verify']);
 $router->get('/forgot-password', [AuthController::class, 'showForgotPassword']);
 $router->post('/forgot-password', [AuthController::class, 'sendResetLink']);

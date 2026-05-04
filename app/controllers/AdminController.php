@@ -492,10 +492,41 @@ class AdminController extends Controller
     public function playerDelete(): void
     {
         $this->validateCsrfForFormPost('/admin?tab=players');
-        $id = (int)($_POST['id'] ?? 0);
-        $db = Database::connection();
-        $stmt = $db->prepare('DELETE FROM users WHERE id = :id');
-        $stmt->execute([':id' => $id]);
+        $targetUserId = (int)($_POST['id'] ?? 0);
+        $adminUserId = (int)($_SESSION['user_id'] ?? 0);
+
+        if ($targetUserId <= 0 || $adminUserId <= 0) {
+            $this->completeAdminAction('/admin?tab=players&err=invalid_user', [], 'Invalid user id');
+            return;
+        }
+
+        if ($targetUserId === $adminUserId) {
+            $this->completeAdminAction('/admin?tab=players&err=self_delete', [], 'Cannot delete your own admin account');
+            return;
+        }
+
+        $targetUser = $this->users->findById($targetUserId);
+        if ($targetUser === null) {
+            $this->completeAdminAction('/admin?tab=players&err=user_not_found', [], 'User not found');
+            return;
+        }
+
+        $targetRole = strtolower(trim((string)($targetUser['role'] ?? 'player')));
+        $targetStatus = strtolower(trim((string)($targetUser['status'] ?? 'active')));
+        if ($targetRole === 'admin' && $targetStatus === 'active') {
+            $otherActiveAdmins = $this->users->countOtherActiveAdmins($targetUserId);
+            if ($otherActiveAdmins <= 0) {
+                $this->completeAdminAction('/admin?tab=players&err=last_admin', [], 'Cannot delete the last active admin');
+                return;
+            }
+        }
+
+        $deleted = $this->users->softDeleteByAdmin($targetUserId, $adminUserId, 'admin_panel_player_delete');
+        if (!$deleted) {
+            $this->completeAdminAction('/admin?tab=players&err=delete_failed', [], 'User deletion failed');
+            return;
+        }
+
         $this->completeAdminAction('/admin?tab=players');
     }
 

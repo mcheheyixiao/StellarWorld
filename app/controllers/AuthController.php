@@ -1126,6 +1126,14 @@ class AuthController extends Controller
 
     public function logout(): void
     {
+        $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+        if ($method !== 'POST') {
+            header('Location: /');
+            exit;
+        }
+
+        $this->validateCsrfForFormPost('/');
+
         if (!empty($_COOKIE['remember_me'])) {
             $cookieVal = (string)$_COOKIE['remember_me'];
             $parts = explode(':', $cookieVal, 2);

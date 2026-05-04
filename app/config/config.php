@@ -66,6 +66,46 @@ define('MICROSOFT_OAUTH_SCOPE', getenv('MICROSOFT_OAUTH_SCOPE') ?: 'XboxLive.sig
 
 // Mod API shared secret
 define('SERVER_TOKEN', getenv('SERVER_TOKEN') ?: '');
+$_pluginAllowQueryTokenEnv = getenv('PLUGIN_ALLOW_QUERY_TOKEN');
+if ($_pluginAllowQueryTokenEnv === false || trim((string)$_pluginAllowQueryTokenEnv) === '') {
+    $_pluginAllowQueryToken = APP_ENV !== 'production';
+} else {
+    $_pluginAllowQueryToken = filter_var((string)$_pluginAllowQueryTokenEnv, FILTER_VALIDATE_BOOLEAN);
+}
+define('PLUGIN_ALLOW_QUERY_TOKEN', $_pluginAllowQueryToken);
+unset($_pluginAllowQueryTokenEnv, $_pluginAllowQueryToken);
+
+define('PLUGIN_REQUIRE_HMAC', filter_var((string)(getenv('PLUGIN_REQUIRE_HMAC') ?: '0'), FILTER_VALIDATE_BOOLEAN));
+define('PLUGIN_HMAC_TIME_WINDOW_SECONDS', max(60, (int)(getenv('PLUGIN_HMAC_TIME_WINDOW_SECONDS') ?: 300)));
+
+$_pluginAllowGetDeliveriesEnv = getenv('PLUGIN_ALLOW_GET_DELIVERIES');
+if ($_pluginAllowGetDeliveriesEnv === false || trim((string)$_pluginAllowGetDeliveriesEnv) === '') {
+    $_pluginAllowGetDeliveries = APP_ENV !== 'production';
+} else {
+    $_pluginAllowGetDeliveries = filter_var((string)$_pluginAllowGetDeliveriesEnv, FILTER_VALIDATE_BOOLEAN);
+}
+define('PLUGIN_ALLOW_GET_DELIVERIES', $_pluginAllowGetDeliveries);
+unset($_pluginAllowGetDeliveriesEnv, $_pluginAllowGetDeliveries);
+
+$_skinProxyAllowedHostsRaw = trim((string)(getenv('SKIN_PROXY_ALLOWED_HOSTS') ?: 'textures.minecraft.net,sessionserver.mojang.com'));
+$_skinProxyAllowedHosts = [];
+if ($_skinProxyAllowedHostsRaw !== '') {
+    $parts = preg_split('/\s*,\s*/', $_skinProxyAllowedHostsRaw) ?: [];
+    foreach ($parts as $part) {
+        $host = strtolower(trim((string)$part));
+        if ($host !== '') {
+            $_skinProxyAllowedHosts[] = $host;
+        }
+    }
+}
+if ($_skinProxyAllowedHosts === []) {
+    $_skinProxyAllowedHosts = ['textures.minecraft.net'];
+}
+define('SKIN_PROXY_ALLOWED_HOSTS', array_values(array_unique($_skinProxyAllowedHosts)));
+unset($_skinProxyAllowedHostsRaw, $_skinProxyAllowedHosts, $parts, $part, $host);
+
+define('SKIN_PROXY_MAX_BYTES', max(262144, (int)(getenv('SKIN_PROXY_MAX_BYTES') ?: 2097152)));
+define('SKIN_PROXY_MAX_DIMENSION', max(64, (int)(getenv('SKIN_PROXY_MAX_DIMENSION') ?: 2048)));
 define('MC_SERVER_HOST', getenv('MC_SERVER_HOST') ?: '202.189.7.81');
 define('MC_SERVER_PORT', (int)(getenv('MC_SERVER_PORT') ?: 11052));
 define('RCON_HOST', getenv('RCON_HOST') ?: '127.0.0.1');

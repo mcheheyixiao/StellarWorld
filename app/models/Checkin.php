@@ -15,9 +15,11 @@ class Checkin extends Model
     private const USERNAME_PATTERN = '/^[a-zA-Z0-9_]{1,16}$/';
     private const DELIVERY_STATUSES = ['pending', 'delivering', 'delivered', 'failed', 'cancelled'];
     private const DELIVERY_LOCK_TIMEOUT_MINUTES = 10;
+    private const DELIVERY_ACK_TOKEN_BYTES = 32;
     private const MAX_PLUGIN_LIMIT = 50;
 
     private static bool $schemaReady = false;
+    private static bool $deliveryClaimColumnsReady = false;
     private static bool $legacySynced = false;
 
     public function __construct()
@@ -332,9 +334,10 @@ class Checkin extends Model
         }
     }
 
-    public function pullPendingDeliveries(int $limit): array
+    public function pullPendingDeliveries(int $limit, ?string $claimedBy = null): array
     {
         $limit = max(1, min(self::MAX_PLUGIN_LIMIT, $limit));
+        $claimedBy = $this->normalizeDeliveryActor($claimedBy);
         $this->recoverExpiredDeliveries();
 
         $this->db->beginTransaction();
@@ -367,19 +370,45 @@ class Checkin extends Model
                 return [];
             }
 
-            $deliveryIds = array_map(static fn(array $row): int => (int)$row['id'], $rows);
             $recordIds = array_map(static fn(array $row): int => (int)$row['record_id'], $rows);
-            $nowString = $this->now()->format('Y-m-d H:i:s');
+            $now = $this->now();
+            $nowString = $now->format('Y-m-d H:i:s');
+            $claimExpiresAt = $now->modify('+' . self::DELIVERY_LOCK_TIMEOUT_MINUTES . ' minutes');
+            $claimExpiresString = $claimExpiresAt->format('Y-m-d H:i:s');
+            $claimExpiresEpoch = $claimExpiresAt->getTimestamp();
 
-            $inDeliveries = implode(',', array_fill(0, count($deliveryIds), '?'));
-            $update = $this->db->prepare('
+            $updateDelivery = $this->db->prepare('
                 UPDATE checkin_reward_deliveries
                 SET status = \'delivering\',
-                    locked_at = ?,
-                    updated_at = ?
-                WHERE id IN (' . $inDeliveries . ')
+                    locked_at = :locked_at,
+                    claim_token_hash = :claim_token_hash,
+                    claim_expires_at = :claim_expires_at,
+                    claimed_by = :claimed_by,
+                    claimed_at = :claimed_at,
+                    acked_by = NULL,
+                    updated_at = :updated_at
+                WHERE id = :id
             ');
-            $update->execute(array_merge([$nowString, $nowString], $deliveryIds));
+
+            foreach ($rows as &$row) {
+                $ackToken = bin2hex(random_bytes(self::DELIVERY_ACK_TOKEN_BYTES));
+                $claimTokenHash = hash('sha256', $ackToken);
+
+                $updateDelivery->execute([
+                    ':locked_at' => $nowString,
+                    ':claim_token_hash' => $claimTokenHash,
+                    ':claim_expires_at' => $claimExpiresString,
+                    ':claimed_by' => $claimedBy,
+                    ':claimed_at' => $nowString,
+                    ':updated_at' => $nowString,
+                    ':id' => (int)$row['id'],
+                ]);
+
+                $row['status'] = 'delivering';
+                $row['ack_token'] = $ackToken;
+                $row['ack_expires_at'] = $claimExpiresEpoch;
+            }
+            unset($row);
 
             $inRecords = implode(',', array_fill(0, count($recordIds), '?'));
             $updateRecords = $this->db->prepare('
@@ -398,6 +427,8 @@ class Checkin extends Model
                     'record_id' => (int)$row['record_id'],
                     'status' => 'delivering',
                     'attempts' => (int)$row['attempts'],
+                    'ack_token' => (string)($row['ack_token'] ?? ''),
+                    'ack_expires_at' => (int)($row['ack_expires_at'] ?? 0),
                     'player' => [
                         'username' => (string)$row['username'],
                         'uuid' => (string)$row['mc_uuid'],
@@ -413,8 +444,18 @@ class Checkin extends Model
         }
     }
 
-    public function ackDelivery(int $deliveryId, bool $success, string $message): array
+    public function ackDelivery(
+        int $deliveryId,
+        bool $success,
+        string $message,
+        ?string $ackToken = null,
+        ?string $ackedBy = null
+    ): array
     {
+        $ackToken = trim((string)$ackToken);
+        $ackedBy = $this->normalizeDeliveryActor($ackedBy);
+        $usedLegacyAck = $ackToken === '';
+
         $this->db->beginTransaction();
 
         try {
@@ -444,7 +485,49 @@ class Checkin extends Model
                     'status' => 200,
                     'message' => 'Delivery already acknowledged',
                     'delivery' => $this->formatDeliverySummary($delivery),
+                    'legacy_ack' => $usedLegacyAck,
                 ];
+            }
+
+            if ($ackToken !== '') {
+                if ($currentStatus !== 'delivering') {
+                    $this->db->rollBack();
+                    return ['ok' => false, 'status' => 409, 'message' => 'Delivery is not claimable in current status'];
+                }
+
+                $claimTokenHash = trim((string)($delivery['claim_token_hash'] ?? ''));
+                $incomingHash = hash('sha256', $ackToken);
+                if ($claimTokenHash === '' || !hash_equals($claimTokenHash, $incomingHash)) {
+                    $this->db->rollBack();
+                    return ['ok' => false, 'status' => 403, 'message' => 'Invalid ack token'];
+                }
+
+                if (!$this->isDeliveryClaimActive((string)($delivery['claim_expires_at'] ?? ''))) {
+                    $this->db->rollBack();
+                    return ['ok' => false, 'status' => 403, 'message' => 'Ack token expired'];
+                }
+
+                $claimedBy = $this->normalizeDeliveryActor((string)($delivery['claimed_by'] ?? ''));
+                if ($claimedBy !== null && $ackedBy !== null && !hash_equals($claimedBy, $ackedBy)) {
+                    $this->db->rollBack();
+                    return ['ok' => false, 'status' => 403, 'message' => 'Ack actor mismatch'];
+                }
+            } else {
+                if ($currentStatus !== 'delivering') {
+                    $this->db->rollBack();
+                    return ['ok' => false, 'status' => 409, 'message' => 'Legacy ack only allowed for delivering status', 'legacy_ack' => true];
+                }
+
+                if (!$this->isDeliveryLockActive((string)($delivery['locked_at'] ?? ''))) {
+                    $this->db->rollBack();
+                    return ['ok' => false, 'status' => 409, 'message' => 'Legacy ack rejected because delivery lock expired', 'legacy_ack' => true];
+                }
+
+                $claimedBy = $this->normalizeDeliveryActor((string)($delivery['claimed_by'] ?? ''));
+                if ($claimedBy !== null && $ackedBy !== null && !hash_equals($claimedBy, $ackedBy)) {
+                    $this->db->rollBack();
+                    return ['ok' => false, 'status' => 403, 'message' => 'Legacy ack actor mismatch', 'legacy_ack' => true];
+                }
             }
 
             $nowString = $this->now()->format('Y-m-d H:i:s');
@@ -457,12 +540,16 @@ class Checkin extends Model
                     UPDATE checkin_reward_deliveries
                     SET status = \'delivered\',
                         locked_at = NULL,
+                        claim_token_hash = NULL,
+                        claim_expires_at = NULL,
+                        acked_by = :acked_by,
                         last_error = NULL,
                         delivered_at = COALESCE(delivered_at, :delivered_at),
                         updated_at = :updated_at
                     WHERE id = :id
                 ');
                 $update->execute([
+                    ':acked_by' => $ackedBy,
                     ':delivered_at' => $nowString,
                     ':updated_at' => $nowString,
                     ':id' => $deliveryId,
@@ -498,6 +585,7 @@ class Checkin extends Model
                     'ok' => true,
                     'status' => 200,
                     'message' => 'Delivery acknowledged',
+                    'legacy_ack' => $usedLegacyAck,
                     'delivery' => [
                         'id' => $deliveryId,
                         'status' => 'delivered',
@@ -517,11 +605,15 @@ class Checkin extends Model
                     attempts = attempts + 1,
                     last_error = :last_error,
                     locked_at = NULL,
+                    claim_token_hash = NULL,
+                    claim_expires_at = NULL,
+                    acked_by = :acked_by,
                     updated_at = :updated_at
                 WHERE id = :id
             ');
             $update->execute([
                 ':last_error' => $safeMessage,
+                ':acked_by' => $ackedBy,
                 ':updated_at' => $nowString,
                 ':id' => $deliveryId,
             ]);
@@ -543,6 +635,7 @@ class Checkin extends Model
                 'ok' => true,
                 'status' => 200,
                 'message' => 'Delivery marked as failed',
+                'legacy_ack' => $usedLegacyAck,
                 'delivery' => [
                     'id' => $deliveryId,
                     'status' => 'failed',
@@ -794,6 +887,7 @@ class Checkin extends Model
                 ':commands_json' => '[]',
             ]);
 
+            $this->ensureDeliveryClaimColumns();
             self::$schemaReady = true;
         }
 
@@ -922,6 +1016,56 @@ class Checkin extends Model
                 $this->db->rollBack();
             }
         }
+    }
+
+    private function ensureDeliveryClaimColumns(): void
+    {
+        if (self::$deliveryClaimColumnsReady) {
+            return;
+        }
+
+        $columnSet = $this->fetchDeliveryColumnSet();
+        $ddl = [];
+
+        if (!isset($columnSet['claim_token_hash'])) {
+            $ddl[] = 'ALTER TABLE checkin_reward_deliveries ADD COLUMN claim_token_hash CHAR(64) NULL DEFAULT NULL AFTER locked_at';
+        }
+        if (!isset($columnSet['claim_expires_at'])) {
+            $ddl[] = 'ALTER TABLE checkin_reward_deliveries ADD COLUMN claim_expires_at DATETIME NULL DEFAULT NULL AFTER claim_token_hash';
+        }
+        if (!isset($columnSet['claimed_by'])) {
+            $ddl[] = 'ALTER TABLE checkin_reward_deliveries ADD COLUMN claimed_by VARCHAR(128) NULL DEFAULT NULL AFTER claim_expires_at';
+        }
+        if (!isset($columnSet['claimed_at'])) {
+            $ddl[] = 'ALTER TABLE checkin_reward_deliveries ADD COLUMN claimed_at DATETIME NULL DEFAULT NULL AFTER claimed_by';
+        }
+        if (!isset($columnSet['acked_by'])) {
+            $ddl[] = 'ALTER TABLE checkin_reward_deliveries ADD COLUMN acked_by VARCHAR(128) NULL DEFAULT NULL AFTER claimed_at';
+        }
+
+        foreach ($ddl as $sql) {
+            try {
+                $this->db->exec($sql);
+            } catch (\Throwable $e) {
+            }
+        }
+
+        self::$deliveryClaimColumnsReady = true;
+    }
+
+    private function fetchDeliveryColumnSet(): array
+    {
+        $stmt = $this->db->query('SHOW COLUMNS FROM checkin_reward_deliveries');
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $set = [];
+        foreach ($rows as $row) {
+            $name = strtolower(trim((string)($row['Field'] ?? '')));
+            if ($name !== '') {
+                $set[$name] = true;
+            }
+        }
+
+        return $set;
     }
 
     private function getUserIdentity(int $userId, bool $forUpdate = false): ?array
@@ -1161,6 +1305,8 @@ class Checkin extends Model
                     ELSE last_error
                 END,
                 locked_at = NULL,
+                claim_token_hash = NULL,
+                claim_expires_at = NULL,
                 updated_at = :updated_at
             WHERE status = \'delivering\'
               AND locked_at IS NOT NULL
@@ -1365,6 +1511,46 @@ class Checkin extends Model
     {
         $json = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         return is_string($json) ? $json : '[]';
+    }
+
+    private function normalizeDeliveryActor(?string $actor): ?string
+    {
+        $value = trim((string)$actor);
+        if ($value === '') {
+            return null;
+        }
+
+        return mb_substr($value, 0, 128);
+    }
+
+    private function isDeliveryLockActive(string $lockedAt): bool
+    {
+        $lockedAtValue = trim($lockedAt);
+        if ($lockedAtValue === '') {
+            return false;
+        }
+
+        $lockedAtTs = strtotime($lockedAtValue);
+        if ($lockedAtTs === false) {
+            return false;
+        }
+
+        return $lockedAtTs >= (time() - (self::DELIVERY_LOCK_TIMEOUT_MINUTES * 60));
+    }
+
+    private function isDeliveryClaimActive(string $claimExpiresAt): bool
+    {
+        $expiresAtValue = trim($claimExpiresAt);
+        if ($expiresAtValue === '') {
+            return false;
+        }
+
+        $expiresAtTs = strtotime($expiresAtValue);
+        if ($expiresAtTs === false) {
+            return false;
+        }
+
+        return $expiresAtTs >= time();
     }
 
     private function now(): DateTimeImmutable

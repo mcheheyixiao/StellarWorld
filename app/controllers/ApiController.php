@@ -30,8 +30,12 @@ class ApiController extends Controller
     private static bool $serverStatusHistoryTableReady = false;
     private Checkin $checkins;
     private ?array $jsonRequestBody = null;
+    private ?string $rawRequestBody = null;
     private bool $pluginAuthUsedQueryToken = false;
     private bool $pluginDeliveriesUsedGetMethod = false;
+    private bool $pluginAckUsedLegacyToken = false;
+    private ?int $pluginAuthFailureStatus = null;
+    private ?string $pluginAuthFailureMessage = null;
 
     public function __construct()
     {
@@ -531,20 +535,27 @@ class ApiController extends Controller
         }
 
         $this->pluginDeliveriesUsedGetMethod = $method === 'GET';
+        if ($this->pluginDeliveriesUsedGetMethod && !(defined('PLUGIN_ALLOW_GET_DELIVERIES') ? (bool)PLUGIN_ALLOW_GET_DELIVERIES : false)) {
+            $this->respondPluginJson([
+                'success' => false,
+                'message' => 'GET deliveries is disabled, use POST /api/plugin/checkin/deliveries',
+            ], 405);
+            return;
+        }
 
-        if (!$this->isPluginAuthorized()) {
+        if (!$this->isPluginAuthorized($this->pluginDeliveriesUsedGetMethod ? 'deliveries_get' : 'deliveries_post')) {
             $this->respondPluginJson([
                 'success' => false,
                 'code' => ApiCode::AUTH_INVALID,
-                'message' => 'Unauthorized',
-            ], 401);
+                'message' => $this->pluginAuthFailureMessage ?? 'Unauthorized',
+            ], $this->pluginAuthFailureStatus ?? 401);
             return;
         }
 
         try {
             $body = $this->readJsonRequestBody();
             $limit = (int)($body['limit'] ?? ($_POST['limit'] ?? ($_GET['limit'] ?? 20)));
-            $items = $this->checkins->pullPendingDeliveries($limit);
+            $items = $this->checkins->pullPendingDeliveries($limit, $this->resolvePluginAckActor());
             $deliveries = $this->formatPluginCheckinDeliveries($items);
 
             $this->respondPluginJson([
@@ -576,12 +587,12 @@ class ApiController extends Controller
             return;
         }
 
-        if (!$this->isPluginAuthorized()) {
+        if (!$this->isPluginAuthorized('deliveries_ack')) {
             $this->respondPluginJson([
                 'success' => false,
                 'code' => ApiCode::AUTH_INVALID,
-                'message' => 'Unauthorized',
-            ], 401);
+                'message' => $this->pluginAuthFailureMessage ?? 'Unauthorized',
+            ], $this->pluginAuthFailureStatus ?? 401);
             return;
         }
 
@@ -590,6 +601,8 @@ class ApiController extends Controller
             $deliveryId = (int)($body['delivery_id'] ?? ($_POST['delivery_id'] ?? 0));
             $success = $this->parseBooleanValue($body['success'] ?? ($_POST['success'] ?? null));
             $message = trim((string)($body['message'] ?? ($_POST['message'] ?? '')));
+            $ackToken = $this->extractDeliveryAckToken($body);
+            $ackedBy = $this->resolvePluginAckActor();
 
             if ($deliveryId <= 0 || $success === null) {
                 $this->respondPluginJson([
@@ -599,7 +612,11 @@ class ApiController extends Controller
                 return;
             }
 
-            $result = $this->checkins->ackDelivery($deliveryId, $success, $message);
+            $result = $this->checkins->ackDelivery($deliveryId, $success, $message, $ackToken, $ackedBy);
+            if (!empty($result['legacy_ack'])) {
+                $this->pluginAckUsedLegacyToken = true;
+                error_log('[Plugin API] Deprecated legacy ACK without ack_token detected for delivery #' . $deliveryId);
+            }
             $payload = [
                 'success' => (bool)($result['ok'] ?? false),
                 'message' => (string)($result['message'] ?? 'Delivery ack failed'),
@@ -662,6 +679,11 @@ class ApiController extends Controller
             header('Warning: 299 - "Deprecated auth: move plugin token to request headers"', false);
         }
 
+        if ($this->pluginAckUsedLegacyToken) {
+            header('X-Deprecated-Ack: missing-ack-token');
+            header('Warning: 299 - "Deprecated ack: include ack_token in delivery acknowledgement"', false);
+        }
+
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if (is_string($json)) {
             echo $json;
@@ -677,7 +699,7 @@ class ApiController extends Controller
             return $this->jsonRequestBody;
         }
 
-        $raw = file_get_contents('php://input');
+        $raw = $this->getRawRequestBody();
         if (!is_string($raw) || trim($raw) === '') {
             $this->jsonRequestBody = [];
             return $this->jsonRequestBody;
@@ -688,16 +710,106 @@ class ApiController extends Controller
         return $this->jsonRequestBody;
     }
 
-    private function isPluginAuthorized(): bool
+    private function getRawRequestBody(): string
     {
+        if ($this->rawRequestBody !== null) {
+            return $this->rawRequestBody;
+        }
+
+        $raw = file_get_contents('php://input');
+        $this->rawRequestBody = is_string($raw) ? $raw : '';
+        return $this->rawRequestBody;
+    }
+
+    private function isPluginAuthorized(string $context = 'plugin'): bool
+    {
+        $this->pluginAuthFailureStatus = null;
+        $this->pluginAuthFailureMessage = null;
+
         $tokenSource = '';
         $token = $this->extractPluginToken($tokenSource);
         $this->pluginAuthUsedQueryToken = $tokenSource === 'query';
+
+        if ($this->pluginAuthUsedQueryToken && !(defined('PLUGIN_ALLOW_QUERY_TOKEN') ? (bool)PLUGIN_ALLOW_QUERY_TOKEN : false)) {
+            $this->setPluginAuthFailure(403, 'Query token auth is disabled');
+            return false;
+        }
+
+        if ($context === 'deliveries_get' && $this->pluginAuthUsedQueryToken && APP_ENV === 'production') {
+            $this->setPluginAuthFailure(403, 'GET deliveries with query token is not allowed in production');
+            return false;
+        }
+
         if ($this->pluginAuthUsedQueryToken) {
             error_log('[Plugin API] Deprecated query token usage detected on ' . (string)($_SERVER['REQUEST_URI'] ?? '/api/plugin'));
         }
 
-        return $token !== '' && hash_equals((string)SERVER_TOKEN, $token);
+        if ($token === '' || !hash_equals((string)SERVER_TOKEN, $token)) {
+            $this->setPluginAuthFailure(401, 'Unauthorized');
+            return false;
+        }
+
+        if ((defined('PLUGIN_REQUIRE_HMAC') ? (bool)PLUGIN_REQUIRE_HMAC : false) && !$this->verifyPluginRequestHmac()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function setPluginAuthFailure(int $status, string $message): void
+    {
+        $this->pluginAuthFailureStatus = $status;
+        $this->pluginAuthFailureMessage = $message;
+    }
+
+    private function verifyPluginRequestHmac(): bool
+    {
+        $timestampRaw = trim((string)($_SERVER['HTTP_X_STELLAR_TIMESTAMP'] ?? ''));
+        $nonce = trim((string)($_SERVER['HTTP_X_STELLAR_NONCE'] ?? ''));
+        $signature = trim((string)($_SERVER['HTTP_X_STELLAR_SIGNATURE'] ?? ''));
+
+        if ($timestampRaw === '' || $nonce === '' || $signature === '') {
+            $this->setPluginAuthFailure(401, 'Missing HMAC signature headers');
+            return false;
+        }
+
+        if (preg_match('/^\d{10,13}$/', $timestampRaw) !== 1) {
+            $this->setPluginAuthFailure(401, 'Invalid HMAC timestamp');
+            return false;
+        }
+
+        $timestamp = (int)$timestampRaw;
+        if (strlen($timestampRaw) > 10) {
+            $timestamp = (int)floor($timestamp / 1000);
+        }
+
+        $timeWindow = max(60, (int)(defined('PLUGIN_HMAC_TIME_WINDOW_SECONDS') ? PLUGIN_HMAC_TIME_WINDOW_SECONDS : 300));
+        if (abs(time() - $timestamp) > $timeWindow) {
+            $this->setPluginAuthFailure(401, 'HMAC timestamp outside allowed window');
+            return false;
+        }
+
+        if (strlen($nonce) > 128) {
+            $this->setPluginAuthFailure(401, 'Invalid HMAC nonce');
+            return false;
+        }
+
+        $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+        $requestUri = (string)($_SERVER['REQUEST_URI'] ?? '/');
+        $path = parse_url($requestUri, PHP_URL_PATH);
+        if (!is_string($path) || $path === '') {
+            $path = '/';
+        }
+        $bodyHash = hash('sha256', $this->getRawRequestBody());
+        $canonical = $method . "\n" . $path . "\n" . $timestampRaw . "\n" . $nonce . "\n" . $bodyHash;
+
+        $expected = hash_hmac('sha256', $canonical, (string)SERVER_TOKEN);
+        if (!hash_equals(strtolower($expected), strtolower($signature))) {
+            $this->setPluginAuthFailure(401, 'Invalid HMAC signature');
+            return false;
+        }
+
+        return true;
     }
 
     private function extractPluginToken(?string &$source = null): string
@@ -747,6 +859,49 @@ class ApiController extends Controller
         $source = 'none';
         $token = '';
         return trim((string)$token);
+    }
+
+    private function extractDeliveryAckToken(array $body): ?string
+    {
+        foreach ([
+            'HTTP_X_STELLAR_ACK_TOKEN',
+            'HTTP_X_PLUGIN_ACK_TOKEN',
+            'HTTP_X_DELIVERY_ACK_TOKEN',
+        ] as $key) {
+            $value = trim((string)($_SERVER[$key] ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        $bodyValue = trim((string)($body['ack_token'] ?? ($_POST['ack_token'] ?? '')));
+        if ($bodyValue !== '') {
+            return $bodyValue;
+        }
+
+        return null;
+    }
+
+    private function resolvePluginAckActor(): ?string
+    {
+        foreach ([
+            'HTTP_X_STELLAR_SERVER_ID',
+            'HTTP_X_SERVER_ID',
+            'HTTP_X_PLUGIN_INSTANCE',
+            'HTTP_X_PLUGIN_NAME',
+        ] as $key) {
+            $value = trim((string)($_SERVER[$key] ?? ''));
+            if ($value !== '') {
+                return mb_substr($value, 0, 128);
+            }
+        }
+
+        $remoteAddr = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
+        if ($remoteAddr !== '') {
+            return 'ip:' . mb_substr($remoteAddr, 0, 100);
+        }
+
+        return null;
     }
 
     private function parseBooleanValue($value): ?bool
@@ -2309,7 +2464,7 @@ class ApiController extends Controller
         }
 
         $scheme = strtolower((string)($parts['scheme'] ?? ''));
-        if (!in_array($scheme, ['http', 'https'], true)) {
+        if ($scheme !== 'https') {
             return false;
         }
 
@@ -2319,6 +2474,9 @@ class ApiController extends Controller
 
         $host = strtolower(trim((string)($parts['host'] ?? '')));
         if ($host === '' || $host === 'localhost' || str_ends_with($host, '.localhost')) {
+            return false;
+        }
+        if (!$this->isAllowedSkinProxyHost($host)) {
             return false;
         }
 
@@ -2332,6 +2490,111 @@ class ApiController extends Controller
         }
 
         return $this->hostnameResolvesToPublicIp($host);
+    }
+
+    private function isAllowedSkinProxyHost(string $host): bool
+    {
+        $allowedHosts = defined('SKIN_PROXY_ALLOWED_HOSTS') && is_array(SKIN_PROXY_ALLOWED_HOSTS)
+            ? SKIN_PROXY_ALLOWED_HOSTS
+            : ['textures.minecraft.net'];
+
+        $normalizedHost = strtolower(trim($host));
+        if ($normalizedHost === '') {
+            return false;
+        }
+
+        foreach ($allowedHosts as $allowedHostRaw) {
+            $allowedHost = strtolower(trim((string)$allowedHostRaw));
+            if ($allowedHost !== '' && hash_equals($allowedHost, $normalizedHost)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function normalizeContentType(string $contentType): string
+    {
+        $parts = explode(';', $contentType, 2);
+        return strtolower(trim((string)($parts[0] ?? '')));
+    }
+
+    private function detectImageMimeByMagic(string $bytes): ?string
+    {
+        if (strlen($bytes) >= 8 && substr($bytes, 0, 8) === "\x89PNG\r\n\x1a\n") {
+            return 'image/png';
+        }
+        if (strlen($bytes) >= 3 && substr($bytes, 0, 3) === "\xFF\xD8\xFF") {
+            return 'image/jpeg';
+        }
+        if (strlen($bytes) >= 12 && substr($bytes, 0, 4) === 'RIFF' && substr($bytes, 8, 4) === 'WEBP') {
+            return 'image/webp';
+        }
+
+        return null;
+    }
+
+    private function readSkinProxyStreamWithLimit(string $url, int $maxBytes): array
+    {
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'timeout' => 10,
+                'ignore_errors' => true,
+                'follow_location' => 0,
+                'max_redirects' => 0,
+                'protocol_version' => 1.1,
+                'header' => "Connection: close\r\n",
+            ],
+            'ssl' => [
+                'verify_peer' => true,
+                'verify_peer_name' => true,
+            ],
+        ]);
+
+        $stream = @fopen($url, 'rb', false, $context);
+        if (!is_resource($stream)) {
+            return [null, 0, '', false];
+        }
+
+        $bytes = '';
+        $tooLarge = false;
+        while (!feof($stream)) {
+            $chunk = fread($stream, 8192);
+            if (!is_string($chunk) || $chunk === '') {
+                break;
+            }
+            $bytes .= $chunk;
+            if (strlen($bytes) > $maxBytes) {
+                $tooLarge = true;
+                break;
+            }
+        }
+
+        $metadata = stream_get_meta_data($stream);
+        fclose($stream);
+
+        $httpCode = 0;
+        $contentType = '';
+        $headers = $metadata['wrapper_data'] ?? [];
+        if (is_array($headers)) {
+            foreach ($headers as $headerLine) {
+                $line = trim((string)$headerLine);
+                if (preg_match('#^HTTP/\d+(?:\.\d+)?\s+(\d{3})#i', $line, $matches) === 1) {
+                    $httpCode = (int)$matches[1];
+                    continue;
+                }
+                if (stripos($line, 'Content-Type:') === 0) {
+                    $contentType = trim((string)substr($line, 13));
+                }
+            }
+        }
+
+        if ($tooLarge) {
+            return [null, $httpCode, $contentType, true];
+        }
+
+        return [$bytes, $httpCode, $contentType, false];
     }
 
     private function hostnameResolvesToPublicIp(string $host): bool
@@ -2382,66 +2645,161 @@ class ApiController extends Controller
         $rawUrl = trim((string)($_GET['url'] ?? ''));
         if ($rawUrl === '' || preg_match('#^https?://#i', $rawUrl) !== 1 || !$this->isSafeProxyUrl($rawUrl)) {
             http_response_code(400);
-            header('Content-Type: text/plain; charset=utf-8');
-            echo 'Bad Request';
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Content-Type-Options: nosniff');
+            echo '{"success":false,"message":"Invalid skin URL"}';
             return;
         }
 
         // 1x1 透明 PNG（作为失败兜底，避免前端白屏）
-        $transparentPngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X7G8AAAAASUVORK5CYII=';
-        $transparentPng = base64_decode($transparentPngBase64, true);
+        $allowedMime = ['image/png', 'image/jpeg', 'image/webp'];
+        $maxBytes = max(262144, (int)(defined('SKIN_PROXY_MAX_BYTES') ? SKIN_PROXY_MAX_BYTES : 2097152));
+        $maxDimension = max(64, (int)(defined('SKIN_PROXY_MAX_DIMENSION') ? SKIN_PROXY_MAX_DIMENSION : 2048));
 
         $imgBytes = null;
         $httpCode = 0;
+        $upstreamContentType = '';
+        $tooLarge = false;
 
         if (function_exists('curl_init')) {
+            $buffer = '';
             $ch = curl_init($rawUrl);
             if ($ch !== false) {
                 curl_setopt_array($ch, [
-                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_RETURNTRANSFER => false,
                     CURLOPT_FOLLOWLOCATION => false,
                     CURLOPT_MAXREDIRS => 0,
                     CURLOPT_CONNECTTIMEOUT => 5,
                     CURLOPT_TIMEOUT => 10,
                     CURLOPT_SSL_VERIFYPEER => true,
                     CURLOPT_SSL_VERIFYHOST => 2,
-                    CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; skin-proxy/1.0)',
+                    CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; skin-proxy/2.0)',
+                    CURLOPT_WRITEFUNCTION => static function ($curl, string $chunk) use (&$buffer, &$tooLarge, $maxBytes): int {
+                        $nextLength = strlen($buffer) + strlen($chunk);
+                        if ($nextLength > $maxBytes) {
+                            $tooLarge = true;
+                            return 0;
+                        }
+                        $buffer .= $chunk;
+                        return strlen($chunk);
+                    },
                 ]);
-                if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
-                    curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+                if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTPS')) {
+                    curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
                 }
-                if (defined('CURLOPT_REDIR_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
-                    curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+                if (defined('CURLOPT_REDIR_PROTOCOLS') && defined('CURLPROTO_HTTPS')) {
+                    curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);
                 }
-                $resp = curl_exec($ch);
-                $imgBytes = ($resp !== false && is_string($resp) && $resp !== '') ? $resp : null;
+                curl_exec($ch);
                 $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $upstreamContentType = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
                 curl_close($ch);
+
+                if (!$tooLarge && $buffer !== '') {
+                    $imgBytes = $buffer;
+                }
             }
         } else {
-            $context = stream_context_create([
-                'http' => [
-                    'timeout' => 10,
-                    'ignore_errors' => true,
-                    'follow_location' => 0,
-                    'max_redirects' => 0,
-                ],
-                'ssl' => [
-                    'verify_peer' => true,
-                    'verify_peer_name' => true,
-                ],
-            ]);
-            $resp = @file_get_contents($rawUrl, false, $context);
-            $imgBytes = ($resp !== false && is_string($resp) && $resp !== '') ? $resp : null;
+            [$streamBytes, $streamCode, $streamContentType, $streamTooLarge] = $this->readSkinProxyStreamWithLimit($rawUrl, $maxBytes);
+            $imgBytes = is_string($streamBytes) && $streamBytes !== '' ? $streamBytes : null;
+            $httpCode = (int)$streamCode;
+            $upstreamContentType = (string)$streamContentType;
+            $tooLarge = (bool)$streamTooLarge;
         }
 
-        if ($imgBytes === null || $httpCode !== 0 && ($httpCode < 200 || $httpCode >= 300)) {
-            $imgBytes = is_string($transparentPng) ? $transparentPng : '';
+        if ($tooLarge) {
+            http_response_code(413);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Content-Type-Options: nosniff');
+            echo '{"success":false,"message":"Skin payload too large"}';
+            return;
         }
 
-        header('Content-Type: image/png');
+        if (!is_string($imgBytes) || $imgBytes === '' || $httpCode !== 200) {
+            http_response_code(502);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Content-Type-Options: nosniff');
+            echo '{"success":false,"message":"Skin upstream unavailable"}';
+            return;
+        }
+
+        $upstreamMime = $this->normalizeContentType($upstreamContentType);
+        if (!in_array($upstreamMime, $allowedMime, true)) {
+            http_response_code(415);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Content-Type-Options: nosniff');
+            echo '{"success":false,"message":"Unsupported skin content type"}';
+            return;
+        }
+
+        $magicMime = $this->detectImageMimeByMagic($imgBytes);
+        if ($magicMime === null || !in_array($magicMime, $allowedMime, true)) {
+            http_response_code(415);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Content-Type-Options: nosniff');
+            echo '{"success":false,"message":"Unsupported skin image signature"}';
+            return;
+        }
+
+        if (!hash_equals($upstreamMime, $magicMime)) {
+            http_response_code(415);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Content-Type-Options: nosniff');
+            echo '{"success":false,"message":"Skin content type mismatch"}';
+            return;
+        }
+
+        $imageInfo = @getimagesizefromstring($imgBytes);
+        if (!is_array($imageInfo)) {
+            http_response_code(415);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Content-Type-Options: nosniff');
+            echo '{"success":false,"message":"Invalid skin image payload"}';
+            return;
+        }
+
+        $width = (int)($imageInfo[0] ?? 0);
+        $height = (int)($imageInfo[1] ?? 0);
+        if ($width <= 0 || $height <= 0 || $width > $maxDimension || $height > $maxDimension) {
+            http_response_code(415);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Content-Type-Options: nosniff');
+            echo '{"success":false,"message":"Skin image dimensions are out of range"}';
+            return;
+        }
+
+        $imageMime = $this->normalizeContentType((string)($imageInfo['mime'] ?? $magicMime));
+        if (!in_array($imageMime, $allowedMime, true)) {
+            http_response_code(415);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Content-Type-Options: nosniff');
+            echo '{"success":false,"message":"Unsupported skin image format"}';
+            return;
+        }
+
+        header('Content-Type: ' . $imageMime);
+        header('X-Content-Type-Options: nosniff');
         header('Access-Control-Allow-Origin: *');
-        header('Cache-Control: public, max-age=86400');
+        header('Cache-Control: no-store, max-age=0');
+        header('Pragma: no-cache');
         echo $imgBytes;
         exit;
     }

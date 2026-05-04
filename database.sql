@@ -347,19 +347,12 @@ CREATE TABLE IF NOT EXISTS gallery_images (
     created_at DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Seed super admin user (DEV/TEST only)
+-- Admin seed (disabled by default for production safety)
 -- 请在生产环境执行前替换默认管理员账号、邮箱与密码哈希，或拆分到单独的 seed.sql。
-INSERT INTO users (username, email, password_hash, role, status, email_verified, created_at, updated_at)
-VALUES (
-    'StellarVan',
-    'admin@example.com',
-    '$2y$10$replace_this_with_real_bcrypt_hashXXXXXXXXXXXXXXX',
-    'admin',
-    'active',
-    1,
-    NOW(),
-    NOW()
-) ON DUPLICATE KEY UPDATE username = username;
+-- Admin seed is intentionally disabled for production safety.
+-- First deployment should create an admin account manually (CLI or secure bootstrap flow).
+-- INSERT INTO users (username, email, password_hash, role, status, email_verified, created_at, updated_at)
+-- VALUES ('change_me_admin', 'change_me_admin@example.com', '$2y$10$replace_with_real_hash', 'admin', 'active', 1, NOW(), NOW());
 
 CREATE TABLE IF NOT EXISTS milestones (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

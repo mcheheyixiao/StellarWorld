@@ -37,6 +37,61 @@ class User extends Model
         return $row ?: null;
     }
 
+    public function findById(int $userId): ?array
+    {
+        $stmt = $this->db->prepare('
+            SELECT id, username, email, role, status
+            FROM users
+            WHERE id = :id
+            LIMIT 1
+        ');
+        $stmt->execute([':id' => $userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function countOtherActiveAdmins(int $excludeUserId): int
+    {
+        $stmt = $this->db->prepare('
+            SELECT COUNT(*)
+            FROM users
+            WHERE role = \'admin\'
+              AND status = \'active\'
+              AND id <> :exclude_id
+        ');
+        $stmt->execute([':exclude_id' => $excludeUserId]);
+        return (int)$stmt->fetchColumn();
+    }
+
+    public function softDeleteByAdmin(int $userId, int $adminId, ?string $reason = null): bool
+    {
+        if ($userId <= 0 || $adminId <= 0) {
+            return false;
+        }
+
+        $stmt = $this->db->prepare('
+            UPDATE users
+            SET status = \'frozen\',
+                updated_at = NOW()
+            WHERE id = :id
+            LIMIT 1
+        ');
+        $stmt->execute([':id' => $userId]);
+        $updated = $stmt->rowCount() > 0;
+
+        $this->deleteRememberTokensByUserId($userId);
+
+        if ($updated) {
+            $safeReason = trim((string)$reason);
+            if ($safeReason === '') {
+                $safeReason = 'admin_soft_delete';
+            }
+            error_log('[Admin] Soft delete user by admin=' . $adminId . ' target=' . $userId . ' reason=' . $safeReason);
+        }
+
+        return $updated;
+    }
+
     public function findByMinecraftUuid(string $uuid): ?array
     {
         $uuid = $this->normalizeMinecraftUuid($uuid);

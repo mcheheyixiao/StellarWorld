@@ -36,7 +36,7 @@ class ProfileController extends Controller
         $userId = (int)$_SESSION['user_id'];
         $profile = $this->users->getProfile($userId);
         if (!$profile) {
-            header('Location: /auth/logout');
+            header('Location: /auth/login');
             exit;
         }
 

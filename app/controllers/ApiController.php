@@ -188,19 +188,25 @@ class ApiController extends Controller
 
         $status = $this->loadStatusFromWsApi();
         if (is_array($status)) {
-            $this->persistStatusHistory($status, 'ws-api');
-            $this->saveEndpointCache('status', $status);
-            $this->saveSnapshotCache('status', $status);
-            $this->saveSnapshotCache('players', $this->extractPlayersPayload($status));
-            $this->saveSnapshotCache('chat', $this->extractChatPayload($status));
-            $this->json($status);
-            return;
+            $normalizedStatus = $this->normalizeStatusPayload($status);
+            if (is_array($normalizedStatus)) {
+                $this->persistStatusHistory($normalizedStatus, 'ws-api');
+                $this->saveEndpointCache('status', $normalizedStatus);
+                $this->saveSnapshotCache('status', $normalizedStatus);
+                $this->saveSnapshotCache('players', $this->extractPlayersPayload($normalizedStatus));
+                $this->saveSnapshotCache('chat', $this->extractChatPayload($normalizedStatus));
+                $this->json($normalizedStatus);
+                return;
+            }
         }
 
         $fallback = $this->loadLatestStatusFromDatabase();
         if (is_array($fallback)) {
-            $this->json($fallback);
-            return;
+            $normalizedFallback = $this->normalizeStatusPayload($fallback);
+            if (is_array($normalizedFallback)) {
+                $this->json($normalizedFallback);
+                return;
+            }
         }
 
         $snapshot = $this->loadSnapshotCache('status', self::SNAPSHOT_FALLBACK_MAX_AGE_SECONDS);
@@ -225,15 +231,16 @@ class ApiController extends Controller
 
         $cached = $this->loadEndpointCache('players', self::PLAYERS_CACHE_TTL_SECONDS);
         if (is_array($cached)) {
-            $this->json($this->sanitizePlayersPayload($cached));
+            $this->json($this->normalizePlayersEndpointPayload($cached));
             return;
         }
 
         $players = $this->loadPlayersFromWsApi();
         if (is_array($players)) {
-            $this->saveEndpointCache('players', $players);
-            $this->saveSnapshotCache('players', $players);
-            $this->json($players);
+            $playersPayload = $this->normalizePlayersEndpointPayload($players);
+            $this->saveEndpointCache('players', $playersPayload);
+            $this->saveSnapshotCache('players', $playersPayload);
+            $this->json($playersPayload);
             return;
         }
 
@@ -248,13 +255,17 @@ class ApiController extends Controller
 
         $status = $this->loadStatusFromWsApi();
         if (is_array($status)) {
-            $this->persistStatusHistory($status, 'ws-api');
-            $playersPayload = $this->extractPlayersPayload($status);
-            $this->saveEndpointCache('status', $status);
-            $this->saveSnapshotCache('status', $status);
+            $normalizedStatus = $this->normalizeStatusPayload($status);
+            if (!is_array($normalizedStatus)) {
+                $normalizedStatus = $status;
+            }
+            $this->persistStatusHistory($normalizedStatus, 'ws-api');
+            $playersPayload = $this->extractPlayersPayload($normalizedStatus);
+            $this->saveEndpointCache('status', $normalizedStatus);
+            $this->saveSnapshotCache('status', $normalizedStatus);
             $this->saveEndpointCache('players', $playersPayload);
             $this->saveSnapshotCache('players', $playersPayload);
-            $this->saveSnapshotCache('chat', $this->extractChatPayload($status));
+            $this->saveSnapshotCache('chat', $this->extractChatPayload($normalizedStatus));
             $this->json($playersPayload);
             return;
         }
@@ -267,7 +278,7 @@ class ApiController extends Controller
 
         $playersSnapshot = $this->loadSnapshotCache('players', self::SNAPSHOT_FALLBACK_MAX_AGE_SECONDS);
         if (is_array($playersSnapshot)) {
-            $this->json($this->sanitizePlayersPayload($playersSnapshot));
+            $this->json($this->normalizePlayersEndpointPayload($playersSnapshot));
             return;
         }
 
@@ -1800,26 +1811,485 @@ class ApiController extends Controller
     {
         $candidate = $this->unwrapApiPayload($payload);
         if (isset($candidate['status']) && is_array($candidate['status'])) {
-            $candidate = $candidate['status'];
-        }
-
-        if (isset($candidate['server']) && is_array($candidate['server'])) {
-            return $this->mapRealtimeSnapshotToLegacyStatus($candidate);
-        }
-
-        if (array_key_exists('online', $candidate) || isset($candidate['players'])) {
-            return $this->sanitizeLegacyStatusPayload($candidate);
+            $candidate = array_replace($candidate, $candidate['status']);
         }
 
         if (!$this->isAssocArray($candidate)) {
-            return $this->sanitizeLegacyStatusPayload(['players' => ['list' => $candidate]]);
+            $candidate = ['players' => ['list' => $candidate]];
         }
 
-        if (array_key_exists('list', $candidate) || array_key_exists('max', $candidate)) {
-            return $this->sanitizeLegacyStatusPayload(['players' => $candidate]);
+        $statePlayers = $this->extractVersionedModuleData($candidate, 'players');
+        $stateStats = $this->extractVersionedModuleData($candidate, 'stats');
+        $stateServer = $this->extractVersionedModuleData($candidate, 'server');
+        $statePlugins = $this->extractVersionedModuleData($candidate, 'plugins');
+        $stateChat = $this->extractVersionedModuleData($candidate, 'chat');
+
+        $hasStatusSignals = array_key_exists('online', $candidate)
+            || array_key_exists('players', $candidate)
+            || array_key_exists('stats', $candidate)
+            || array_key_exists('metrics', $candidate)
+            || array_key_exists('server', $candidate)
+            || array_key_exists('serverInfo', $candidate)
+            || array_key_exists('motd', $candidate)
+            || array_key_exists('version', $candidate)
+            || $statePlayers !== null
+            || $stateStats !== null
+            || $stateServer !== null;
+        if (!$hasStatusSignals) {
+            return null;
         }
 
-        return null;
+        $serverNode = [];
+        if (isset($candidate['server']) && is_array($candidate['server'])) {
+            $serverNode = $candidate['server'];
+        } elseif (is_array($stateServer)) {
+            $serverNode = $stateServer;
+        } elseif (isset($candidate['serverInfo']) && is_array($candidate['serverInfo'])) {
+            $serverNode = $candidate['serverInfo'];
+        }
+
+        $playersSource = $candidate['players'] ?? $statePlayers;
+        if ($playersSource === null && isset($candidate['sample']) && is_array($candidate['sample'])) {
+            $playersSource = ['list' => $candidate['sample']];
+        }
+
+        $statsSource = $candidate['stats'] ?? null;
+        if ($statsSource === null) {
+            $statsSource = $candidate['metrics'] ?? null;
+        }
+        if ($statsSource === null) {
+            $statsSource = $stateStats;
+        }
+
+        $players = $this->normalizeStatusPlayers($playersSource, is_array($statsSource) ? $statsSource : []);
+        $stats = $this->normalizeStatusStats($statsSource, $players);
+        if ($stats['tps'] === null && array_key_exists('tps', $candidate)) {
+            $stats['tps'] = $this->normalizeNullableFloat($candidate['tps']);
+        }
+        if ($stats['mspt'] === null && array_key_exists('mspt', $candidate)) {
+            $stats['mspt'] = $this->normalizeNullableFloat($candidate['mspt']);
+        }
+
+        $motd = $this->normalizeStatusMotd(
+            $candidate['motd'] ?? null,
+            $serverNode['motd'] ?? ($candidate['serverInfo']['motd'] ?? null)
+        );
+        $version = $this->normalizeStatusVersion(
+            $candidate['version'] ?? null,
+            $serverNode['version'] ?? null
+        );
+
+        $onlineRaw = array_key_exists('online', $candidate) ? $candidate['online'] : null;
+        if ($onlineRaw === null) {
+            $onlineRaw = $this->firstAvailableValue($serverNode, ['online', 'isOnline', 'up', 'healthy', 'ok']);
+        }
+        $onlineParsed = $this->parseHealthBool($onlineRaw);
+        $online = $onlineParsed !== null ? $onlineParsed : (($players['online'] > 0) || ($stats['onlinePlayers'] > 0));
+
+        $serverOnlineRaw = $this->firstAvailableValue($serverNode, ['online', 'isOnline', 'up', 'healthy', 'ok']);
+        $serverOnlineParsed = $this->parseHealthBool($serverOnlineRaw);
+        $serverOnline = $serverOnlineParsed !== null ? $serverOnlineParsed : $online;
+        $serverMotd = $this->normalizeStatusMotd($serverNode['motd'] ?? null, $motd);
+        $serverVersion = $this->normalizeStatusVersion($serverNode['version'] ?? null, $version);
+
+        $pluginsSource = $candidate['plugins'] ?? $statePlugins;
+        $plugins = is_array($pluginsSource) ? $this->normalizePluginList($pluginsSource) : [];
+
+        $chatSource = $candidate['chat'] ?? null;
+        if ($chatSource === null && isset($candidate['messages']) && is_array($candidate['messages'])) {
+            $chatSource = $candidate['messages'];
+        }
+        if ($chatSource === null) {
+            $chatSource = $stateChat;
+        }
+        $chat = is_array($chatSource) ? $this->sanitizeChatPayload($chatSource) : [];
+
+        $updatedAtRaw = $this->firstAvailableValue(
+            $candidate,
+            ['updatedAt', 'updated_at', 'timestamp', 'time', 'checked_at', 'checkedAt', 'last_update', 'lastUpdate']
+        );
+        if ($updatedAtRaw === null && is_array($serverNode)) {
+            $updatedAtRaw = $this->firstAvailableValue(
+                $serverNode,
+                ['updatedAt', 'updated_at', 'timestamp', 'time', 'checked_at', 'checkedAt', 'last_update', 'lastUpdate']
+            );
+        }
+        $updatedAt = $this->parseUnixTimestamp($updatedAtRaw);
+
+        $sourceRaw = $this->firstAvailableValue($candidate, ['source', 'sourceType', 'source_type', 'provider']);
+        $source = is_scalar($sourceRaw) ? trim((string)$sourceRaw) : '';
+        if ($source === '') {
+            $source = 'ws-api';
+        }
+
+        $normalized = [
+            'online' => $online,
+            'players' => $players,
+            'motd' => $motd,
+            'version' => $version,
+            'server' => [
+                'online' => $serverOnline,
+                'motd' => $serverMotd,
+                'version' => $serverVersion,
+            ],
+            'stats' => $stats,
+            'plugins' => $plugins,
+            'chat' => $chat,
+            'updatedAt' => $updatedAt,
+            'source' => $source,
+            'messages' => $chat,
+        ];
+
+        foreach (['world', 'address', 'serverId', 'serverName', 'platform', 'updatedAt'] as $optionalKey) {
+            if (array_key_exists($optionalKey, $serverNode)) {
+                $normalized['server'][$optionalKey] = $serverNode[$optionalKey];
+            }
+        }
+
+        $iconRaw = $candidate['icon'] ?? ($candidate['favicon'] ?? ($serverNode['icon'] ?? ($serverNode['favicon'] ?? null)));
+        if (is_scalar($iconRaw)) {
+            $icon = trim((string)$iconRaw);
+            if ($icon !== '') {
+                $normalized['icon'] = $icon;
+            }
+        }
+
+        if ($stats['tps'] !== null) {
+            $normalized['tps'] = $stats['tps'];
+        }
+
+        return $normalized;
+    }
+
+    private function extractVersionedModuleData(array $payload, string $module)
+    {
+        $module = trim($module);
+        if ($module === '') {
+            return null;
+        }
+
+        $moduleNode = $this->readNestedPath($payload, ['state', $module]);
+        if ($moduleNode === null) {
+            $moduleNode = $this->readNestedPath($payload, ['payload', 'state', $module]);
+        }
+        if ($moduleNode === null) {
+            return null;
+        }
+
+        if (is_array($moduleNode) && $this->isAssocArray($moduleNode) && array_key_exists('data', $moduleNode)) {
+            return $moduleNode['data'];
+        }
+
+        return $moduleNode;
+    }
+
+    private function normalizeStatusPlayers($players, array $stats = []): array
+    {
+        if (is_array($players) && $this->isAssocArray($players) && array_key_exists('version', $players) && array_key_exists('data', $players)) {
+            $players = $players['data'];
+        }
+
+        $listSource = [];
+        $onlineRaw = null;
+        $maxRaw = null;
+
+        if (is_array($players)) {
+            if ($this->isAssocArray($players)) {
+                $onlineRaw = $this->firstAvailableValue($players, ['online', 'onlinePlayers', 'playerCount', 'player_count']);
+                $maxRaw = $this->firstAvailableValue($players, ['max', 'maxPlayers', 'playerMax', 'player_max']);
+
+                if (isset($players['list']) && is_array($players['list'])) {
+                    $listSource = $players['list'];
+                } elseif (isset($players['sample']) && is_array($players['sample'])) {
+                    $listSource = $players['sample'];
+                } elseif (isset($players['players']) && is_array($players['players']) && !$this->isAssocArray($players['players'])) {
+                    $listSource = $players['players'];
+                } elseif (isset($players['data']) && is_array($players['data']) && !$this->isAssocArray($players['data'])) {
+                    $listSource = $players['data'];
+                }
+            } else {
+                $listSource = $players;
+            }
+        }
+
+        $list = $this->normalizePlayersList($listSource);
+
+        $online = $this->normalizeNullableInt($onlineRaw);
+        if ($online === null) {
+            $online = $this->normalizeNullableInt($this->firstAvailableValue($stats, ['onlinePlayers', 'online_players', 'online', 'playerCount']));
+        }
+        if ($online === null) {
+            $online = count($list);
+        }
+        $online = max(0, $online);
+        if ($online === 0 && count($list) > 0) {
+            $online = count($list);
+        }
+
+        $max = null;
+        $maxInt = $this->normalizeNullableInt($maxRaw);
+        if ($maxInt !== null) {
+            $max = max(0, $maxInt);
+        } elseif (is_scalar($maxRaw)) {
+            $maxText = trim((string)$maxRaw);
+            if ($maxText !== '') {
+                $max = $maxText;
+            }
+        }
+        if ($max === null) {
+            $statsMaxRaw = $this->firstAvailableValue($stats, ['maxPlayers', 'max_players', 'max', 'playerMax']);
+            $statsMaxInt = $this->normalizeNullableInt($statsMaxRaw);
+            if ($statsMaxInt !== null) {
+                $max = max(0, $statsMaxInt);
+            } elseif (is_scalar($statsMaxRaw)) {
+                $statsMaxText = trim((string)$statsMaxRaw);
+                if ($statsMaxText !== '') {
+                    $max = $statsMaxText;
+                }
+            }
+        }
+
+        return [
+            'online' => $online,
+            'max' => $max,
+            'list' => $list,
+        ];
+    }
+
+    private function normalizeStatusStats($stats, array $players = []): array
+    {
+        $statsNode = [];
+        if (is_array($stats)) {
+            if ($this->isAssocArray($stats) && array_key_exists('version', $stats) && array_key_exists('data', $stats) && is_array($stats['data'])) {
+                $statsNode = $stats['data'];
+            } elseif ($this->isAssocArray($stats)) {
+                $statsNode = $stats;
+            }
+        }
+
+        $onlinePlayers = $this->normalizeNullableInt(
+            $this->firstAvailableValue($statsNode, ['onlinePlayers', 'online_players', 'playerCount', 'player_count', 'online'])
+        );
+        if ($onlinePlayers === null) {
+            $onlinePlayers = $this->normalizeNullableInt($players['online'] ?? null);
+        }
+        if ($onlinePlayers === null) {
+            $onlinePlayers = isset($players['list']) && is_array($players['list']) ? count($players['list']) : 0;
+        }
+        $onlinePlayers = max(0, $onlinePlayers);
+
+        $maxPlayers = $this->normalizeNullableInt(
+            $this->firstAvailableValue($statsNode, ['maxPlayers', 'max_players', 'max', 'playerMax', 'player_max'])
+        );
+        if ($maxPlayers === null) {
+            $maxPlayers = $this->normalizeNullableInt($players['max'] ?? null);
+        }
+        if ($maxPlayers !== null) {
+            $maxPlayers = max(0, $maxPlayers);
+        }
+
+        $tps = $this->normalizeNullableFloat($this->firstAvailableValue($statsNode, ['tps', 'ticksPerSecond']));
+        if ($tps !== null && $tps < 0) {
+            $tps = null;
+        }
+
+        $mspt = $this->normalizeNullableFloat($this->firstAvailableValue($statsNode, ['mspt', 'millisecondsPerTick']));
+        if ($mspt !== null && $mspt < 0) {
+            $mspt = null;
+        }
+
+        $cpuUsage = $this->normalizeNullableFloat($this->firstAvailableValue($statsNode, ['cpuUsage', 'cpu_usage', 'cpu']));
+        if ($cpuUsage !== null && $cpuUsage < 0) {
+            $cpuUsage = null;
+        }
+
+        $memoryUsedMb = $this->normalizeNullableInt($this->firstAvailableValue($statsNode, ['memoryUsedMb', 'memory_used_mb', 'memoryUsed']));
+        if ($memoryUsedMb !== null) {
+            $memoryUsedMb = max(0, $memoryUsedMb);
+        }
+
+        $memoryMaxMb = $this->normalizeNullableInt($this->firstAvailableValue($statsNode, ['memoryMaxMb', 'memory_max_mb', 'memoryMax']));
+        if ($memoryMaxMb !== null) {
+            $memoryMaxMb = max(0, $memoryMaxMb);
+        }
+
+        $uptimeSeconds = $this->normalizeNullableInt($this->firstAvailableValue($statsNode, ['uptimeSeconds', 'uptime_seconds', 'uptime']));
+        if ($uptimeSeconds !== null) {
+            $uptimeSeconds = max(0, $uptimeSeconds);
+        }
+
+        return [
+            'onlinePlayers' => $onlinePlayers,
+            'maxPlayers' => $maxPlayers,
+            'tps' => $tps,
+            'mspt' => $mspt,
+            'cpuUsage' => $cpuUsage,
+            'memoryUsedMb' => $memoryUsedMb,
+            'memoryMaxMb' => $memoryMaxMb,
+            'uptimeSeconds' => $uptimeSeconds,
+        ];
+    }
+
+    private function normalizeStatusMotd($motd, $serverMotd = null): array
+    {
+        $motdNode = $motd;
+        if (!$this->isSupportedMotdNode($motdNode)) {
+            $motdNode = $serverMotd;
+        }
+
+        $source = 'legacy';
+        $clean = '';
+        $plain = '';
+        $miniMessage = '';
+        $html = '';
+
+        if (is_scalar($motdNode) && !is_array($motdNode)) {
+            $clean = trim((string)$motdNode);
+            $plain = $clean;
+        } elseif (is_array($motdNode) && $this->isAssocArray($motdNode)) {
+            $sourceRaw = $this->firstAvailableValue($motdNode, ['source', 'provider']);
+            if (is_scalar($sourceRaw) && trim((string)$sourceRaw) !== '') {
+                $source = trim((string)$sourceRaw);
+            } else {
+                $source = 'plugin';
+            }
+
+            $cleanRaw = $this->firstAvailableValue($motdNode, ['clean', 'plain', 'text', 'line', 'message']);
+            if (is_scalar($cleanRaw)) {
+                $clean = trim((string)$cleanRaw);
+            }
+
+            $plainRaw = $this->firstAvailableValue($motdNode, ['plain', 'clean', 'text']);
+            if (is_scalar($plainRaw)) {
+                $plain = trim((string)$plainRaw);
+            }
+
+            $miniMessageRaw = $this->firstAvailableValue($motdNode, ['miniMessage', 'mini_message']);
+            if (is_scalar($miniMessageRaw)) {
+                $miniMessage = trim((string)$miniMessageRaw);
+            }
+        }
+
+        if ($plain === '' && $clean !== '') {
+            $plain = $clean;
+        }
+        if ($clean === '' && $plain !== '') {
+            $clean = $plain;
+        }
+
+        return [
+            'source' => $source,
+            'clean' => $clean,
+            'plain' => $plain,
+            'html' => $html,
+            'miniMessage' => $miniMessage,
+        ];
+    }
+
+    private function normalizeStatusVersion($version, $serverVersion = null): string
+    {
+        foreach ([$version, $serverVersion] as $candidate) {
+            if (is_scalar($candidate) && !is_array($candidate)) {
+                $value = trim((string)$candidate);
+                if ($value !== '') {
+                    return $value;
+                }
+                continue;
+            }
+
+            if (!is_array($candidate)) {
+                continue;
+            }
+
+            if ($candidate !== [] && !$this->isAssocArray($candidate)) {
+                foreach ($candidate as $item) {
+                    if (!is_scalar($item)) {
+                        continue;
+                    }
+                    $value = trim((string)$item);
+                    if ($value !== '') {
+                        return $value;
+                    }
+                }
+                continue;
+            }
+
+            foreach (['name_clean', 'name', 'text', 'protocol', 'version'] as $key) {
+                if (!array_key_exists($key, $candidate) || !is_scalar($candidate[$key])) {
+                    continue;
+                }
+                $value = trim((string)$candidate[$key]);
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function normalizeNullableInt($value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_int($value)) {
+            return $value;
+        }
+        if (is_float($value)) {
+            return (int)round($value);
+        }
+        if (is_numeric($value)) {
+            return (int)round((float)$value);
+        }
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $text = trim($value);
+        if ($text === '' || !preg_match('/^-?\d+(?:\.\d+)?$/', $text)) {
+            return null;
+        }
+
+        return (int)round((float)$text);
+    }
+
+    private function normalizeNullableFloat($value): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_float($value) || is_int($value)) {
+            return (float)$value;
+        }
+        if (is_numeric($value)) {
+            return (float)$value;
+        }
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $text = trim($value);
+        if ($text === '' || !preg_match('/^-?\d+(?:\.\d+)?$/', $text)) {
+            return null;
+        }
+
+        return (float)$text;
+    }
+
+    private function isSupportedMotdNode($value): bool
+    {
+        if (is_scalar($value) && !is_array($value)) {
+            return trim((string)$value) !== '';
+        }
+
+        if (!is_array($value)) {
+            return false;
+        }
+
+        return $this->isAssocArray($value);
     }
 
     private function mapRealtimeSnapshotToLegacyStatus(array $snapshot): array
@@ -1875,32 +2345,34 @@ class ApiController extends Controller
 
     private function sanitizeLegacyStatusPayload(array $payload): array
     {
-        $playersSource = [];
-        if (isset($payload['players']) && is_array($payload['players'])) {
-            $playersSource = $payload['players'];
-        }
-        if ($playersSource === [] && isset($payload['sample']) && is_array($payload['sample'])) {
-            $playersSource = ['list' => $payload['sample']];
+        $normalizedStatus = $this->normalizeStatusPayload($payload);
+        if (is_array($normalizedStatus)) {
+            return $normalizedStatus;
         }
 
-        $players = $this->sanitizePlayersPayload($playersSource);
-        $online = array_key_exists('online', $payload) ? (bool)$payload['online'] : ($players['online'] > 0);
-
-        $normalized = $payload;
-        $normalized['online'] = $online;
-        $normalized['players'] = $players;
-
-        return $normalized;
+        return $this->defaultOfflineStatus();
     }
 
     private function extractPlayersPayload(array $statusPayload): array
     {
-        $normalized = $this->sanitizeLegacyStatusPayload($statusPayload);
-        if (isset($normalized['players']) && is_array($normalized['players'])) {
-            return $normalized['players'];
+        $normalized = $this->normalizeStatusPayload($statusPayload);
+        if (is_array($normalized) && isset($normalized['players']) && is_array($normalized['players'])) {
+            return $this->normalizePlayersEndpointPayload($normalized['players']);
         }
 
-        return ['online' => 0, 'max' => 0, 'list' => []];
+        return $this->normalizePlayersEndpointPayload(['online' => 0, 'max' => null, 'list' => []]);
+    }
+
+    private function normalizePlayersEndpointPayload(array $payload): array
+    {
+        $normalized = $this->normalizeStatusPlayers($payload);
+
+        return [
+            'online' => $normalized['online'],
+            'max' => $normalized['max'],
+            'list' => $normalized['list'],
+            'players' => $normalized['list'],
+        ];
     }
 
     private function extractChatPayload(array $statusPayload): array
@@ -2256,10 +2728,46 @@ class ApiController extends Controller
 
     private function defaultOfflineStatus(): array
     {
-        return [
+        $offline = [
             'online' => false,
-            'players' => ['online' => 0, 'max' => 0, 'list' => []],
+            'players' => ['online' => 0, 'max' => null, 'list' => []],
+            'motd' => [
+                'source' => 'fallback',
+                'clean' => '',
+                'plain' => '',
+                'html' => '',
+                'miniMessage' => '',
+            ],
+            'version' => '',
+            'server' => [
+                'online' => false,
+                'motd' => [
+                    'source' => 'fallback',
+                    'clean' => '',
+                    'plain' => '',
+                    'html' => '',
+                    'miniMessage' => '',
+                ],
+                'version' => '',
+            ],
+            'stats' => [
+                'onlinePlayers' => 0,
+                'maxPlayers' => null,
+                'tps' => null,
+                'mspt' => null,
+                'cpuUsage' => null,
+                'memoryUsedMb' => null,
+                'memoryMaxMb' => null,
+                'uptimeSeconds' => null,
+            ],
+            'plugins' => [],
+            'chat' => [],
+            'updatedAt' => null,
+            'source' => 'fallback',
         ];
+
+        $normalized = $this->normalizeStatusPayload($offline);
+        return is_array($normalized) ? $normalized : $offline;
     }
 
     private function persistStatusHistory(array $statusPayload, string $source): bool

@@ -11,7 +11,7 @@
 
 @font-face {
   font-family: "FusionPixel";
-  src: url("/fonts/fusion-pixel-12px-proportional-zh_hans.ttf.woff2") format("woff2");
+  src: url("../fonts/SourceHanSansCN-VF.ttf.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -19,7 +19,7 @@
 
 @font-face {
   font-family: "HarmonyOS Sans SC";
-  src: url("/fonts/HarmonyOS_Sans_SC_Regular.woff2") format("woff2");
+  src: url("../fonts/HarmonyOS_Sans_SC_Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;

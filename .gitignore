@@ -21,3 +21,4 @@ Thumbs.db
 !/public/.well-known/acme-challenge/
 !/public/baidu_verify*.html
 !/public/BingSiteAuth.xml
+/node_modules/

@@ -2,7 +2,7 @@
 
   @font-face {
     font-family: 'FusionPixel';
-    src: url('/fonts/fusion-pixel-12px-proportional-zh_hans.ttf.woff2') format('woff2');
+    src: url('../fonts/SourceHanSansCN-VF.ttf.woff2') format('woff2');
     font-weight: normal;
     font-style: normal;
     font-display: swap;
@@ -10,15 +10,15 @@
 
   @font-face {
     font-family: 'HarmonyOS Sans SC';
-    src: url('/fonts/HarmonyOS_Sans_SC_Regular.woff2') format('woff2');
+    src: url('../fonts/HarmonyOS_Sans_SC_Regular.woff2') format('woff2');
     font-weight: normal;
     font-style: normal;
     font-display: swap;
   }
 
   @font-face {
-    font-family: '像素体';
-    src: url('/fonts/像素体.ttf') format('truetype');
+    font-family: 'SourceHanSansCN';
+    src: url('../fonts/SourceHanSansCN-VF.ttf.woff2') format('woff2');
     font-weight: normal;
     font-style: normal;
     font-display: swap;
@@ -70,8 +70,8 @@
     --shadow-xl: 0 26px 72px rgba(159, 210, 255, 0.34), 0 14px 34px rgba(26, 35, 64, 0.14);
     --shadow-glow: 0 0 44px rgba(159, 210, 255, 0.55);
 
-    --font-main: 'HarmonyOS Sans SC', 'FusionPixel', '像素体', 'Quicksand', 'Noto Sans SC', sans-serif;
-    --font-title: 'HarmonyOS Sans SC', 'FusionPixel', '像素体', 'Quicksand', 'Noto Sans SC', sans-serif;
+    --font-main: 'SourceHanSansCN' , 'HarmonyOS Sans SC', 'FusionPixel', 'Quicksand', 'Noto Sans SC', sans-serif;
+    --font-title: 'SourceHanSansCN' , 'HarmonyOS Sans SC', 'FusionPixel', 'Quicksand', 'Noto Sans SC', sans-serif;
   }
 
   [data-theme="dark"] {

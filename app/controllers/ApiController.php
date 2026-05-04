@@ -30,6 +30,8 @@ class ApiController extends Controller
     private static bool $serverStatusHistoryTableReady = false;
     private Checkin $checkins;
     private ?array $jsonRequestBody = null;
+    private bool $pluginAuthUsedQueryToken = false;
+    private bool $pluginDeliveriesUsedGetMethod = false;
 
     public function __construct()
     {
@@ -519,6 +521,17 @@ class ApiController extends Controller
 
     public function pluginCheckinDeliveries(): void
     {
+        $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+        if ($method !== 'GET' && $method !== 'POST') {
+            $this->respondPluginJson([
+                'success' => false,
+                'message' => 'Method Not Allowed',
+            ], 405);
+            return;
+        }
+
+        $this->pluginDeliveriesUsedGetMethod = $method === 'GET';
+
         if (!$this->isPluginAuthorized()) {
             $this->respondPluginJson([
                 'success' => false,
@@ -529,7 +542,8 @@ class ApiController extends Controller
         }
 
         try {
-            $limit = (int)($_GET['limit'] ?? 20);
+            $body = $this->readJsonRequestBody();
+            $limit = (int)($body['limit'] ?? ($_POST['limit'] ?? ($_GET['limit'] ?? 20)));
             $items = $this->checkins->pullPendingDeliveries($limit);
             $deliveries = $this->formatPluginCheckinDeliveries($items);
 
@@ -553,6 +567,15 @@ class ApiController extends Controller
 
     public function pluginCheckinDeliveriesAck(): void
     {
+        $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'POST'));
+        if ($method !== 'POST') {
+            $this->respondPluginJson([
+                'success' => false,
+                'message' => 'Method Not Allowed',
+            ], 405);
+            return;
+        }
+
         if (!$this->isPluginAuthorized()) {
             $this->respondPluginJson([
                 'success' => false,
@@ -626,6 +649,18 @@ class ApiController extends Controller
     {
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('Pragma: no-cache');
+
+        if ($this->pluginDeliveriesUsedGetMethod) {
+            header('X-Deprecated-Route: GET /api/plugin/checkin/deliveries');
+            header('Warning: 299 - "Deprecated: use POST /api/plugin/checkin/deliveries"', false);
+        }
+
+        if ($this->pluginAuthUsedQueryToken) {
+            header('X-Deprecated-Auth: query-token');
+            header('Warning: 299 - "Deprecated auth: move plugin token to request headers"', false);
+        }
 
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if (is_string($json)) {
@@ -655,30 +690,62 @@ class ApiController extends Controller
 
     private function isPluginAuthorized(): bool
     {
-        $token = $this->extractPluginToken();
+        $tokenSource = '';
+        $token = $this->extractPluginToken($tokenSource);
+        $this->pluginAuthUsedQueryToken = $tokenSource === 'query';
+        if ($this->pluginAuthUsedQueryToken) {
+            error_log('[Plugin API] Deprecated query token usage detected on ' . (string)($_SERVER['REQUEST_URI'] ?? '/api/plugin'));
+        }
+
         return $token !== '' && hash_equals((string)SERVER_TOKEN, $token);
     }
 
-    private function extractPluginToken(): string
+    private function extractPluginToken(?string &$source = null): string
     {
         $body = $this->readJsonRequestBody();
+
         $authorization = trim((string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
         if ($authorization !== '') {
             if (preg_match('/^Bearer\s+(.+)$/i', $authorization, $matches) === 1) {
+                $source = 'authorization_bearer';
                 return trim((string)$matches[1]);
             }
 
+            $source = 'authorization_raw';
             return $authorization;
         }
 
-        foreach (['HTTP_X_API_TOKEN', 'HTTP_X_SERVER_TOKEN'] as $key) {
+        // Preferred auth carriers for plugin callers:
+        // 1) Authorization: Bearer <token>
+        // 2) X-Plugin-Token / X-Stellar-Plugin-Token
+        foreach ([
+            'HTTP_X_PLUGIN_TOKEN',
+            'HTTP_X_STELLAR_PLUGIN_TOKEN',
+            // Legacy headers retained for compatibility.
+            'HTTP_X_API_TOKEN',
+            'HTTP_X_SERVER_TOKEN',
+        ] as $key) {
             $header = trim((string)($_SERVER[$key] ?? ''));
             if ($header !== '') {
+                $source = strtolower(str_replace('HTTP_', '', $key));
                 return $header;
             }
         }
 
-        $token = $body['token'] ?? $_POST['token'] ?? $_GET['token'] ?? '';
+        $bodyToken = trim((string)($body['token'] ?? $_POST['token'] ?? ''));
+        if ($bodyToken !== '') {
+            $source = 'body';
+            return $bodyToken;
+        }
+
+        $queryToken = trim((string)($_GET['token'] ?? ''));
+        if ($queryToken !== '') {
+            $source = 'query';
+            return $queryToken;
+        }
+
+        $source = 'none';
+        $token = '';
         return trim((string)$token);
     }
 

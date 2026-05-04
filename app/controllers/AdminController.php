@@ -71,6 +71,9 @@ class AdminController extends Controller
      *   enable_realtime_panel: bool,
      *   ws_url: string,
      *   ws_auth_token: string,
+     *   ws_ticket_endpoint: string,
+     *   ws_ticket_query_param: string,
+     *   ws_ticket_ttl_seconds: int,
      *   reconnect_interval_ms: int
      * }
      */
@@ -78,15 +81,80 @@ class AdminController extends Controller
     {
         $enabled = defined('REALTIME_ENABLE_PANEL') ? (bool)REALTIME_ENABLE_PANEL : false;
         $wsUrl = defined('REALTIME_WS_URL') ? trim((string)REALTIME_WS_URL) : '';
-        $authToken = defined('REALTIME_WS_AUTH_TOKEN') ? (string)REALTIME_WS_AUTH_TOKEN : '';
+        $ticketTtl = defined('REALTIME_WS_TICKET_TTL_SECONDS') ? (int)REALTIME_WS_TICKET_TTL_SECONDS : 120;
+        $ticketQueryParam = defined('REALTIME_WS_TICKET_QUERY_PARAM') ? trim((string)REALTIME_WS_TICKET_QUERY_PARAM) : 'token';
+        if ($ticketQueryParam === '') {
+            $ticketQueryParam = 'token';
+        }
         $reconnectIntervalMs = defined('REALTIME_RECONNECT_INTERVAL_MS') ? (int)REALTIME_RECONNECT_INTERVAL_MS : 3000;
 
         return [
             'enable_realtime_panel' => $enabled,
             'ws_url' => $wsUrl,
-            'ws_auth_token' => $authToken,
+            // Keep this legacy field for frontend compatibility, but never expose long-lived token.
+            'ws_auth_token' => '',
+            'ws_ticket_endpoint' => '/admin/realtime-ticket',
+            'ws_ticket_query_param' => $ticketQueryParam,
+            'ws_ticket_ttl_seconds' => max(60, min(300, $ticketTtl)),
             'reconnect_interval_ms' => max(500, $reconnectIntervalMs),
         ];
+    }
+
+    /**
+     * Issue a short-lived session-bound ticket for admin realtime panel WS connect.
+     *
+     * Note: The website can only issue ticket metadata here. WS service must verify this ticket.
+     *
+     * @return array{ticket:string,expires_at:int}
+     */
+    private function issueRealtimeWsTicket(): array
+    {
+        $ttl = defined('REALTIME_WS_TICKET_TTL_SECONDS') ? (int)REALTIME_WS_TICKET_TTL_SECONDS : 120;
+        $ttl = max(60, min(300, $ttl));
+        $ticket = bin2hex(random_bytes(32));
+        $expiresAt = time() + $ttl;
+
+        $_SESSION['admin_realtime_ws_ticket'] = [
+            'hash' => hash('sha256', $ticket),
+            'expires_at' => $expiresAt,
+            'issued_at' => time(),
+            'user_id' => (int)($_SESSION['user_id'] ?? 0),
+            'session_id' => session_id(),
+        ];
+
+        return [
+            'ticket' => $ticket,
+            'expires_at' => $expiresAt,
+        ];
+    }
+
+    public function realtimeTicket(): void
+    {
+        $config = $this->getRealtimePanelConfig();
+        if (($config['enable_realtime_panel'] ?? false) !== true) {
+            $this->json(['success' => false, 'message' => 'Realtime panel disabled'], 403);
+            return;
+        }
+
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('Pragma: no-cache');
+
+        try {
+            $issued = $this->issueRealtimeWsTicket();
+            $ttl = max(1, (int)$issued['expires_at'] - time());
+            $this->json([
+                'success' => true,
+                'message' => 'ok',
+                'ticket' => (string)$issued['ticket'],
+                'expires_at' => (int)$issued['expires_at'],
+                'expires_in' => $ttl,
+                'ticket_query_param' => (string)($config['ws_ticket_query_param'] ?? 'token'),
+                // Current WS service still validates long-lived tokens; it must be upgraded to verify tickets.
+                'requires_ws_server_ticket_support' => true,
+            ]);
+        } catch (\Throwable $e) {
+            $this->json(['success' => false, 'message' => 'Failed to issue realtime ticket'], 500);
+        }
     }
 
     public function realtime(): void
@@ -439,6 +507,41 @@ class AdminController extends Controller
             $this->users->unbindCharacter($id);
         }
         $this->completeAdminAction('/admin?tab=players');
+    }
+
+    public function feedbackAttachment(): void
+    {
+        $attachmentId = (int)($_GET['id'] ?? 0);
+        if ($attachmentId <= 0) {
+            http_response_code(404);
+            exit;
+        }
+
+        $attachment = $this->feedbacks->getAttachmentById($attachmentId);
+        if (!is_array($attachment)) {
+            http_response_code(404);
+            exit;
+        }
+
+        $absolutePath = $this->feedbacks->resolveAttachmentAbsolutePath((string)($attachment['file_path'] ?? ''));
+        if ($absolutePath === null || !is_file($absolutePath)) {
+            http_response_code(404);
+            exit;
+        }
+
+        $mimeType = trim((string)($attachment['mime_type'] ?? ''));
+        if ($mimeType === '' || preg_match('/^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i', $mimeType) !== 1) {
+            $mimeType = 'application/octet-stream';
+        }
+
+        header('Content-Type: ' . $mimeType);
+        header('Content-Length: ' . (string)filesize($absolutePath));
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, no-store, no-cache, must-revalidate');
+        header('Pragma: no-cache');
+
+        readfile($absolutePath);
+        exit;
     }
 
     public function feedbackUpdate(): void

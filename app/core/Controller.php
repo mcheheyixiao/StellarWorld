@@ -350,29 +350,208 @@ class Controller
 
     protected function getClientIp(): string
     {
-        $candidates = [
-            $_SERVER['HTTP_CF_CONNECTING_IP'] ?? null,
-            $_SERVER['HTTP_X_FORWARDED_FOR'] ?? null,
-            $_SERVER['HTTP_X_REAL_IP'] ?? null,
-            $_SERVER['REMOTE_ADDR'] ?? null,
-        ];
+        $remoteAddr = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
+        if ($remoteAddr === '' || filter_var($remoteAddr, FILTER_VALIDATE_IP) === false) {
+            return '0.0.0.0';
+        }
 
-        foreach ($candidates as $value) {
-            if (!is_string($value)) {
+        // Only trust forwarding headers when request comes from configured trusted proxy.
+        if (!$this->isTrustedProxyIp($remoteAddr)) {
+            return $remoteAddr;
+        }
+
+        $cfIp = $this->normalizeForwardedHeaderIp((string)($_SERVER['HTTP_CF_CONNECTING_IP'] ?? ''));
+        if ($cfIp !== null) {
+            return $cfIp;
+        }
+
+        $realIp = $this->normalizeForwardedHeaderIp((string)($_SERVER['HTTP_X_REAL_IP'] ?? ''));
+        if ($realIp !== null) {
+            return $realIp;
+        }
+
+        $forwardedFor = $this->extractClientIpFromXForwardedFor((string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
+        if ($forwardedFor !== null) {
+            return $forwardedFor;
+        }
+
+        return $remoteAddr;
+    }
+
+    private function normalizeForwardedHeaderIp(string $value): ?string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        if (filter_var($value, FILTER_VALIDATE_IP) === false) {
+            return null;
+        }
+
+        return $value;
+    }
+
+    private function extractClientIpFromXForwardedFor(string $value): ?string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        $candidates = array_filter(array_map('trim', explode(',', $value)), static function ($item): bool {
+            return is_string($item) && $item !== '';
+        });
+
+        $validIps = [];
+        foreach ($candidates as $candidate) {
+            if (filter_var($candidate, FILTER_VALIDATE_IP) === false) {
                 continue;
             }
-            $value = trim($value);
-            if ($value === '') {
-                continue;
-            }
+            $validIps[] = $candidate;
+        }
 
-            $first = trim(explode(',', $value)[0]);
-            if (filter_var($first, FILTER_VALIDATE_IP)) {
-                return $first;
+        if ($validIps === []) {
+            return null;
+        }
+
+        // Prefer first public IP in chain to reduce spoofing risk from private/reserved ranges.
+        foreach ($validIps as $ip) {
+            if ($this->isPublicIp($ip)) {
+                return $ip;
             }
         }
 
-        return '0.0.0.0';
+        return $validIps[0];
+    }
+
+    private function isPublicIp(string $ip): bool
+    {
+        return filter_var(
+            $ip,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+        ) !== false;
+    }
+
+    private function isTrustedProxyIp(string $ip): bool
+    {
+        $entries = $this->getTrustedProxyEntries();
+        if ($entries === []) {
+            return false;
+        }
+
+        foreach ($entries as $entry) {
+            if ($this->ipMatchesCidrRule($ip, $entry)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return string[]
+     */
+    private function getTrustedProxyEntries(): array
+    {
+        if (!defined('TRUSTED_PROXIES') || !is_array(TRUSTED_PROXIES)) {
+            return [];
+        }
+
+        $result = [];
+        foreach (TRUSTED_PROXIES as $entry) {
+            $value = trim((string)$entry);
+            if ($value !== '') {
+                $result[] = $value;
+            }
+        }
+
+        return $result;
+    }
+
+    private function ipMatchesCidrRule(string $clientIp, string $rule): bool
+    {
+        $rule = trim($rule);
+        if ($rule === '') {
+            return false;
+        }
+
+        if (strpos($rule, '/') === false) {
+            return filter_var($rule, FILTER_VALIDATE_IP) !== false && strcasecmp($clientIp, $rule) === 0;
+        }
+
+        [$network, $prefixRaw] = array_pad(explode('/', $rule, 2), 2, '');
+        $network = trim((string)$network);
+        $prefixRaw = trim((string)$prefixRaw);
+
+        if ($network === '' || $prefixRaw === '' || !ctype_digit($prefixRaw)) {
+            return false;
+        }
+
+        if (filter_var($clientIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false
+            && filter_var($network, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false
+        ) {
+            $prefix = (int)$prefixRaw;
+            if ($prefix < 0 || $prefix > 32) {
+                return false;
+            }
+            return $this->ipv4CidrContains($clientIp, $network, $prefix);
+        }
+
+        if (filter_var($clientIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false
+            && filter_var($network, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false
+        ) {
+            $prefix = (int)$prefixRaw;
+            if ($prefix < 0 || $prefix > 128) {
+                return false;
+            }
+            return $this->ipv6CidrContains($clientIp, $network, $prefix);
+        }
+
+        return false;
+    }
+
+    private function ipv4CidrContains(string $clientIp, string $networkIp, int $prefix): bool
+    {
+        $clientLong = ip2long($clientIp);
+        $networkLong = ip2long($networkIp);
+        if ($clientLong === false || $networkLong === false) {
+            return false;
+        }
+
+        if ($prefix === 0) {
+            return true;
+        }
+
+        $mask = -1 << (32 - $prefix);
+        return (($clientLong & $mask) === ($networkLong & $mask));
+    }
+
+    private function ipv6CidrContains(string $clientIp, string $networkIp, int $prefix): bool
+    {
+        $clientPacked = @inet_pton($clientIp);
+        $networkPacked = @inet_pton($networkIp);
+        if ($clientPacked === false || $networkPacked === false) {
+            return false;
+        }
+
+        $bytes = intdiv($prefix, 8);
+        $bits = $prefix % 8;
+
+        if ($bytes > 0 && substr($clientPacked, 0, $bytes) !== substr($networkPacked, 0, $bytes)) {
+            return false;
+        }
+
+        if ($bits === 0) {
+            return true;
+        }
+
+        $clientByte = ord($clientPacked[$bytes]);
+        $networkByte = ord($networkPacked[$bytes]);
+        $mask = (0xFF << (8 - $bits)) & 0xFF;
+
+        return (($clientByte & $mask) === ($networkByte & $mask));
     }
 
     protected function isHttpsRequest(): bool

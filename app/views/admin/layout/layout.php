@@ -393,19 +393,16 @@ $feedbackCategoryLabels = [
                                 }
                                 $renderableAttachments = [];
                                 foreach ($feedbackAttachments as $attachment) {
-                                    $attachmentPath = trim((string)($attachment['file_path'] ?? ''));
-                                    if ($attachmentPath === '') {
+                                    $attachmentId = (int)($attachment['id'] ?? 0);
+                                    if ($attachmentId <= 0) {
                                         continue;
-                                    }
-                                    if ($attachmentPath[0] !== '/') {
-                                        $attachmentPath = '/' . ltrim($attachmentPath, '/');
                                     }
                                     $attachmentAlt = trim((string)($attachment['original_name'] ?? ''));
                                     if ($attachmentAlt === '') {
                                         $attachmentAlt = '反馈附件';
                                     }
                                     $renderableAttachments[] = [
-                                        'path' => $attachmentPath,
+                                        'path' => '/admin/feedback/attachment?id=' . $attachmentId,
                                         'alt' => $attachmentAlt,
                                     ];
                                 }

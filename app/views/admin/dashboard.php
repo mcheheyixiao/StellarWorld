@@ -1605,6 +1605,9 @@ window.adminRealtimePanelConfig = <?= json_encode(
         'enable_realtime_panel' => false,
         'ws_url' => '',
         'ws_auth_token' => '',
+        'ws_ticket_endpoint' => '/admin/realtime-ticket',
+        'ws_ticket_query_param' => 'token',
+        'ws_ticket_ttl_seconds' => 120,
         'reconnect_interval_ms' => 3000,
     ],
     JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES

@@ -149,28 +149,16 @@ class PageController extends Controller
 
             $userIdInt = (int)$playerId;
             if ($userIdInt > 0) {
+                // Public timeline only keeps whitelisted public events.
                 $stmt = $db->prepare('
-                    (
-                        SELECT
-                            created_at AS event_time,
-                            "checkin" AS event_type,
-                            checkin_date AS checkin_date,
-                            NULL AS action,
-                            NULL AS details_json
-                        FROM user_checkins
-                        WHERE user_id = :user_id
-                    )
-                    UNION ALL
-                    (
-                        SELECT
-                            created_at AS event_time,
-                            "audit" AS event_type,
-                            NULL AS checkin_date,
-                            action AS action,
-                            details AS details_json
-                        FROM audit_logs
-                        WHERE user_id = :user_id
-                    )
+                    SELECT
+                        created_at AS event_time,
+                        "checkin" AS event_type,
+                        checkin_date AS checkin_date,
+                        NULL AS action,
+                        NULL AS details_json
+                    FROM user_checkins
+                    WHERE user_id = :user_id
                     ORDER BY event_time DESC
                     LIMIT 10
                 ');

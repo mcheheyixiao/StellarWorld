@@ -23,6 +23,9 @@
     var healthPollIntervalMs = 1000;
     var healthEndpoint = '/api/status/health';
     var pluginsEndpoint = '/api/plugins';
+    var ticketEndpoint = String(config.ws_ticket_endpoint || '/admin/realtime-ticket');
+    var ticketQueryParam = String(config.ws_ticket_query_param || 'token').trim() || 'token';
+    var ticketSyncHintShown = false;
 
     var minSnapshotIntervalMs = Math.max(1500, Number(config.min_snapshot_interval_ms || 2000));
     var snapshotIntervalMs = Math.max(minSnapshotIntervalMs, Number(config.snapshot_interval_ms || 3000));
@@ -63,7 +66,8 @@
 
         clearReconnectTimer();
         clearSnapshotTimer();
-        var wsUrl = buildWsUrl(config.ws_url, config.ws_auth_token);
+        var wsTicket = acquireRealtimeTicketSync();
+        var wsUrl = buildWsUrl(config.ws_url, wsTicket, ticketQueryParam);
         if (!wsUrl) {
             setConnectionState('error', '未配置 ws_url');
             return;
@@ -1003,7 +1007,7 @@
             .replace(/'/g, '&#039;');
     }
 
-    function buildWsUrl(url, token) {
+    function normalizeWsUrl(url) {
         var rawUrl = String(url || '').trim();
         if (!rawUrl) {
             return '';
@@ -1019,19 +1023,83 @@
             }
         }
 
-        if (!token) {
+        return normalizedUrl;
+    }
+
+    function buildWsUrl(url, credential, credentialParamName) {
+        var normalizedUrl = normalizeWsUrl(url);
+        if (!normalizedUrl) {
+            return '';
+        }
+
+        var safeCredential = String(credential || '').trim();
+        var safeParamName = String(credentialParamName || '').trim();
+        if (!safeCredential || !safeParamName) {
             return normalizedUrl;
         }
 
         try {
             var urlObj = new URL(normalizedUrl);
-            if (!urlObj.searchParams.has('token')) {
-                urlObj.searchParams.set('token', String(token));
+            if (!urlObj.searchParams.has(safeParamName)) {
+                urlObj.searchParams.set(safeParamName, safeCredential);
             }
             return urlObj.toString();
         } catch (err) {
             return normalizedUrl;
         }
+    }
+
+    function acquireRealtimeTicketSync() {
+        if (!ticketEndpoint) {
+            return '';
+        }
+
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', ticketEndpoint + '?t=' + Date.now(), false);
+            xhr.withCredentials = true;
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.setRequestHeader('Cache-Control', 'no-store');
+            xhr.send(null);
+            if (xhr.status < 200 || xhr.status >= 300) {
+                throw new Error('HTTP ' + xhr.status);
+            }
+
+            var payload = JSON.parse(xhr.responseText || '{}');
+            var data = extractTicketPayload(payload);
+            var ticket = data && typeof data.ticket === 'string' ? data.ticket.trim() : '';
+            if (typeof data.ticket_query_param === 'string' && data.ticket_query_param.trim() !== '') {
+                ticketQueryParam = data.ticket_query_param.trim();
+            }
+
+            if (ticket === '') {
+                throw new Error('Missing ticket');
+            }
+
+            return ticket;
+        } catch (err) {
+            if (!ticketSyncHintShown) {
+                ticketSyncHintShown = true;
+                setConnectionState('reconnecting', 'WS ticket unavailable; fallback without token');
+            }
+            return '';
+        }
+    }
+
+    function extractTicketPayload(payload) {
+        if (!payload || typeof payload !== 'object') {
+            return {};
+        }
+
+        if (payload.success === false) {
+            return {};
+        }
+
+        if (payload.data && typeof payload.data === 'object') {
+            return payload.data;
+        }
+
+        return payload;
     }
 
     function isRealtimeTabActive() {

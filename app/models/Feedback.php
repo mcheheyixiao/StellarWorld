@@ -339,6 +339,71 @@ class Feedback extends Model
         }, $rows);
     }
 
+    public function getAttachmentById(int $attachmentId): ?array
+    {
+        if ($attachmentId <= 0) {
+            return null;
+        }
+
+        $stmt = $this->db->prepare('
+            SELECT
+                id,
+                feedback_id,
+                file_path,
+                original_name,
+                mime_type,
+                file_size,
+                created_at
+            FROM player_feedback_attachments
+            WHERE id = :id
+            LIMIT 1
+        ');
+        $stmt->bindValue(':id', $attachmentId, PDO::PARAM_INT);
+        $stmt->execute();
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return null;
+        }
+
+        return [
+            'id' => (int)($row['id'] ?? 0),
+            'feedback_id' => (int)($row['feedback_id'] ?? 0),
+            'file_path' => (string)($row['file_path'] ?? ''),
+            'original_name' => (string)($row['original_name'] ?? ''),
+            'mime_type' => (string)($row['mime_type'] ?? ''),
+            'file_size' => (int)($row['file_size'] ?? 0),
+            'created_at' => (string)($row['created_at'] ?? ''),
+        ];
+    }
+
+    public function resolveAttachmentAbsolutePath(string $storedPath): ?string
+    {
+        $storedPath = trim($storedPath);
+        if ($storedPath === '') {
+            return null;
+        }
+
+        $normalized = str_replace('\\', '/', $storedPath);
+        $normalized = ltrim($normalized, '/');
+        if ($normalized === '' || str_contains($normalized, '..')) {
+            return null;
+        }
+
+        if (str_starts_with($normalized, 'uploads/feedback/')) {
+            $base = rtrim((string)PUBLIC_PATH, '\\/') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'feedback';
+            $relative = substr($normalized, strlen('uploads/feedback/'));
+            return $this->resolveAttachmentPathUnderBase($base, (string)$relative);
+        }
+
+        if (str_starts_with($normalized, 'storage/feedback/')) {
+            $base = rtrim((string)BASE_PATH, '\\/') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'feedback';
+            $relative = substr($normalized, strlen('storage/feedback/'));
+            return $this->resolveAttachmentPathUnderBase($base, (string)$relative);
+        }
+
+        return null;
+    }
+
     public function updateFeedbackStatus(int $id, string $status, string $adminReply, int $adminId): bool
     {
         $status = strtolower(trim($status));
@@ -541,6 +606,37 @@ class Feedback extends Model
         unset($row);
     }
 
+    private function resolveAttachmentPathUnderBase(string $baseDir, string $relativePath): ?string
+    {
+        $baseDir = rtrim(str_replace('\\', '/', $baseDir), '/');
+        $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
+        if ($baseDir === '' || $relativePath === '' || str_contains($relativePath, '..')) {
+            return null;
+        }
+
+        if (!is_dir($baseDir)) {
+            return null;
+        }
+
+        $absolutePath = $baseDir . '/' . $relativePath;
+        $realBase = realpath($baseDir);
+        $realFile = realpath($absolutePath);
+        if ($realBase === false || $realFile === false) {
+            return null;
+        }
+        if (!is_file($realFile)) {
+            return null;
+        }
+
+        $realBaseNorm = rtrim(str_replace('\\', '/', $realBase), '/') . '/';
+        $realFileNorm = str_replace('\\', '/', $realFile);
+        if (!str_starts_with($realFileNorm, $realBaseNorm)) {
+            return null;
+        }
+
+        return $realFile;
+    }
+
     /**
      * @param array<string, mixed> $filters
      * @param array<string, string> $params
@@ -606,8 +702,9 @@ class Feedback extends Model
 
         $year = date('Y');
         $month = date('m');
-        $relativeDir = '/uploads/feedback/' . $year . '/' . $month;
-        $absoluteDir = rtrim((string)PUBLIC_PATH, '\\/') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'feedback' . DIRECTORY_SEPARATOR . $year . DIRECTORY_SEPARATOR . $month;
+        // Security hardening: store new feedback attachments outside public web root.
+        $relativeDir = '/storage/feedback/' . $year . '/' . $month;
+        $absoluteDir = rtrim((string)BASE_PATH, '\\/') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'feedback' . DIRECTORY_SEPARATOR . $year . DIRECTORY_SEPARATOR . $month;
 
         if (!is_dir($absoluteDir) && !@mkdir($absoluteDir, 0775, true) && !is_dir($absoluteDir)) {
             throw new \RuntimeException('上传目录创建失败，请稍后重试。');

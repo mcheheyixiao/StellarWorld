@@ -48,6 +48,7 @@ $router->post('/api/checkin/claim', [ApiController::class, 'checkinClaim']);
 $router->get('/api/checkin/history', [ApiController::class, 'checkinHistory']);
 $router->get('/api/checkin/rewards', [ApiController::class, 'checkinRewards']);
 $router->get('/api/plugin/checkin/deliveries', [ApiController::class, 'pluginCheckinDeliveries']);
+$router->post('/api/plugin/checkin/deliveries', [ApiController::class, 'pluginCheckinDeliveries']);
 $router->post('/api/plugin/checkin/deliveries/ack', [ApiController::class, 'pluginCheckinDeliveriesAck']);
 
 // Profile pages
@@ -71,6 +72,8 @@ $router->get('/sitemap.xml', [PageController::class, 'sitemap']);
 // Admin panel (requires admin role)
 $router->get('/admin', [AdminController::class, 'dashboard']);
 $router->get('/admin/realtime', [AdminController::class, 'realtime']);
+$router->get('/admin/realtime-ticket', [AdminController::class, 'realtimeTicket']);
+$router->get('/admin/feedback/attachment', [AdminController::class, 'feedbackAttachment']);
 $router->post('/admin/players/update', [AdminController::class, 'playerUpdate']);
 $router->post('/admin/players/delete', [AdminController::class, 'playerDelete']);
 $router->post('/admin/players/unbind', [AdminController::class, 'playerUnbind']);

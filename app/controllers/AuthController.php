@@ -9,8 +9,9 @@ use Core\Controller;
 use Core\EmailCodeService;
 use Core\EmailDomainWhitelist;
 use Core\MUAFetcher;
+use Core\PasswordHasher;
+use Core\PasswordResetService;
 use Core\RconClient;
-use Core\MinecraftUuid;
 use Model\User;
 use Model\AuditModel;
 use PHPMailer\PHPMailer\PHPMailer;
@@ -519,27 +520,11 @@ class AuthController extends Controller
                 require_once $autoload;
             }
 
-            $token = bin2hex(random_bytes(32));
             $db = \Core\Database::connection();
+            $token = PasswordResetService::issueTokenForEmail($db, $email);
 
             // 单邮箱仅保留一条有效记录，避免重复点击造成多条 token
-            $del = $db->prepare('DELETE FROM password_resets WHERE email = :email');
-            $del->execute([':email' => $email]);
-
-            $ins = $db->prepare('
-                INSERT INTO password_resets (email, token, created_at)
-                VALUES (:email, :token, NOW())
-            ');
-            $ins->execute([
-                ':email' => $email,
-                ':token' => $token,
-            ]);
-
-            $resetUrl = sprintf('%s://%s/reset-password?token=%s',
-                isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http',
-                $_SERVER['HTTP_HOST'] ?? 'localhost',
-                urlencode($token)
-            );
+            $resetUrl = PasswordResetService::buildResetUrl($token);
 
             $subject = '繁星World 密码重置';
             $username = trim((string)($user['username'] ?? ''));
@@ -640,16 +625,8 @@ class AuthController extends Controller
             $message = '重置链接无效或已过期';
         } else {
             $db = \Core\Database::connection();
-            $stmt = $db->prepare('
-                SELECT email
-                FROM password_resets
-                WHERE token = :token
-                  AND created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
-                LIMIT 1
-            ');
-            $stmt->execute([':token' => $token]);
-            $row = $stmt->fetch();
-            if ($row) {
+            $row = PasswordResetService::findValidRequestByToken($db, $token);
+            if ($row !== null) {
                 $valid = true;
             } else {
                 $message = '重置链接无效或已过期（有效期 1 小时）';
@@ -684,22 +661,15 @@ class AuthController extends Controller
         }
 
         $db = \Core\Database::connection();
-        $stmt = $db->prepare('
-            SELECT email
-            FROM password_resets
-            WHERE token = :token
-              AND created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
-            LIMIT 1
-        ');
-        $stmt->execute([':token' => $token]);
-        $row = $stmt->fetch();
+        $row = PasswordResetService::findValidRequestByToken($db, $token);
         if (!$row || empty($row['email'])) {
             $this->json(['success' => false, 'message' => '重置链接无效或已过期'], 400);
             return;
         }
 
         $email = (string)$row['email'];
-        $hash = AuthMePassword::hash($passwordRaw);
+        // Website account password must use modern password_hash() output.
+        $hash = PasswordHasher::hash($passwordRaw);
 
         $upd = $db->prepare('UPDATE users SET password_hash = :hash WHERE email = :email LIMIT 1');
         $upd->execute([
@@ -707,8 +677,8 @@ class AuthController extends Controller
             ':email' => $email,
         ]);
 
-        $del = $db->prepare('DELETE FROM password_resets WHERE token = :token');
-        $del->execute([':token' => $token]);
+        // One-time token semantics: consume hashed reset token after successful password update.
+        PasswordResetService::consumeToken($db, $token);
 
         try {
             $user = $this->users->findByEmail($email);
@@ -759,9 +729,10 @@ class AuthController extends Controller
 
         $username = trim((string)($_POST['username'] ?? ''));
         $passwordRaw = (string)($_POST['password'] ?? '');
-        $mcUuid = $this->normalizeMinecraftUuid((string)($_POST['mc_uuid'] ?? '')); // legacy support
-        $mcName = trim((string)($_POST['mc_name'] ?? '')); // legacy support
-        $mcUsername = trim((string)($_POST['mc_username'] ?? ''));
+        // Security hardening: do not trust client-reported MC identity on login.
+        // Only trusted provider flows (e.g. Microsoft OAuth callback data) may set binding data.
+        $mcUuid = '';
+        $mcName = '';
         $pendingOAuth = $this->getFreshPendingOAuth();
         $pendingOAuthProvider = is_array($pendingOAuth) ? (string)($pendingOAuth['provider'] ?? '') : '';
         $pendingOAuthSub = is_array($pendingOAuth) ? trim((string)($pendingOAuth['sub'] ?? '')) : '';
@@ -797,7 +768,17 @@ class AuthController extends Controller
         }
 
         $user = $this->users->findByUsername($username);
-        if (!$user || !AuthMePassword::verify($passwordRaw, (string)$user['password_hash'])) {
+        $storedHash = is_array($user) ? (string)($user['password_hash'] ?? '') : '';
+        $isModernHash = PasswordHasher::isModernHash($storedHash);
+        $passwordValid = false;
+        if (is_array($user)) {
+            if ($isModernHash) {
+                $passwordValid = PasswordHasher::verify($passwordRaw, $storedHash);
+            } else {
+                $passwordValid = AuthMePassword::verify($passwordRaw, $storedHash);
+            }
+        }
+        if (!$user || !$passwordValid) {
             $this->recordLoginAttempt($ip, $username, false);
             try {
                 $this->audit->logAction(null, 'LOGIN_FAILED', $ip, [
@@ -807,6 +788,22 @@ class AuthController extends Controller
             }
             $this->json(['success' => false, 'message' => '用户名或密码错误'], 401);
             return;
+        }
+
+        if ($isModernHash) {
+            if (PasswordHasher::needsRehash($storedHash)) {
+                try {
+                    $this->users->updatePassword((int)$user['id'], PasswordHasher::hash($passwordRaw));
+                } catch (\Throwable $e) {
+                    // Keep login successful even if transparent rehash fails.
+                }
+            }
+        } else {
+            try {
+                $this->users->updatePassword((int)$user['id'], PasswordHasher::hash($passwordRaw));
+            } catch (\Throwable $e) {
+                // Keep login successful even if transparent migration fails.
+            }
         }
 
         if ($user['status'] !== 'active') {
@@ -856,11 +853,6 @@ class AuthController extends Controller
             );
         } catch (\Throwable $e) {
             // 忽略审计失败，避免影响登录
-        }
-
-        if ($mcUuid === '' && $mcUsername !== '') {
-            $mcUuid = MinecraftUuid::getOfflineUuid($mcUsername);
-            $mcName = $mcUsername;
         }
 
         if ($mcUuid !== '') {
@@ -969,9 +961,10 @@ class AuthController extends Controller
         $passwordRaw = (string)($_POST['password'] ?? '');
         $captchaAnswer = trim((string)($_POST['captcha_answer'] ?? ''));
         $emailCode = trim((string)($_POST['email_code'] ?? ''));
-        $mcUuid = $this->normalizeMinecraftUuid((string)($_POST['mc_uuid'] ?? '')); // legacy support
-        $mcName = trim((string)($_POST['mc_name'] ?? '')); // legacy support
-        $mcUsername = trim((string)($_POST['mc_username'] ?? ''));
+        // Security hardening: client-supplied mc_uuid/mc_name/mc_username cannot directly bind identity.
+        // Binding values are only accepted from trusted verification flows (e.g. Microsoft OAuth).
+        $mcUuid = '';
+        $mcName = '';
         $pendingOAuth = $this->getFreshPendingOAuth();
         $pendingOAuthProvider = is_array($pendingOAuth) ? (string)($pendingOAuth['provider'] ?? '') : '';
         $pendingOAuthSub = is_array($pendingOAuth) ? trim((string)($pendingOAuth['sub'] ?? '')) : '';
@@ -1049,7 +1042,6 @@ class AuthController extends Controller
 
             $mcUuid = $pendingOAuthMcUuid;
             $mcName = $pendingOAuthMcUsername;
-            $mcUsername = $pendingOAuthMcUsername;
         }
 
         if ($this->isRegistrationLimited($ip, $isWhite)) {
@@ -1083,8 +1075,8 @@ class AuthController extends Controller
             }
         }
 
-        // 使用 AuthMe 原生 SHA256 算法生成哈希
-        $hash = AuthMePassword::hash($passwordRaw);
+        // Website account password must use modern password_hash() output.
+        $hash = PasswordHasher::hash($passwordRaw);
 
         $userId = $this->users->create([
             'username' => $username,
@@ -1106,11 +1098,6 @@ class AuthController extends Controller
             );
         } catch (\Throwable $e) {
             // 忽略审计失败，避免影响注册
-        }
-
-        if ($mcUuid === '' && $mcUsername !== '') {
-            $mcUuid = MinecraftUuid::getOfflineUuid($mcUsername);
-            $mcName = $mcUsername;
         }
 
         if ($mcUuid !== '') {

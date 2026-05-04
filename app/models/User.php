@@ -194,6 +194,19 @@ class User extends Model
         ]);
     }
 
+    public function updateMinecraftNameWithCooldown(int $userId, string $mcName): void
+    {
+        $stmt = $this->db->prepare('
+            UPDATE users
+            SET mc_username = :mc_username, last_mc_bind_at = NOW(), updated_at = NOW()
+            WHERE id = :id
+        ');
+        $stmt->execute([
+            ':mc_username' => $mcName,
+            ':id' => $userId,
+        ]);
+    }
+
     /**
      * Store Remember Me token record for persistent multi-device login.
      *

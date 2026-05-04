@@ -80,6 +80,13 @@ unset($_realtimeEnabledEnv);
 define('REALTIME_WS_URL', getenv('REALTIME_WS_URL') ?: 'ws://127.0.0.1:3001/ws/admin');
 define('REALTIME_WS_AUTH_TOKEN', getenv('REALTIME_WS_AUTH_TOKEN') !== false ? (string)getenv('REALTIME_WS_AUTH_TOKEN') : '');
 define('REALTIME_RECONNECT_INTERVAL_MS', max(500, (int)(getenv('REALTIME_RECONNECT_INTERVAL_MS') ?: 3000)));
+define('REALTIME_WS_TICKET_TTL_SECONDS', max(60, min(300, (int)(getenv('REALTIME_WS_TICKET_TTL_SECONDS') ?: 120))));
+$_wsTicketQueryParam = trim((string)(getenv('REALTIME_WS_TICKET_QUERY_PARAM') ?: 'token'));
+if ($_wsTicketQueryParam === '') {
+    $_wsTicketQueryParam = 'token';
+}
+define('REALTIME_WS_TICKET_QUERY_PARAM', $_wsTicketQueryParam);
+unset($_wsTicketQueryParam);
 
 // Website status data source (WebSocket service status center)
 define('WS_STATUS_API_BASE', getenv('WS_STATUS_API_BASE') ?: 'http://127.0.0.1:3001');
@@ -109,6 +116,21 @@ define('PUBLIC_PATH', BASE_PATH . '/public');
 // Baidu push (optional): sitemap base URL and active push token
 define('SITE_BASE_URL', rtrim(getenv('SITE_BASE_URL') ?: 'http://localhost', '/'));
 define('BAIDU_PUSH_TOKEN', getenv('BAIDU_PUSH_TOKEN') ?: '');
+
+// Trusted reverse proxies (comma-separated IP/CIDR), e.g. "127.0.0.1,10.0.0.0/8"
+$_trustedProxiesRaw = trim((string)(getenv('TRUSTED_PROXIES') ?: ''));
+$_trustedProxies = [];
+if ($_trustedProxiesRaw !== '') {
+    $parts = preg_split('/\s*,\s*/', $_trustedProxiesRaw) ?: [];
+    foreach ($parts as $part) {
+        $item = trim((string)$part);
+        if ($item !== '') {
+            $_trustedProxies[] = $item;
+        }
+    }
+}
+define('TRUSTED_PROXIES', $_trustedProxies);
+unset($_trustedProxiesRaw, $_trustedProxies, $parts, $part, $item);
 
 // --- NapCatQQ 机器人配置 ---
 // 填入机器人所在服务器的公网IP和端口

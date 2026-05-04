@@ -7,7 +7,8 @@ use Core\AuthMePassword;
 use Core\Controller;
 use Core\Database;
 use Core\MUAFetcher;
-use Core\MinecraftUuid;
+use Core\PasswordHasher;
+use Core\PasswordResetService;
 use Core\RconClient;
 use Model\Feedback;
 use Model\User;
@@ -319,12 +320,23 @@ class ProfileController extends Controller
         $stmt = $db->prepare('SELECT password_hash FROM users WHERE id = :id LIMIT 1');
         $stmt->execute([':id' => $userId]);
         $row = $stmt->fetch(\PDO::FETCH_ASSOC);
-        if (!$row || !AuthMePassword::verify($oldPassword, (string)$row['password_hash'])) {
+        $storedHash = is_array($row) ? (string)($row['password_hash'] ?? '') : '';
+        $isModernHash = PasswordHasher::isModernHash($storedHash);
+        $oldPasswordValid = false;
+        if (is_array($row)) {
+            if ($isModernHash) {
+                $oldPasswordValid = PasswordHasher::verify($oldPassword, $storedHash);
+            } else {
+                $oldPasswordValid = AuthMePassword::verify($oldPassword, $storedHash);
+            }
+        }
+
+        if (!$row || !$oldPasswordValid) {
             $this->json(['success' => false, 'message' => '旧密码不正确'], 400);
             return;
         }
 
-        $newHash = AuthMePassword::hash($newPassword);
+        $newHash = PasswordHasher::hash($newPassword);
         $this->users->updatePassword($userId, $newHash);
 
         try {
@@ -368,8 +380,17 @@ class ProfileController extends Controller
             }
         }
 
-        $mcUuid = MinecraftUuid::getOfflineUuid($mcName);
-        $this->users->updateMinecraftBindWithCooldown($userId, $mcUuid, $mcName);
+        $mcUuid = trim((string)($profile['mc_uuid'] ?? ''));
+        if ($mcUuid === '') {
+            $this->json([
+                'success' => false,
+                'message' => 'Please bind Minecraft account through a verified flow (Microsoft OAuth) before updating character name.',
+            ], 403);
+            return;
+        }
+
+        // Security hardening: keep verified UUID unchanged, only update display name.
+        $this->users->updateMinecraftNameWithCooldown($userId, $mcName);
 
         $muaSub = trim((string)($profile['mua_sub'] ?? ''));
         if ($muaSub !== '' && defined('RCON_PASSWORD') && trim((string)RCON_PASSWORD) !== '') {
@@ -425,27 +446,9 @@ class ProfileController extends Controller
                 require_once $autoload;
             }
 
-            $token = bin2hex(random_bytes(32));
             $db = Database::connection();
-
-            $del = $db->prepare('DELETE FROM password_resets WHERE email = :email');
-            $del->execute([':email' => $email]);
-
-            $ins = $db->prepare('
-                INSERT INTO password_resets (email, token, created_at)
-                VALUES (:email, :token, NOW())
-            ');
-            $ins->execute([
-                ':email' => $email,
-                ':token' => $token,
-            ]);
-
-            $resetUrl = sprintf(
-                '%s://%s/reset-password?token=%s',
-                isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http',
-                $_SERVER['HTTP_HOST'] ?? 'localhost',
-                urlencode($token)
-            );
+            $token = PasswordResetService::issueTokenForEmail($db, $email);
+            $resetUrl = PasswordResetService::buildResetUrl($token);
 
             $username = (string)($profile['username'] ?? '玩家');
             $subject = '繁星World 一键密码重置';

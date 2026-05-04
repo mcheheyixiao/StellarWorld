@@ -28,6 +28,8 @@
                        placeholder="仅填写游戏名，网站将自动生成 UUID" autocomplete="off">
                 <?php if ($isMicrosoftMinecraftPending): ?>
                     <p class="auth-help-text">已通过 Microsoft 正版账号验证</p>
+                <?php else: ?>
+                    <p class="auth-help-text">填写昵称不会直接绑定 mc_uuid，请在注册后通过可信流程完成绑定。</p>
                 <?php endif; ?>
             </div>
 

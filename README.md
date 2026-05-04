@@ -249,3 +249,10 @@ Plugin 显示 `Offline` 的常见原因：
 - `WS_STATUS_API_TIMEOUT_MS`：状态中心请求超时（毫秒）
 - `WS_STATUS_API_TOKEN`：状态中心 API token（可留空；为空时仅依赖无需鉴权的接口如 `/health`）
 - `PUBLIC_STATUS_WS_URL`：前台 WebSocket 地址
+
+## Realtime Ticket Verify Env
+
+```dotenv
+REALTIME_TICKET_VERIFY_TOKEN=replace-with-internal-service-token
+REALTIME_TICKET_VERIFY_ALLOW_EMPTY_TOKEN=0
+```

@@ -127,6 +127,8 @@ if ($_wsTicketQueryParam === '') {
 }
 define('REALTIME_WS_TICKET_QUERY_PARAM', $_wsTicketQueryParam);
 unset($_wsTicketQueryParam);
+define('REALTIME_TICKET_VERIFY_TOKEN', getenv('REALTIME_TICKET_VERIFY_TOKEN') !== false ? trim((string)getenv('REALTIME_TICKET_VERIFY_TOKEN')) : '');
+define('REALTIME_TICKET_VERIFY_ALLOW_EMPTY_TOKEN', filter_var((string)(getenv('REALTIME_TICKET_VERIFY_ALLOW_EMPTY_TOKEN') ?: '0'), FILTER_VALIDATE_BOOLEAN));
 
 // Website status data source (WebSocket service status center)
 define('WS_STATUS_API_BASE', getenv('WS_STATUS_API_BASE') ?: 'http://127.0.0.1:3001');

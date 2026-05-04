@@ -74,6 +74,7 @@ $router->get('/sitemap.xml', [PageController::class, 'sitemap']);
 $router->get('/admin', [AdminController::class, 'dashboard']);
 $router->get('/admin/realtime', [AdminController::class, 'realtime']);
 $router->get('/admin/realtime-ticket', [AdminController::class, 'realtimeTicket']);
+$router->post('/admin/realtime-ticket/verify', [AdminController::class, 'realtimeTicketVerify']);
 $router->get('/admin/feedback/attachment', [AdminController::class, 'feedbackAttachment']);
 $router->post('/admin/players/update', [AdminController::class, 'playerUpdate']);
 $router->post('/admin/players/delete', [AdminController::class, 'playerDelete']);

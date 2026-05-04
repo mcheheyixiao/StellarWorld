@@ -149,12 +149,258 @@ class AdminController extends Controller
                 'expires_at' => (int)$issued['expires_at'],
                 'expires_in' => $ttl,
                 'ticket_query_param' => (string)($config['ws_ticket_query_param'] ?? 'token'),
-                // Current WS service still validates long-lived tokens; it must be upgraded to verify tickets.
+                // WS service must verify this ticket.
                 'requires_ws_server_ticket_support' => true,
             ]);
         } catch (\Throwable $e) {
             $this->json(['success' => false, 'message' => 'Failed to issue realtime ticket'], 500);
         }
+    }
+
+    public function realtimeTicketVerify(): void
+    {
+        if (strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST') {
+            $this->failRealtimeTicketVerify('invalid ticket', 405);
+            return;
+        }
+
+        $requestContext = [
+            'user_id' => (int)($_SESSION['user_id'] ?? 0),
+            'origin' => '',
+            'path' => '/ws/admin',
+            'ip' => $this->getClientIp(),
+            'ticket_hash_prefix' => '',
+        ];
+
+        $providedToken = $this->extractRealtimeVerifyToken();
+        $expectedToken = defined('REALTIME_TICKET_VERIFY_TOKEN') ? trim((string)REALTIME_TICKET_VERIFY_TOKEN) : '';
+        if ($expectedToken === '') {
+            $allowEmptyTokenInDev = APP_ENV === 'development'
+                && (defined('REALTIME_TICKET_VERIFY_ALLOW_EMPTY_TOKEN') ? (bool)REALTIME_TICKET_VERIFY_ALLOW_EMPTY_TOKEN : false);
+            if (!$allowEmptyTokenInDev) {
+                $this->logRealtimeTicketVerifyFailure('verify_token_not_configured', $requestContext);
+                $this->failRealtimeTicketVerify('invalid ticket', 503);
+                return;
+            }
+            header('X-Realtime-Verify-Auth-Mode: dev-empty-token');
+        } elseif (!$this->isRealtimeVerifyTokenAllowed($providedToken)) {
+            $this->logRealtimeTicketVerifyFailure('verify_token_invalid', $requestContext);
+            $this->failRealtimeTicketVerify('invalid ticket', 401);
+            return;
+        }
+
+        try {
+            $body = $this->readRealtimeVerifyJsonBody();
+        } catch (\RuntimeException $e) {
+            $this->logRealtimeTicketVerifyFailure('invalid_json_body', $requestContext);
+            $status = (int)$e->getCode();
+            $this->failRealtimeTicketVerify('invalid ticket', $status >= 400 ? $status : 400);
+            return;
+        }
+
+        $ticket = (string)($body['ticket'] ?? '');
+        $requestContext['origin'] = trim((string)($body['origin'] ?? ''));
+        $requestPath = trim((string)($body['path'] ?? ''));
+        if ($requestPath !== '') {
+            $requestContext['path'] = $requestPath;
+        }
+        $bodyIp = trim((string)($body['ip'] ?? ''));
+        if ($bodyIp !== '') {
+            $requestContext['ip'] = $bodyIp;
+        }
+        if ($ticket !== '') {
+            $requestContext['ticket_hash_prefix'] = substr(hash('sha256', $ticket), 0, 8);
+        }
+
+        if (!$this->isSafeRealtimeTicketFormat($ticket)) {
+            $this->logRealtimeTicketVerifyFailure('invalid_ticket_format', $requestContext);
+            $this->failRealtimeTicketVerify('invalid ticket', 401);
+            return;
+        }
+
+        $stored = $_SESSION['admin_realtime_ws_ticket'] ?? null;
+        if (!is_array($stored)
+            || !array_key_exists('hash', $stored)
+            || !array_key_exists('expires_at', $stored)
+            || !array_key_exists('user_id', $stored)
+            || !array_key_exists('session_id', $stored)
+        ) {
+            $this->logRealtimeTicketVerifyFailure('ticket_missing_from_session', $requestContext);
+            $this->failRealtimeTicketVerify('invalid ticket', 401);
+            return;
+        }
+
+        $expiresAt = (int)($stored['expires_at'] ?? 0);
+        if ($expiresAt < time()) {
+            unset($_SESSION['admin_realtime_ws_ticket']);
+            $this->logRealtimeTicketVerifyFailure('ticket_expired', $requestContext);
+            $this->failRealtimeTicketVerify('invalid ticket', 401);
+            return;
+        }
+
+        $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
+        $storedUserId = (int)($stored['user_id'] ?? 0);
+        if ($storedUserId !== $sessionUserId) {
+            $this->logRealtimeTicketVerifyFailure('ticket_user_mismatch', $requestContext);
+            $this->failRealtimeTicketVerify('invalid ticket', 401);
+            return;
+        }
+
+        if ((string)($stored['session_id'] ?? '') !== session_id()) {
+            $this->logRealtimeTicketVerifyFailure('ticket_session_mismatch', $requestContext);
+            $this->failRealtimeTicketVerify('invalid ticket', 401);
+            return;
+        }
+
+        $ticketHash = hash('sha256', $ticket);
+        if (!hash_equals((string)($stored['hash'] ?? ''), $ticketHash)) {
+            $this->logRealtimeTicketVerifyFailure('ticket_hash_mismatch', $requestContext);
+            $this->failRealtimeTicketVerify('invalid ticket', 401);
+            return;
+        }
+
+        $user = $this->users->findById($storedUserId);
+        if (!is_array($user)) {
+            $this->logRealtimeTicketVerifyFailure('user_not_found', $requestContext);
+            $this->failRealtimeTicketVerify('invalid ticket', 401);
+            return;
+        }
+
+        $role = trim((string)($user['role'] ?? ''));
+        $status = trim((string)($user['status'] ?? ''));
+        if ($role !== 'admin' || $status !== 'active') {
+            $this->logRealtimeTicketVerifyFailure('user_not_active_admin', $requestContext);
+            $this->failRealtimeTicketVerify('invalid ticket', 403);
+            return;
+        }
+
+        unset($_SESSION['admin_realtime_ws_ticket']);
+        $this->successRealtimeTicketVerify([
+            'admin_id' => (int)($user['id'] ?? $storedUserId),
+            'username' => (string)($user['username'] ?? ''),
+            'expires_at' => $expiresAt,
+        ]);
+    }
+
+    private function extractRealtimeVerifyToken(): string
+    {
+        $authCandidates = [
+            (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''),
+            (string)($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? ''),
+        ];
+        foreach ($authCandidates as $header) {
+            $value = trim($header);
+            if ($value === '') {
+                continue;
+            }
+            if (preg_match('/^Bearer\s+(.+)$/i', $value, $matches) !== 1) {
+                continue;
+            }
+            $token = trim((string)($matches[1] ?? ''));
+            if ($token !== '') {
+                return $token;
+            }
+        }
+
+        return trim((string)($_SERVER['HTTP_X_STELLAR_REALTIME_TOKEN'] ?? ''));
+    }
+
+    private function isRealtimeVerifyTokenAllowed(string $provided): bool
+    {
+        $expected = defined('REALTIME_TICKET_VERIFY_TOKEN') ? trim((string)REALTIME_TICKET_VERIFY_TOKEN) : '';
+        if ($expected === '') {
+            return APP_ENV === 'development'
+                && (defined('REALTIME_TICKET_VERIFY_ALLOW_EMPTY_TOKEN') ? (bool)REALTIME_TICKET_VERIFY_ALLOW_EMPTY_TOKEN : false);
+        }
+
+        if ($provided === '') {
+            return false;
+        }
+
+        return hash_equals($expected, $provided);
+    }
+
+    /**
+     * @return array{ticket:string,ip:string,userAgent:string,origin:string,path:string}
+     */
+    private function readRealtimeVerifyJsonBody(): array
+    {
+        $raw = file_get_contents('php://input');
+        if (!is_string($raw)) {
+            throw new \RuntimeException('invalid request body', 400);
+        }
+        if (strlen($raw) > 16384) {
+            throw new \RuntimeException('request body too large', 400);
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded) || json_last_error() !== JSON_ERROR_NONE) {
+            throw new \RuntimeException('invalid json', 400);
+        }
+
+        return [
+            'ticket' => isset($decoded['ticket']) ? (string)$decoded['ticket'] : '',
+            'ip' => isset($decoded['ip']) ? trim((string)$decoded['ip']) : '',
+            'userAgent' => isset($decoded['userAgent']) ? trim((string)$decoded['userAgent']) : '',
+            'origin' => isset($decoded['origin']) ? trim((string)$decoded['origin']) : '',
+            'path' => isset($decoded['path']) ? trim((string)$decoded['path']) : '',
+        ];
+    }
+
+    private function isSafeRealtimeTicketFormat(string $ticket): bool
+    {
+        if ($ticket === '') {
+            return false;
+        }
+        if ($ticket !== trim($ticket)) {
+            return false;
+        }
+        $length = strlen($ticket);
+        if ($length < 32 || $length > 256) {
+            return false;
+        }
+        if (preg_match('/[\s\x00-\x1F\x7F]/', $ticket) === 1) {
+            return false;
+        }
+
+        return preg_match('/^[A-Za-z0-9._~-]+$/', $ticket) === 1;
+    }
+
+    private function failRealtimeTicketVerify(string $message, int $status = 401): void
+    {
+        $this->json([
+            'success' => false,
+            'message' => $message,
+        ], $status);
+    }
+
+    private function successRealtimeTicketVerify(array $data): void
+    {
+        $this->json([
+            'success' => true,
+            'ok' => true,
+            'data' => $data,
+        ]);
+    }
+
+    private function logRealtimeTicketVerifyFailure(string $reason, array $context = []): void
+    {
+        $payload = [
+            'reason' => $reason,
+            'user_id' => (int)($context['user_id'] ?? ($_SESSION['user_id'] ?? 0)),
+            'origin' => trim((string)($context['origin'] ?? '')),
+            'path' => trim((string)($context['path'] ?? '')),
+            'ip' => trim((string)($context['ip'] ?? $this->getClientIp())),
+            'ticket_hash_prefix' => trim((string)($context['ticket_hash_prefix'] ?? '')),
+        ];
+
+        $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (is_string($encoded)) {
+            error_log('[RealtimeTicketVerify] ' . $encoded);
+            return;
+        }
+
+        error_log('[RealtimeTicketVerify] reason=' . $reason);
     }
 
     public function realtime(): void

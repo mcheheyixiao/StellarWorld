@@ -707,3 +707,64 @@ DEALLOCATE PREPARE stmt_add_feedback_supplemented_at;
 UPDATE player_feedback
 SET status = 'resolved'
 WHERE status = 'closed';
+
+-- Redeem V1: categories, keys, and exchange logs
+-- V1 note:
+-- plain_code is intentionally stored for admin CSV export convenience.
+-- In production, you can switch to one-time export at generation time and avoid long-term plain storage.
+CREATE TABLE IF NOT EXISTS redeem_categories (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    description TEXT NULL,
+    default_command_template TEXT NOT NULL,
+    status ENUM('enabled', 'disabled') NOT NULL DEFAULT 'enabled',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_redeem_categories_name (name),
+    KEY idx_redeem_categories_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS redeem_keys (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    category_id INT UNSIGNED NULL,
+    code_hash CHAR(64) NOT NULL,
+    plain_code VARCHAR(128) NOT NULL,
+    command_template TEXT NOT NULL,
+    max_uses INT UNSIGNED NOT NULL DEFAULT 1,
+    used_count INT UNSIGNED NOT NULL DEFAULT 0,
+    status ENUM('available', 'revoked', 'deleted') NOT NULL DEFAULT 'available',
+    expires_at DATETIME NULL,
+    remark VARCHAR(255) NULL,
+    created_by INT UNSIGNED NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_redeem_keys_code_hash (code_hash),
+    KEY idx_redeem_keys_status (status),
+    KEY idx_redeem_keys_category (category_id),
+    KEY idx_redeem_keys_expires (expires_at),
+    KEY idx_redeem_keys_created_at (created_at),
+    CONSTRAINT fk_redeem_keys_category FOREIGN KEY (category_id) REFERENCES redeem_categories(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_redeem_keys_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS redeem_logs (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    key_id BIGINT UNSIGNED NULL,
+    redeem_code_hash CHAR(64) NOT NULL,
+    server_id VARCHAR(64) NOT NULL,
+    player_uuid VARCHAR(64) NULL,
+    player_name VARCHAR(64) NULL,
+    world_name VARCHAR(64) NULL,
+    status ENUM('executing', 'success', 'failed') NOT NULL DEFAULT 'executing',
+    failure_reason VARCHAR(255) NULL,
+    command_snapshot JSON NULL,
+    executed_commands JSON NULL,
+    created_at DATETIME NOT NULL,
+    completed_at DATETIME NULL,
+    KEY idx_redeem_logs_key (key_id),
+    KEY idx_redeem_logs_status (status),
+    KEY idx_redeem_logs_created_at (created_at),
+    KEY idx_redeem_logs_player (player_name),
+    KEY idx_redeem_logs_server (server_id),
+    CONSTRAINT fk_redeem_logs_key FOREIGN KEY (key_id) REFERENCES redeem_keys(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

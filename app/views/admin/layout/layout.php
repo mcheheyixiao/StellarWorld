@@ -151,6 +151,10 @@ $feedbackCategoryLabels = [
             <?php include BASE_PATH . '/app/views/admin/checkin/stats.php'; ?>
         </div>
 
+        <div id="tab-redeem" class="ta-tab-content tab-hidden">
+            <?php include BASE_PATH . '/app/views/admin/redeem/index.php'; ?>
+        </div>
+
         <div id="tab-players" class="ta-tab-content tab-hidden">
             <div class="ta-card">
                 <h1>玩家管理</h1>

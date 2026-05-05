@@ -107,6 +107,13 @@ $checkinExpanded = $checkinActiveTarget !== '' || strpos($adminCurrentPath, '/ad
             </div>
         </div>
 
+        <button type="button" class="admin-tab-btn ta-sidebar-item" data-tab-target="tab-redeem">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3H4V7Zm0 5h16v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-5Zm4 2.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>卡密系统</span>
+        </button>
+
         <button type="button" class="admin-tab-btn ta-sidebar-item" data-tab-target="tab-players">
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>

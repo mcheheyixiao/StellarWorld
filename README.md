@@ -1,4 +1,4 @@
-# StellarWorld Realtime Observability
+﻿# StellarWorld Realtime Observability
 
 ## 1. 系统架构
 
@@ -256,3 +256,102 @@ Plugin 显示 `Offline` 的常见原因：
 REALTIME_TICKET_VERIFY_TOKEN=replace-with-internal-service-token
 REALTIME_TICKET_VERIFY_ALLOW_EMPTY_TOKEN=0
 ```
+
+## Redeem V1 (Card Code Exchange)
+
+### Manual SQL Setup
+
+This project does not use a dedicated migration framework.
+Run the base SQL file manually:
+
+```bash
+mysql -u <user> -p <database> < database.sql
+```
+
+### Admin Entry
+
+- `/admin?tab=redeem`
+- `/admin/redeem` (redirects to the tab above)
+
+### New Admin APIs
+
+- `GET /api/admin/redeem/categories`
+- `POST /api/admin/redeem/categories`
+- `PATCH /api/admin/redeem/categories/{id}`
+- `DELETE /api/admin/redeem/categories/{id}`
+
+- `GET /api/admin/redeem/keys`
+- `POST /api/admin/redeem/keys/batch`
+- `PATCH /api/admin/redeem/keys/{id}/revoke`
+- `POST /api/admin/redeem/keys/revoke-batch`
+- `POST /api/admin/redeem/keys/delete-batch`
+
+- `GET /api/admin/redeem/logs`
+- `GET /api/admin/redeem/stats/publish`
+
+### New Minecraft Plugin APIs
+
+- `POST /api/minecraft/redeem/claim`
+- `POST /api/minecraft/redeem/{redeemId}/complete`
+- `POST /api/minecraft/redeem/{redeemId}/fail`
+- `POST /api/minecraft/redeem/heartbeat`
+
+### Required Environment Variables
+
+- `REDEEM_CODE_PEPPER` (required)
+- `REDEEM_CODE_CASE_INSENSITIVE` (default: `true`)
+- `REDEEM_PLUGIN_SERVER_ID` (required for plugin API)
+- `REDEEM_PLUGIN_SERVER_SECRET` (required for plugin API)
+- `REDEEM_PLUGIN_TIME_WINDOW_SECONDS` (default: `300`)
+
+### Plugin Auth Contract (Redeem API)
+
+Headers:
+
+- `X-Stellar-Server-Id`
+- `X-Stellar-Timestamp`
+- `X-Stellar-Signature`
+
+Signature:
+
+```text
+hmac_sha256(timestamp + "." + raw_body, REDEEM_PLUGIN_SERVER_SECRET)
+```
+
+Server checks:
+
+- server id must equal `REDEEM_PLUGIN_SERVER_ID`
+- timestamp window validation
+- constant-time signature comparison
+
+### Realtime Event Hook (Lightweight)
+
+Redeem V1 emits lightweight event calls through `Core\RealtimeNotifier::emit(...)`:
+
+- `redeem.key.generated`
+- `redeem.key.revoked`
+- `redeem.claim.success`
+- `redeem.claim.failed`
+- `redeem.stats.updated`
+
+By default this is a no-op unless you provide a bridge function like `stellar_realtime_emit`.
+
+### Known V1 Limits
+
+- no offline reward queue
+- no automatic command rollback on plugin fail callback
+- no placeholder expansion service on website side
+- no multi-server rules matrix
+- no player binding restrictions beyond plugin payload checks
+- `plain_code` is stored for admin export convenience in V1
+
+### Rollback
+
+1. remove new routes in `app/config/routes.php`
+2. remove redeem tab/button include from admin views
+3. remove redeem-related controllers/services/models/scripts
+4. drop tables if needed:
+   - `DROP TABLE redeem_logs;`
+   - `DROP TABLE redeem_keys;`
+   - `DROP TABLE redeem_categories;`
+5. remove redeem env vars from deployment config

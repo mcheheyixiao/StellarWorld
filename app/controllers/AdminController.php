@@ -533,7 +533,7 @@ class AdminController extends Controller
         };
 
         $activeTab = trim((string)($_GET['tab'] ?? 'dashboard'));
-        $allowedTabs = ['dashboard', 'realtime', 'checkin-rewards', 'checkin-logs', 'checkin-stats', 'players', 'feedback', 'announcements', 'milestones', 'gallery', 'site-settings', 'team', 'ip-whitelist', 'ip-blacklist'];
+        $allowedTabs = ['dashboard', 'realtime', 'checkin-rewards', 'checkin-logs', 'checkin-stats', 'redeem', 'players', 'feedback', 'announcements', 'milestones', 'gallery', 'site-settings', 'team', 'ip-whitelist', 'ip-blacklist'];
         if (!in_array($activeTab, $allowedTabs, true)) {
             $activeTab = 'dashboard';
         }

@@ -8,6 +8,9 @@ use Controller\ApiController;
 use Controller\PageController;
 use Controller\AdminController;
 use Controller\ProfileController;
+use Controller\AdminRedeemController;
+use Controller\AdminRedeemApiController;
+use Controller\MinecraftRedeemApiController;
 
 /** @var Router $router */
 
@@ -52,6 +55,27 @@ $router->get('/api/plugin/checkin/deliveries', [ApiController::class, 'pluginChe
 $router->post('/api/plugin/checkin/deliveries', [ApiController::class, 'pluginCheckinDeliveries']);
 $router->post('/api/plugin/checkin/deliveries/ack', [ApiController::class, 'pluginCheckinDeliveriesAck']);
 
+// Admin redeem APIs
+$router->get('/api/admin/redeem/categories', [AdminRedeemApiController::class, 'categories']);
+$router->post('/api/admin/redeem/categories', [AdminRedeemApiController::class, 'createCategory']);
+$router->patch('/api/admin/redeem/categories/{id}', [AdminRedeemApiController::class, 'updateCategory']);
+$router->delete('/api/admin/redeem/categories/{id}', [AdminRedeemApiController::class, 'deleteCategory']);
+
+$router->get('/api/admin/redeem/keys', [AdminRedeemApiController::class, 'keys']);
+$router->post('/api/admin/redeem/keys/batch', [AdminRedeemApiController::class, 'batchGenerateKeys']);
+$router->patch('/api/admin/redeem/keys/{id}/revoke', [AdminRedeemApiController::class, 'revokeKey']);
+$router->post('/api/admin/redeem/keys/revoke-batch', [AdminRedeemApiController::class, 'revokeBatchKeys']);
+$router->post('/api/admin/redeem/keys/delete-batch', [AdminRedeemApiController::class, 'deleteBatchKeys']);
+
+$router->get('/api/admin/redeem/logs', [AdminRedeemApiController::class, 'logs']);
+$router->get('/api/admin/redeem/stats/publish', [AdminRedeemApiController::class, 'statsPublish']);
+
+// Minecraft redeem APIs
+$router->post('/api/minecraft/redeem/claim', [MinecraftRedeemApiController::class, 'claim']);
+$router->post('/api/minecraft/redeem/{redeemId}/complete', [MinecraftRedeemApiController::class, 'complete']);
+$router->post('/api/minecraft/redeem/{redeemId}/fail', [MinecraftRedeemApiController::class, 'fail']);
+$router->post('/api/minecraft/redeem/heartbeat', [MinecraftRedeemApiController::class, 'heartbeat']);
+
 // Profile pages
 $router->get('/profile', [ProfileController::class, 'index']);
 $router->post('/profile/password/update', [ProfileController::class, 'updatePassword']);
@@ -72,6 +96,7 @@ $router->get('/sitemap.xml', [PageController::class, 'sitemap']);
 
 // Admin panel (requires admin role)
 $router->get('/admin', [AdminController::class, 'dashboard']);
+$router->get('/admin/redeem', [AdminRedeemController::class, 'index']);
 $router->get('/admin/realtime', [AdminController::class, 'realtime']);
 $router->get('/admin/realtime-ticket', [AdminController::class, 'realtimeTicket']);
 $router->post('/admin/realtime-ticket/verify', [AdminController::class, 'realtimeTicketVerify']);

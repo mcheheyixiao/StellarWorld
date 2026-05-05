@@ -87,6 +87,13 @@ if ($_pluginAllowGetDeliveriesEnv === false || trim((string)$_pluginAllowGetDeli
 define('PLUGIN_ALLOW_GET_DELIVERIES', $_pluginAllowGetDeliveries);
 unset($_pluginAllowGetDeliveriesEnv, $_pluginAllowGetDeliveries);
 
+// Redeem V1 security and plugin bridge config
+define('REDEEM_CODE_PEPPER', getenv('REDEEM_CODE_PEPPER') !== false ? trim((string)getenv('REDEEM_CODE_PEPPER')) : '');
+define('REDEEM_CODE_CASE_INSENSITIVE', filter_var((string)(getenv('REDEEM_CODE_CASE_INSENSITIVE') ?: '1'), FILTER_VALIDATE_BOOLEAN));
+define('REDEEM_PLUGIN_SERVER_ID', getenv('REDEEM_PLUGIN_SERVER_ID') !== false ? trim((string)getenv('REDEEM_PLUGIN_SERVER_ID')) : '');
+define('REDEEM_PLUGIN_SERVER_SECRET', getenv('REDEEM_PLUGIN_SERVER_SECRET') !== false ? trim((string)getenv('REDEEM_PLUGIN_SERVER_SECRET')) : '');
+define('REDEEM_PLUGIN_TIME_WINDOW_SECONDS', max(60, (int)(getenv('REDEEM_PLUGIN_TIME_WINDOW_SECONDS') ?: 300)));
+
 $_skinProxyAllowedHostsRaw = trim((string)(getenv('SKIN_PROXY_ALLOWED_HOSTS') ?: 'textures.minecraft.net,sessionserver.mojang.com'));
 $_skinProxyAllowedHosts = [];
 if ($_skinProxyAllowedHostsRaw !== '') {

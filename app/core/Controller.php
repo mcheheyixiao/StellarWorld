@@ -39,7 +39,8 @@ class Controller
 
                     if ($dbRow && !empty($dbRow['expires'])) {
                         $expiresTs = strtotime((string)$dbRow['expires']);
-                        if ($expiresTs !== false && $expiresTs >= time()) {
+                        $userStatus = (string)($dbRow['status'] ?? '');
+                        if ($expiresTs !== false && $expiresTs >= time() && $userStatus === 'active') {
                             // Strict comparison to prevent timing attacks.
                             $computedHash = hash('sha256', $validator);
                             if (!empty($dbRow['validator_hash']) && hash_equals($dbRow['validator_hash'], $computedHash)) {

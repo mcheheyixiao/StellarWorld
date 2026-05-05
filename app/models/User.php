@@ -293,7 +293,8 @@ class User extends Model
                 t.validator_hash,
                 t.expires,
                 u.username,
-                u.role
+                u.role,
+                u.status
             FROM auth_tokens t
             INNER JOIN users u ON u.id = t.user_id
             WHERE t.selector = :selector

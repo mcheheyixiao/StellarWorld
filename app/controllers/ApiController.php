@@ -547,9 +547,13 @@ class ApiController extends Controller
 
         $this->pluginDeliveriesUsedGetMethod = $method === 'GET';
         if ($this->pluginDeliveriesUsedGetMethod && !(defined('PLUGIN_ALLOW_GET_DELIVERIES') ? (bool)PLUGIN_ALLOW_GET_DELIVERIES : false)) {
+            header('Allow: POST');
             $this->respondPluginJson([
                 'success' => false,
                 'message' => 'GET deliveries is disabled, use POST /api/plugin/checkin/deliveries',
+                'expected_method' => 'POST',
+                'endpoint' => '/api/plugin/checkin/deliveries',
+                'hint' => 'Update StellarStatsSync CheckinDeliveryClient.fetchPendingDeliveries() to POST JSON body {"limit":20}.',
             ], 405);
             return;
         }
@@ -2138,10 +2142,12 @@ class ApiController extends Controller
         }
 
         $source = 'legacy';
+        $format = 'plain';
         $clean = '';
         $plain = '';
         $miniMessage = '';
         $html = '';
+        $lines = [];
 
         if (is_scalar($motdNode) && !is_array($motdNode)) {
             $clean = trim((string)$motdNode);
@@ -2154,6 +2160,11 @@ class ApiController extends Controller
                 $source = 'plugin';
             }
 
+            $formatRaw = $this->firstAvailableValue($motdNode, ['format', 'type']);
+            if (is_scalar($formatRaw) && trim((string)$formatRaw) !== '') {
+                $format = trim((string)$formatRaw);
+            }
+
             $cleanRaw = $this->firstAvailableValue($motdNode, ['clean', 'plain', 'text', 'line', 'message']);
             if (is_scalar($cleanRaw)) {
                 $clean = trim((string)$cleanRaw);
@@ -2164,9 +2175,47 @@ class ApiController extends Controller
                 $plain = trim((string)$plainRaw);
             }
 
-            $miniMessageRaw = $this->firstAvailableValue($motdNode, ['miniMessage', 'mini_message']);
+            $miniMessageRaw = $this->firstAvailableValue($motdNode, ['miniMessage', 'mini_message', 'minimessage']);
             if (is_scalar($miniMessageRaw)) {
                 $miniMessage = trim((string)$miniMessageRaw);
+            }
+
+            $htmlRaw = $this->firstAvailableValue($motdNode, ['html']);
+            if (is_scalar($htmlRaw)) {
+                $html = trim((string)$htmlRaw);
+            }
+
+            $lines = $this->normalizeStatusMotdLines($motdNode['lines'] ?? null);
+            if ($lines === []) {
+                $lines = $this->normalizeStatusMotdLines($motdNode['raw'] ?? null);
+            }
+            if ($lines === [] && array_key_exists('line', $motdNode)) {
+                $lines = $this->normalizeStatusMotdLines([$motdNode['line']]);
+            }
+        } elseif (is_array($motdNode)) {
+            $lines = $this->normalizeStatusMotdLines($motdNode);
+        }
+
+        if ($lines !== []) {
+            if ($clean === '') {
+                $clean = $this->joinMotdLines($lines, 'clean', ' ');
+            }
+            if ($plain === '') {
+                $plain = $this->joinMotdLines($lines, 'plain', ' ');
+            }
+            if ($miniMessage === '') {
+                $miniMessage = $this->joinMotdLines($lines, 'miniMessage', "\n");
+            }
+            if ($html === '') {
+                $html = $this->joinMotdLines($lines, 'html', '<br>');
+            }
+        }
+
+        if ($format === 'plain') {
+            if ($miniMessage !== '' || $this->joinMotdLines($lines, 'miniMessage', '') !== '') {
+                $format = 'minimessage';
+            } elseif ($html !== '') {
+                $format = 'html';
             }
         }
 
@@ -2179,11 +2228,113 @@ class ApiController extends Controller
 
         return [
             'source' => $source,
+            'format' => $format,
             'clean' => $clean,
             'plain' => $plain,
             'html' => $html,
             'miniMessage' => $miniMessage,
+            'lines' => $lines,
         ];
+    }
+
+    private function normalizeStatusMotdLines($value): array
+    {
+        if (!is_array($value)) {
+            return [];
+        }
+
+        $lines = [];
+        foreach ($value as $lineNode) {
+            if (is_array($lineNode) && !$this->isAssocArray($lineNode)) {
+                foreach ($lineNode as $nestedLine) {
+                    $normalizedNestedLine = $this->normalizeStatusMotdLine($nestedLine);
+                    if (is_array($normalizedNestedLine)) {
+                        $lines[] = $normalizedNestedLine;
+                    }
+                }
+                continue;
+            }
+
+            $normalizedLine = $this->normalizeStatusMotdLine($lineNode);
+            if (is_array($normalizedLine)) {
+                $lines[] = $normalizedLine;
+            }
+        }
+
+        return $lines;
+    }
+
+    private function normalizeStatusMotdLine($lineNode): ?array
+    {
+        $clean = '';
+        $plain = '';
+        $miniMessage = '';
+        $html = '';
+
+        if (is_scalar($lineNode) && !is_array($lineNode)) {
+            $clean = trim((string)$lineNode);
+            $plain = $clean;
+        } elseif (is_array($lineNode) && $this->isAssocArray($lineNode)) {
+            $cleanRaw = $this->firstAvailableValue($lineNode, ['clean', 'plain', 'text', 'line', 'message']);
+            if (is_scalar($cleanRaw)) {
+                $clean = trim((string)$cleanRaw);
+            }
+
+            $plainRaw = $this->firstAvailableValue($lineNode, ['plain', 'clean', 'text']);
+            if (is_scalar($plainRaw)) {
+                $plain = trim((string)$plainRaw);
+            }
+
+            $miniMessageRaw = $this->firstAvailableValue($lineNode, ['miniMessage', 'mini_message', 'minimessage']);
+            if (is_scalar($miniMessageRaw)) {
+                $miniMessage = trim((string)$miniMessageRaw);
+            }
+
+            $htmlRaw = $this->firstAvailableValue($lineNode, ['html']);
+            if (is_scalar($htmlRaw)) {
+                $html = trim((string)$htmlRaw);
+            }
+        }
+
+        if ($plain === '' && $clean !== '') {
+            $plain = $clean;
+        }
+        if ($clean === '' && $plain !== '') {
+            $clean = $plain;
+        }
+
+        if ($clean === '' && $plain === '' && $miniMessage === '' && $html === '') {
+            return null;
+        }
+
+        return [
+            'clean' => $clean,
+            'plain' => $plain,
+            'miniMessage' => $miniMessage,
+            'html' => $html,
+        ];
+    }
+
+    private function joinMotdLines(array $lines, string $key, string $glue): string
+    {
+        $parts = [];
+        foreach ($lines as $line) {
+            if (!is_array($line)) {
+                continue;
+            }
+
+            $value = $line[$key] ?? null;
+            if (!is_scalar($value)) {
+                continue;
+            }
+
+            $text = trim((string)$value);
+            if ($text !== '') {
+                $parts[] = $text;
+            }
+        }
+
+        return implode($glue, $parts);
     }
 
     private function normalizeStatusVersion($version, $serverVersion = null): string
@@ -2289,7 +2440,7 @@ class ApiController extends Controller
             return false;
         }
 
-        return $this->isAssocArray($value);
+        return $this->isAssocArray($value) || $value !== [];
     }
 
     private function mapRealtimeSnapshotToLegacyStatus(array $snapshot): array
@@ -2733,20 +2884,24 @@ class ApiController extends Controller
             'players' => ['online' => 0, 'max' => null, 'list' => []],
             'motd' => [
                 'source' => 'fallback',
+                'format' => 'plain',
                 'clean' => '',
                 'plain' => '',
                 'html' => '',
                 'miniMessage' => '',
+                'lines' => [],
             ],
             'version' => '',
             'server' => [
                 'online' => false,
                 'motd' => [
                     'source' => 'fallback',
+                    'format' => 'plain',
                     'clean' => '',
                     'plain' => '',
                     'html' => '',
                     'miniMessage' => '',
+                    'lines' => [],
                 ],
                 'version' => '',
             ],
@@ -2959,6 +3114,12 @@ class ApiController extends Controller
         }
         if (!isset($normalized['chat']) || !is_array($normalized['chat'])) {
             $normalized['chat'] = [];
+        }
+        if (!array_key_exists('motd', $normalized) && array_key_exists('motd', $normalized['server'])) {
+            $normalized['motd'] = $normalized['server']['motd'];
+        }
+        if (!array_key_exists('version', $normalized) && array_key_exists('version', $normalized['server'])) {
+            $normalized['version'] = $normalized['server']['version'];
         }
 
         return $normalized;

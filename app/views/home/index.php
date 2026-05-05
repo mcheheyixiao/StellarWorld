@@ -752,14 +752,35 @@ html.dark .mc-status-line strong {
 .refresh-btn .spinning,
 .status-refresh-btn .spinning { animation: spin 1s linear infinite; }
 
-.motd {
-    white-space: pre-wrap;
+.mc-hero-motd .motd {
+    white-space: normal;
+    line-height: 1.7;
     word-break: break-word;
     font-family: Consolas, monospace;
     text-align: center;
 }
 
-.motd * { text-align: center; }
+.mc-hero-motd .motd-line {
+    display: block;
+}
+
+.mc-hero-motd .motd-bold {
+    font-weight: 700;
+}
+
+.mc-hero-motd .motd-italic {
+    font-style: italic;
+}
+
+.mc-hero-motd .motd-underlined {
+    text-decoration: underline;
+}
+
+.mc-hero-motd .motd-strikethrough {
+    text-decoration: line-through;
+}
+
+.mc-hero-motd .motd * { text-align: center; }
 
 .player-item {
     border-radius: 0.75rem;

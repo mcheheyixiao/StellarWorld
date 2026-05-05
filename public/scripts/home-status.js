@@ -164,6 +164,538 @@
                 .replace(/'/g, '&#39;');
         }
 
+        var MOTD_COLOR_MAP = {
+            black: '#000000',
+            dark_blue: '#0000AA',
+            dark_green: '#00AA00',
+            dark_aqua: '#00AAAA',
+            dark_red: '#AA0000',
+            dark_purple: '#AA00AA',
+            gold: '#FFAA00',
+            gray: '#AAAAAA',
+            dark_gray: '#555555',
+            blue: '#5555FF',
+            green: '#55FF55',
+            aqua: '#55FFFF',
+            red: '#FF5555',
+            light_purple: '#FF55FF',
+            yellow: '#FFFF55',
+            white: '#FFFFFF'
+        };
+        var MOTD_CLASS_WHITELIST = ['motd-bold', 'motd-italic', 'motd-underlined', 'motd-strikethrough'];
+
+        function normalizeHexColor(colorValue) {
+            var text = String(colorValue || '').trim();
+            if (/^#[0-9a-fA-F]{6}$/.test(text)) {
+                return text.toUpperCase();
+            }
+            return '';
+        }
+
+        function resolveMotdColor(colorValue) {
+            var text = String(colorValue || '').trim().toLowerCase();
+            if (!text) {
+                return '';
+            }
+            if (MOTD_COLOR_MAP[text]) {
+                return MOTD_COLOR_MAP[text];
+            }
+            return normalizeHexColor(text);
+        }
+
+        function normalizeMotdLine(lineNode) {
+            if (typeof lineNode === 'string') {
+                var textLine = lineNode.trim();
+                if (!textLine) {
+                    return null;
+                }
+                return { clean: textLine, plain: textLine, miniMessage: '', html: '' };
+            }
+            if (!lineNode || typeof lineNode !== 'object') {
+                return null;
+            }
+
+            var clean = String(lineNode.clean || lineNode.plain || lineNode.text || lineNode.line || lineNode.message || '').trim();
+            var plain = String(lineNode.plain || lineNode.clean || lineNode.text || '').trim();
+            var miniMessage = String(lineNode.miniMessage || lineNode.mini_message || lineNode.minimessage || '').trim();
+            var html = String(lineNode.html || '').trim();
+
+            if (!plain && clean) {
+                plain = clean;
+            }
+            if (!clean && plain) {
+                clean = plain;
+            }
+
+            if (!clean && !plain && !miniMessage && !html) {
+                return null;
+            }
+            return { clean: clean, plain: plain, miniMessage: miniMessage, html: html };
+        }
+
+        function normalizeMotdPayload(motdNode) {
+            if (!motdNode) {
+                return null;
+            }
+            if (typeof motdNode === 'string') {
+                var text = motdNode.trim();
+                return {
+                    clean: text,
+                    plain: text,
+                    miniMessage: '',
+                    html: '',
+                    lines: []
+                };
+            }
+            if (typeof motdNode !== 'object') {
+                return null;
+            }
+
+            var clean = String(motdNode.clean || motdNode.plain || motdNode.text || '').trim();
+            var plain = String(motdNode.plain || motdNode.clean || motdNode.text || '').trim();
+            var miniMessage = String(motdNode.miniMessage || motdNode.mini_message || motdNode.minimessage || '').trim();
+            var html = String(motdNode.html || '').trim();
+            var linesSource = Array.isArray(motdNode.lines) ? motdNode.lines : (Array.isArray(motdNode.raw) ? motdNode.raw : []);
+            var lines = linesSource.map(normalizeMotdLine).filter(function (line) { return !!line; });
+
+            if ((!clean && !plain) && lines.length > 0) {
+                var joined = lines.map(function (line) {
+                    return String(line.clean || line.plain || '').trim();
+                }).filter(function (lineText) {
+                    return lineText !== '';
+                }).join(' ');
+                if (joined) {
+                    clean = joined;
+                    plain = joined;
+                }
+            }
+
+            if (!plain && clean) {
+                plain = clean;
+            }
+            if (!clean && plain) {
+                clean = plain;
+            }
+
+            return {
+                clean: clean,
+                plain: plain,
+                miniMessage: miniMessage,
+                html: html,
+                lines: lines
+            };
+        }
+
+        function splitMotdLines(rawText) {
+            return String(rawText == null ? '' : rawText)
+                .replace(/<br\s*\/?>/gi, '\n')
+                .replace(/<newline>/gi, '\n')
+                .replace(/\r\n?/g, '\n')
+                .split('\n');
+        }
+
+        function applyMiniMessageTag(rawTag, state) {
+            var content = String(rawTag || '').slice(1, -1).trim();
+            if (!content) {
+                return;
+            }
+
+            var lower = content.toLowerCase();
+            if (lower === 'reset') {
+                state.color = '';
+                state.bold = false;
+                state.italic = false;
+                state.underlined = false;
+                state.strikethrough = false;
+                state.gradient = null;
+                return;
+            }
+
+            if (lower.charAt(0) === '/') {
+                var closeName = lower.slice(1).trim();
+                if (closeName === 'bold' || closeName === 'b') {
+                    state.bold = false;
+                    return;
+                }
+                if (closeName === 'italic' || closeName === 'i') {
+                    state.italic = false;
+                    return;
+                }
+                if (closeName === 'underlined' || closeName === 'u') {
+                    state.underlined = false;
+                    return;
+                }
+                if (closeName === 'strikethrough' || closeName === 'st') {
+                    state.strikethrough = false;
+                    return;
+                }
+                if (closeName === 'gradient') {
+                    state.gradient = null;
+                    return;
+                }
+                if (closeName === 'color') {
+                    state.color = '';
+                    return;
+                }
+                if (MOTD_COLOR_MAP[closeName] || /^#[0-9a-f]{6}$/i.test(closeName)) {
+                    state.color = '';
+                    state.gradient = null;
+                    return;
+                }
+                return;
+            }
+
+            if (lower === 'bold' || lower === 'b') {
+                state.bold = true;
+                return;
+            }
+            if (lower === 'italic' || lower === 'i') {
+                state.italic = true;
+                return;
+            }
+            if (lower === 'underlined' || lower === 'u') {
+                state.underlined = true;
+                return;
+            }
+            if (lower === 'strikethrough' || lower === 'st') {
+                state.strikethrough = true;
+                return;
+            }
+
+            var colorTagMatch = lower.match(/^color\s*:\s*(#[0-9a-f]{6})$/i);
+            if (colorTagMatch) {
+                state.color = normalizeHexColor(colorTagMatch[1]);
+                state.gradient = null;
+                return;
+            }
+
+            var gradientTagMatch = lower.match(/^gradient\s*:\s*(#[0-9a-f]{6})\s*:\s*(#[0-9a-f]{6})$/i);
+            if (gradientTagMatch) {
+                var start = normalizeHexColor(gradientTagMatch[1]);
+                var end = normalizeHexColor(gradientTagMatch[2]);
+                if (start && end) {
+                    state.gradient = { start: start, end: end };
+                }
+                return;
+            }
+
+            var inlineHex = normalizeHexColor(lower);
+            if (inlineHex) {
+                state.color = inlineHex;
+                state.gradient = null;
+                return;
+            }
+
+            var namedColor = resolveMotdColor(lower);
+            if (namedColor) {
+                state.color = namedColor;
+                state.gradient = null;
+            }
+        }
+
+        function parseMiniMessageSegments(textValue) {
+            var text = String(textValue == null ? '' : textValue);
+            var tagRegex = /<[^<>]*>/g;
+            var segments = [];
+            var state = {
+                color: '',
+                bold: false,
+                italic: false,
+                underlined: false,
+                strikethrough: false,
+                gradient: null
+            };
+            var lastIndex = 0;
+            var match;
+
+            while ((match = tagRegex.exec(text)) !== null) {
+                if (match.index > lastIndex) {
+                    segments.push({
+                        text: text.slice(lastIndex, match.index),
+                        state: Object.assign({}, state, { gradient: state.gradient ? Object.assign({}, state.gradient) : null })
+                    });
+                }
+
+                applyMiniMessageTag(match[0], state);
+                lastIndex = match.index + match[0].length;
+            }
+
+            if (lastIndex < text.length) {
+                segments.push({
+                    text: text.slice(lastIndex),
+                    state: Object.assign({}, state, { gradient: state.gradient ? Object.assign({}, state.gradient) : null })
+                });
+            }
+
+            return segments;
+        }
+
+        function parseHexColor(hex) {
+            var normalized = normalizeHexColor(hex);
+            if (!normalized) {
+                return null;
+            }
+            return {
+                r: parseInt(normalized.slice(1, 3), 16),
+                g: parseInt(normalized.slice(3, 5), 16),
+                b: parseInt(normalized.slice(5, 7), 16)
+            };
+        }
+
+        function toHexChannel(value) {
+            var bounded = Math.max(0, Math.min(255, Math.round(value)));
+            var hex = bounded.toString(16).toUpperCase();
+            return hex.length === 1 ? '0' + hex : hex;
+        }
+
+        function interpolateHexColor(startHex, endHex, ratio) {
+            var start = parseHexColor(startHex);
+            var end = parseHexColor(endHex);
+            if (!start || !end) {
+                return '';
+            }
+            var r = start.r + (end.r - start.r) * ratio;
+            var g = start.g + (end.g - start.g) * ratio;
+            var b = start.b + (end.b - start.b) * ratio;
+            return '#' + toHexChannel(r) + toHexChannel(g) + toHexChannel(b);
+        }
+
+        function buildMotdSpanAttrs(state, overrideColor) {
+            var classes = [];
+            if (state.bold) {
+                classes.push('motd-bold');
+            }
+            if (state.italic) {
+                classes.push('motd-italic');
+            }
+            if (state.underlined) {
+                classes.push('motd-underlined');
+            }
+            if (state.strikethrough) {
+                classes.push('motd-strikethrough');
+            }
+
+            var color = normalizeHexColor(overrideColor || '') || resolveMotdColor(state.color || '');
+            var attrs = '';
+            if (classes.length > 0) {
+                attrs += ' class="' + classes.join(' ') + '"';
+            }
+            if (color) {
+                attrs += ' style="color:' + color + '"';
+            }
+            return attrs;
+        }
+
+        function renderMotdSpan(text, state, overrideColor) {
+            var safeText = escapeHtml(text);
+            if (safeText === '') {
+                return '';
+            }
+
+            var attrs = buildMotdSpanAttrs(state, overrideColor);
+            if (!attrs) {
+                return safeText;
+            }
+            return '<span' + attrs + '>' + safeText + '</span>';
+        }
+
+        function renderGradientMotdText(text, state) {
+            var gradient = state.gradient;
+            if (!gradient) {
+                return renderMotdSpan(text, state, '');
+            }
+
+            var chars = Array.from(String(text == null ? '' : text));
+            var output = '';
+            for (var i = 0; i < chars.length; i += 1) {
+                var ratio = chars.length <= 1 ? 0 : (i / (chars.length - 1));
+                var color = interpolateHexColor(gradient.start, gradient.end, ratio);
+                output += renderMotdSpan(chars[i], state, color);
+            }
+            return output;
+        }
+
+        function renderMiniMessageLine(textLine) {
+            var segments = parseMiniMessageSegments(textLine);
+            var html = '';
+
+            segments.forEach(function (segment) {
+                if (!segment.text) {
+                    return;
+                }
+                if (segment.state.gradient) {
+                    html += renderGradientMotdText(segment.text, segment.state);
+                    return;
+                }
+                html += renderMotdSpan(segment.text, segment.state, '');
+            });
+
+            return html;
+        }
+
+        function renderTextLines(lines) {
+            if (!Array.isArray(lines) || lines.length === 0) {
+                return '';
+            }
+            return lines.map(function (line) {
+                return '<div class="motd-line">' + escapeHtml(line) + '</div>';
+            }).join('');
+        }
+
+        function extractSafeColorFromStyle(styleText) {
+            var text = String(styleText || '');
+            var match = text.match(/(?:^|;)\s*color\s*:\s*([^;]+)/i);
+            if (!match) {
+                return '';
+            }
+
+            var rawColor = String(match[1] || '').trim();
+            var safeHex = normalizeHexColor(rawColor) || resolveMotdColor(rawColor);
+            if (safeHex) {
+                return safeHex;
+            }
+
+            var rgbMatch = rawColor.match(/^rgb\(\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*\)$/i);
+            if (!rgbMatch) {
+                return '';
+            }
+
+            var r = Number(rgbMatch[1]);
+            var g = Number(rgbMatch[2]);
+            var b = Number(rgbMatch[3]);
+            if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) {
+                return '';
+            }
+            if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+                return '';
+            }
+            return '#' + toHexChannel(r) + toHexChannel(g) + toHexChannel(b);
+        }
+
+        function sanitizeMotdHtml(htmlText) {
+            var raw = String(htmlText == null ? '' : htmlText).trim();
+            if (!raw) {
+                return '';
+            }
+            if (typeof DOMParser === 'undefined') {
+                return '';
+            }
+
+            var parser = new DOMParser();
+            var doc = parser.parseFromString('<div>' + raw + '</div>', 'text/html');
+            var root = doc && doc.body ? doc.body.firstElementChild : null;
+            if (!root) {
+                return '';
+            }
+            var lineBreakToken = '__MOTD_LINE_BREAK__';
+
+            function sanitizeNode(node) {
+                if (!node) {
+                    return '';
+                }
+                if (node.nodeType === 3) {
+                    return escapeHtml(node.textContent || '');
+                }
+                if (node.nodeType !== 1) {
+                    return '';
+                }
+
+                var tag = String(node.tagName || '').toLowerCase();
+                if (tag === 'br') {
+                    return lineBreakToken;
+                }
+
+                var childrenHtml = '';
+                Array.prototype.forEach.call(node.childNodes || [], function (child) {
+                    childrenHtml += sanitizeNode(child);
+                });
+
+                if (tag === 'span') {
+                    var classes = String(node.getAttribute('class') || '')
+                        .split(/\s+/)
+                        .filter(function (cls) {
+                            return MOTD_CLASS_WHITELIST.indexOf(cls) !== -1;
+                        });
+                    var color = extractSafeColorFromStyle(node.getAttribute('style') || '');
+
+                    var attrs = '';
+                    if (classes.length > 0) {
+                        attrs += ' class="' + classes.join(' ') + '"';
+                    }
+                    if (color) {
+                        attrs += ' style="color:' + color + '"';
+                    }
+                    return '<span' + attrs + '>' + childrenHtml + '</span>';
+                }
+
+                if (tag === 'div' || tag === 'p') {
+                    return lineBreakToken + childrenHtml + lineBreakToken;
+                }
+
+                return childrenHtml;
+            }
+
+            var sanitized = '';
+            Array.prototype.forEach.call(root.childNodes || [], function (child) {
+                sanitized += sanitizeNode(child);
+            });
+
+            var lineParts = sanitized.split(lineBreakToken);
+            while (lineParts.length > 0 && lineParts[0] === '') {
+                lineParts.shift();
+            }
+            while (lineParts.length > 0 && lineParts[lineParts.length - 1] === '') {
+                lineParts.pop();
+            }
+            if (lineParts.length === 0) {
+                return '';
+            }
+
+            return lineParts.map(function (lineHtml) {
+                return '<div class="motd-line">' + lineHtml + '</div>';
+            }).join('');
+        }
+
+        function renderMotdHtml(motdNode) {
+            var motd = normalizeMotdPayload(motdNode);
+            if (!motd) {
+                return '<div class="motd-line">--</div>';
+            }
+
+            var hasMiniMessageLines = motd.lines.some(function (line) {
+                return String(line.miniMessage || '').trim() !== '';
+            });
+            if (hasMiniMessageLines) {
+                return motd.lines.map(function (line) {
+                    var mini = String(line.miniMessage || '').trim();
+                    var fallbackText = String(line.clean || line.plain || '').trim();
+                    var rendered = mini ? renderMiniMessageLine(mini) : escapeHtml(fallbackText);
+                    return '<div class="motd-line">' + rendered + '</div>';
+                }).join('');
+            }
+
+            if (motd.miniMessage) {
+                var miniLines = splitMotdLines(motd.miniMessage);
+                return miniLines.map(function (lineText) {
+                    return '<div class="motd-line">' + renderMiniMessageLine(lineText) + '</div>';
+                }).join('');
+            }
+
+            if (motd.html) {
+                var sanitizedHtml = sanitizeMotdHtml(motd.html);
+                if (sanitizedHtml) {
+                    return sanitizedHtml;
+                }
+            }
+
+            var textFallback = String(motd.clean || motd.plain || '').trim();
+            if (!textFallback) {
+                return '<div class="motd-line">--</div>';
+            }
+
+            return renderTextLines(splitMotdLines(textFallback)) || '<div class="motd-line">--</div>';
+        }
+
         function normalizePlayerList(players) {
             if (!Array.isArray(players)) {
                 return [];
@@ -321,13 +853,7 @@
             }
 
             if (motdDisplay) {
-                if (data.motd && data.motd.html) {
-                    motdDisplay.innerHTML = data.motd.html;
-                } else if (data.motd && data.motd.clean) {
-                    motdDisplay.textContent = data.motd.clean;
-                } else {
-                    motdDisplay.textContent = '--';
-                }
+                motdDisplay.innerHTML = renderMotdHtml(data.motd);
             }
 
             if (playersList) {
@@ -340,6 +866,7 @@
                 }
             }
         }
+        window.updateServerStatusUI = updateServerStatusUI;
 
         async function fetchServerStatus() {
             window.isFreshestDataFetched = false;

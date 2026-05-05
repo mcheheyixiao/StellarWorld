@@ -27,7 +27,15 @@ class AdminController extends Controller
         $this->users = new User();
         $this->checkins = new Checkin();
         $this->feedbacks = new Feedback();
-        $this->requireAdmin();
+        if (!$this->isRealtimeTicketVerifyEndpoint()) {
+            $this->requireAdmin();
+        }
+    }
+
+    private function isRealtimeTicketVerifyEndpoint(): bool
+    {
+        $path = (string)(parse_url((string)($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?? '');
+        return $path === '/admin/realtime-ticket/verify';
     }
 
     private function requireAdmin(): void
@@ -101,9 +109,7 @@ class AdminController extends Controller
     }
 
     /**
-     * Issue a short-lived session-bound ticket for admin realtime panel WS connect.
-     *
-     * Note: The website can only issue ticket metadata here. WS service must verify this ticket.
+     * Issue a short-lived signed ticket for admin realtime panel WS connect.
      *
      * @return array{ticket:string,expires_at:int}
      */
@@ -111,21 +117,66 @@ class AdminController extends Controller
     {
         $ttl = defined('REALTIME_WS_TICKET_TTL_SECONDS') ? (int)REALTIME_WS_TICKET_TTL_SECONDS : 120;
         $ttl = max(60, min(300, $ttl));
-        $ticket = bin2hex(random_bytes(32));
-        $expiresAt = time() + $ttl;
+        $now = time();
+        $expiresAt = $now + $ttl;
 
-        $_SESSION['admin_realtime_ws_ticket'] = [
-            'hash' => hash('sha256', $ticket),
-            'expires_at' => $expiresAt,
-            'issued_at' => time(),
-            'user_id' => (int)($_SESSION['user_id'] ?? 0),
-            'session_id' => session_id(),
+        $secret = defined('REALTIME_TICKET_VERIFY_TOKEN') ? trim((string)REALTIME_TICKET_VERIFY_TOKEN) : '';
+        if ($secret === '') {
+            throw new \RuntimeException('REALTIME_TICKET_VERIFY_TOKEN is not configured');
+        }
+
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0 || ($_SESSION['role'] ?? '') !== 'admin') {
+            throw new \RuntimeException('Admin session is required');
+        }
+
+        $payload = [
+            'v' => 1,
+            'typ' => 'admin_ws',
+            'uid' => $userId,
+            'role' => 'admin',
+            'iat' => $now,
+            'exp' => $expiresAt,
+            'nonce' => bin2hex(random_bytes(12)),
         ];
+
+        $payloadJson = json_encode($payload, JSON_UNESCAPED_SLASHES);
+        if (!is_string($payloadJson)) {
+            throw new \RuntimeException('Failed to encode realtime ticket payload');
+        }
+
+        $payloadB64 = $this->base64UrlEncode($payloadJson);
+        $signature = $this->base64UrlEncode(hash_hmac('sha256', $payloadB64, $secret, true));
+        $ticket = 'v1.' . $payloadB64 . '.' . $signature;
+
+        if (strlen($ticket) > 256) {
+            throw new \RuntimeException('Realtime ticket is too long');
+        }
 
         return [
             'ticket' => $ticket,
             'expires_at' => $expiresAt,
         ];
+    }
+
+    private function base64UrlEncode(string $value): string
+    {
+        return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
+    }
+
+    private function base64UrlDecode(string $value): ?string
+    {
+        if ($value === '' || preg_match('/^[A-Za-z0-9_-]+$/', $value) !== 1) {
+            return null;
+        }
+
+        $padding = strlen($value) % 4;
+        if ($padding > 0) {
+            $value .= str_repeat('=', 4 - $padding);
+        }
+
+        $decoded = base64_decode(strtr($value, '-_', '+/'), true);
+        return is_string($decoded) ? $decoded : null;
     }
 
     public function realtimeTicket(): void
@@ -218,67 +269,18 @@ class AdminController extends Controller
             return;
         }
 
-        $stored = $_SESSION['admin_realtime_ws_ticket'] ?? null;
-        if (!is_array($stored)
-            || !array_key_exists('hash', $stored)
-            || !array_key_exists('expires_at', $stored)
-            || !array_key_exists('user_id', $stored)
-            || !array_key_exists('session_id', $stored)
-        ) {
-            $this->logRealtimeTicketVerifyFailure('ticket_missing_from_session', $requestContext);
+        $verifyResult = $this->verifySignedRealtimeTicket($ticket);
+        if (($verifyResult['ok'] ?? false) !== true) {
+            $this->logRealtimeTicketVerifyFailure((string)($verifyResult['reason'] ?? 'signed_ticket_invalid'), $requestContext);
             $this->failRealtimeTicketVerify('invalid ticket', 401);
             return;
         }
 
-        $expiresAt = (int)($stored['expires_at'] ?? 0);
-        if ($expiresAt < time()) {
-            unset($_SESSION['admin_realtime_ws_ticket']);
-            $this->logRealtimeTicketVerifyFailure('ticket_expired', $requestContext);
-            $this->failRealtimeTicketVerify('invalid ticket', 401);
-            return;
-        }
-
-        $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
-        $storedUserId = (int)($stored['user_id'] ?? 0);
-        if ($storedUserId !== $sessionUserId) {
-            $this->logRealtimeTicketVerifyFailure('ticket_user_mismatch', $requestContext);
-            $this->failRealtimeTicketVerify('invalid ticket', 401);
-            return;
-        }
-
-        if ((string)($stored['session_id'] ?? '') !== session_id()) {
-            $this->logRealtimeTicketVerifyFailure('ticket_session_mismatch', $requestContext);
-            $this->failRealtimeTicketVerify('invalid ticket', 401);
-            return;
-        }
-
-        $ticketHash = hash('sha256', $ticket);
-        if (!hash_equals((string)($stored['hash'] ?? ''), $ticketHash)) {
-            $this->logRealtimeTicketVerifyFailure('ticket_hash_mismatch', $requestContext);
-            $this->failRealtimeTicketVerify('invalid ticket', 401);
-            return;
-        }
-
-        $user = $this->users->findById($storedUserId);
-        if (!is_array($user)) {
-            $this->logRealtimeTicketVerifyFailure('user_not_found', $requestContext);
-            $this->failRealtimeTicketVerify('invalid ticket', 401);
-            return;
-        }
-
-        $role = trim((string)($user['role'] ?? ''));
-        $status = trim((string)($user['status'] ?? ''));
-        if ($role !== 'admin' || $status !== 'active') {
-            $this->logRealtimeTicketVerifyFailure('user_not_active_admin', $requestContext);
-            $this->failRealtimeTicketVerify('invalid ticket', 403);
-            return;
-        }
-
-        unset($_SESSION['admin_realtime_ws_ticket']);
+        $payload = is_array($verifyResult['payload'] ?? null) ? $verifyResult['payload'] : [];
         $this->successRealtimeTicketVerify([
-            'admin_id' => (int)($user['id'] ?? $storedUserId),
-            'username' => (string)($user['username'] ?? ''),
-            'expires_at' => $expiresAt,
+            'admin_id' => (int)($payload['uid'] ?? 0),
+            'username' => (string)($payload['username'] ?? ''),
+            'expires_at' => (int)($payload['exp'] ?? 0),
         ]);
     }
 
@@ -364,6 +366,97 @@ class AdminController extends Controller
         }
 
         return preg_match('/^[A-Za-z0-9._~-]+$/', $ticket) === 1;
+    }
+
+    /**
+     * @return array{ok:bool,reason?:string,payload?:array{uid:int,username:string,exp:int}}
+     */
+    private function verifySignedRealtimeTicket(string $ticket): array
+    {
+        $secret = defined('REALTIME_TICKET_VERIFY_TOKEN') ? trim((string)REALTIME_TICKET_VERIFY_TOKEN) : '';
+        if ($secret === '') {
+            return ['ok' => false, 'reason' => 'verify_token_not_configured'];
+        }
+
+        $parts = explode('.', $ticket);
+        if (count($parts) !== 3 || $parts[0] !== 'v1') {
+            return ['ok' => false, 'reason' => 'invalid_signed_ticket_format'];
+        }
+
+        [, $payloadB64, $signatureB64] = $parts;
+        if ($payloadB64 === '' || $signatureB64 === '') {
+            return ['ok' => false, 'reason' => 'invalid_signed_ticket_parts'];
+        }
+
+        $expectedSignature = $this->base64UrlEncode(hash_hmac('sha256', $payloadB64, $secret, true));
+        if (!hash_equals($expectedSignature, $signatureB64)) {
+            return ['ok' => false, 'reason' => 'signed_ticket_signature_mismatch'];
+        }
+
+        $payloadJson = $this->base64UrlDecode($payloadB64);
+        if (!is_string($payloadJson) || $payloadJson === '') {
+            return ['ok' => false, 'reason' => 'signed_ticket_payload_decode_failed'];
+        }
+
+        $payload = json_decode($payloadJson, true);
+        if (!is_array($payload)) {
+            return ['ok' => false, 'reason' => 'signed_ticket_payload_json_invalid'];
+        }
+
+        if ((int)($payload['v'] ?? 0) !== 1) {
+            return ['ok' => false, 'reason' => 'signed_ticket_version_invalid'];
+        }
+
+        if ((string)($payload['typ'] ?? '') !== 'admin_ws') {
+            return ['ok' => false, 'reason' => 'signed_ticket_type_invalid'];
+        }
+
+        if ((string)($payload['role'] ?? '') !== 'admin') {
+            return ['ok' => false, 'reason' => 'signed_ticket_role_invalid'];
+        }
+
+        $uid = (int)($payload['uid'] ?? 0);
+        if ($uid <= 0) {
+            return ['ok' => false, 'reason' => 'signed_ticket_uid_invalid'];
+        }
+
+        $now = time();
+        $iat = (int)($payload['iat'] ?? 0);
+        $exp = (int)($payload['exp'] ?? 0);
+
+        if ($iat <= 0 || $iat > $now + 30) {
+            return ['ok' => false, 'reason' => 'signed_ticket_iat_invalid'];
+        }
+
+        if ($exp <= $now) {
+            return ['ok' => false, 'reason' => 'signed_ticket_expired'];
+        }
+
+        if ($exp <= $iat) {
+            return ['ok' => false, 'reason' => 'signed_ticket_time_window_invalid'];
+        }
+
+        if ($exp - $iat > 300) {
+            return ['ok' => false, 'reason' => 'signed_ticket_ttl_too_long'];
+        }
+
+        $user = $this->users->findById($uid);
+        if (!is_array($user)) {
+            return ['ok' => false, 'reason' => 'user_not_found'];
+        }
+
+        if ((string)($user['role'] ?? '') !== 'admin' || (string)($user['status'] ?? '') !== 'active') {
+            return ['ok' => false, 'reason' => 'user_not_active_admin'];
+        }
+
+        return [
+            'ok' => true,
+            'payload' => [
+                'uid' => $uid,
+                'username' => (string)($user['username'] ?? ''),
+                'exp' => $exp,
+            ],
+        ];
     }
 
     private function failRealtimeTicketVerify(string $message, int $status = 401): void

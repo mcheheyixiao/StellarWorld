@@ -433,7 +433,10 @@
         });
 
         document.getElementById('redeem-keys-delete-batch-btn').addEventListener('click', function () {
-            doBatchAction('/api/admin/redeem/keys/delete-batch', selectedKeyIds(), '批量删除完成');
+            if (!window.confirm('此操作会将卡密标记为 deleted，不会物理删除数据库记录。是否继续？')) {
+                return;
+            }
+            doBatchAction('/api/admin/redeem/keys/delete-batch', selectedKeyIds(), '批量软删除完成');
         });
 
         document.getElementById('redeem-batch-form').addEventListener('submit', async function (event) {

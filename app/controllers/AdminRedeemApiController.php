@@ -189,6 +189,11 @@ class AdminRedeemApiController extends Controller
 
         $input = $this->readInput();
         $ids = $this->parseIds($input['ids'] ?? []);
+        $validationError = $this->validateBatchIds($ids);
+        if ($validationError !== null) {
+            $this->json($validationError, 400);
+            return;
+        }
 
         try {
             $result = $this->redeemService->revokeKeys($ids);
@@ -213,6 +218,11 @@ class AdminRedeemApiController extends Controller
 
         $input = $this->readInput();
         $ids = $this->parseIds($input['ids'] ?? []);
+        $validationError = $this->validateBatchIds($ids);
+        if ($validationError !== null) {
+            $this->json($validationError, 400);
+            return;
+        }
 
         try {
             $result = $this->redeemService->deleteKeys($ids);
@@ -339,5 +349,29 @@ class AdminRedeemApiController extends Controller
         }
 
         return array_values(array_unique($ids));
+    }
+
+    /**
+     * @param array<int,int> $ids
+     * @return array<string,mixed>|null
+     */
+    private function validateBatchIds(array $ids): ?array
+    {
+        $count = count($ids);
+        if ($count === 0) {
+            return [
+                'success' => false,
+                'message' => '请选择要操作的卡密',
+            ];
+        }
+
+        if ($count > 500) {
+            return [
+                'success' => false,
+                'message' => '单次最多操作 500 条卡密',
+            ];
+        }
+
+        return null;
     }
 }

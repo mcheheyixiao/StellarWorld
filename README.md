@@ -285,6 +285,7 @@ mysql -u <user> -p <database> < database.sql
 - `PATCH /api/admin/redeem/keys/{id}/revoke`
 - `POST /api/admin/redeem/keys/revoke-batch`
 - `POST /api/admin/redeem/keys/delete-batch`
+  - `delete-batch` is a soft delete only (`redeem_keys.status` -> `deleted`), not a physical row delete.
 
 - `GET /api/admin/redeem/logs`
 - `GET /api/admin/redeem/stats/publish`
@@ -303,6 +304,14 @@ mysql -u <user> -p <database> < database.sql
 - `REDEEM_PLUGIN_SERVER_ID` (required for plugin API)
 - `REDEEM_PLUGIN_SERVER_SECRET` (required for plugin API)
 - `REDEEM_PLUGIN_TIME_WINDOW_SECONDS` (default: `300`)
+
+Realtime internal forwarding env (optional but recommended):
+
+```dotenv
+REALTIME_INTERNAL_EVENT_URL=http://127.0.0.1:3001/internal/events
+REALTIME_INTERNAL_SECRET=replace-with-same-secret-as-StellarRealtime
+REALTIME_INTERNAL_TIMEOUT_MS=800
+```
 
 ### Plugin Auth Contract (Redeem API)
 
@@ -333,13 +342,18 @@ Redeem V1 emits lightweight event calls through `Core\RealtimeNotifier::emit(...
 - `redeem.claim.success`
 - `redeem.claim.failed`
 - `redeem.stats.updated`
+- `redeem.plugin.heartbeat` (from `POST /api/minecraft/redeem/heartbeat`)
 
-By default this is a no-op unless you provide a bridge function like `stellar_realtime_emit`.
+By default this is a no-op unless you provide a bridge function like `stellar_realtime_emit`
+or configure `REALTIME_INTERNAL_EVENT_URL` + `REALTIME_INTERNAL_SECRET`.
+
+Realtime forwarding is best-effort and never blocks the main redeem flow.
 
 ### Known V1 Limits
 
 - no offline reward queue
 - no automatic command rollback on plugin fail callback
+- failed records do not automatically roll back `used_count` in V1
 - no placeholder expansion service on website side
 - no multi-server rules matrix
 - no player binding restrictions beyond plugin payload checks

@@ -5,7 +5,7 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
 <div id="redeem-admin-root" class="space-y-6" data-csrf-token="<?= $redeemCsrfToken ?>">
     <div class="ta-card">
         <h1>卡密系统</h1>
-        <p class="ta-help-text">V1 功能：分类管理、批量生成、卡密列表、吊销/删除、兑换日志、发布统计。</p>
+        <p class="ta-help-text">V1 功能：分类管理、批量生成、卡密列表、吊销/软删除、兑换日志、发布统计。</p>
     </div>
 
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5" id="redeem-stats-grid">
@@ -36,8 +36,9 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
             <h2 class="text-lg font-semibold">卡密列表</h2>
             <button type="button" class="ta-btn ta-btn-secondary" id="redeem-keys-refresh-btn">刷新</button>
             <button type="button" class="ta-btn ta-btn-secondary" id="redeem-keys-revoke-batch-btn">批量吊销</button>
-            <button type="button" class="ta-btn ta-btn-secondary" id="redeem-keys-delete-batch-btn">批量删除</button>
+            <button type="button" class="ta-btn ta-btn-secondary" id="redeem-keys-delete-batch-btn">批量软删除</button>
         </div>
+        <p class="ta-help-text">说明：批量软删除会将卡密状态标记为 <code>deleted</code>，不会物理删除数据库记录。</p>
 
         <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
             <label>
@@ -191,6 +192,7 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
             <h2 class="text-lg font-semibold">兑换日志</h2>
             <button type="button" class="ta-btn ta-btn-secondary" id="redeem-logs-refresh-btn">刷新</button>
         </div>
+        <p class="ta-help-text">提示：V1 不会自动回滚已执行的命令或 used_count。状态为 failed 的记录表示插件执行或回传失败，需要管理员人工核对实际奖励发放情况。</p>
 
         <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
             <label>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Controller;
 
 use Core\Controller;
+use Core\RealtimeNotifier;
 use Core\RedeemPluginAuthService;
 use Core\RedeemService;
 
@@ -109,9 +110,31 @@ class MinecraftRedeemApiController extends Controller
             return;
         }
 
-        if (!$this->ensurePluginAuthorized(null)) {
+        $body = $this->readJsonBody();
+        $serverId = trim((string)($body['serverId'] ?? ''));
+        if ($serverId === '') {
+            $serverId = trim((string)($_SERVER['HTTP_X_STELLAR_SERVER_ID'] ?? ''));
+        }
+
+        if (!$this->ensurePluginAuthorized($serverId !== '' ? $serverId : null)) {
             return;
         }
+
+        $plugin = trim((string)($body['plugin'] ?? ''));
+        $version = trim((string)($body['version'] ?? ''));
+        $serverVersion = trim((string)($body['serverVersion'] ?? ''));
+        $onlinePlayersRaw = $body['onlinePlayers'] ?? null;
+        $onlinePlayers = is_numeric($onlinePlayersRaw) ? (int)$onlinePlayersRaw : null;
+
+        RealtimeNotifier::emit('redeem.plugin.heartbeat', [
+            'serverId' => $serverId,
+            'plugin' => $plugin,
+            'version' => $version,
+            'serverVersion' => $serverVersion,
+            'onlinePlayers' => $onlinePlayers,
+            'online' => true,
+            'lastSeenAt' => date('Y-m-d H:i:s'),
+        ]);
 
         $this->respondPluginJson([
             'success' => true,

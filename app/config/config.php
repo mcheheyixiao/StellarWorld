@@ -93,6 +93,9 @@ define('REDEEM_CODE_CASE_INSENSITIVE', filter_var((string)(getenv('REDEEM_CODE_C
 define('REDEEM_PLUGIN_SERVER_ID', getenv('REDEEM_PLUGIN_SERVER_ID') !== false ? trim((string)getenv('REDEEM_PLUGIN_SERVER_ID')) : '');
 define('REDEEM_PLUGIN_SERVER_SECRET', getenv('REDEEM_PLUGIN_SERVER_SECRET') !== false ? trim((string)getenv('REDEEM_PLUGIN_SERVER_SECRET')) : '');
 define('REDEEM_PLUGIN_TIME_WINDOW_SECONDS', max(60, (int)(getenv('REDEEM_PLUGIN_TIME_WINDOW_SECONDS') ?: 300)));
+define('REALTIME_INTERNAL_EVENT_URL', getenv('REALTIME_INTERNAL_EVENT_URL') !== false ? trim((string)getenv('REALTIME_INTERNAL_EVENT_URL')) : '');
+define('REALTIME_INTERNAL_SECRET', getenv('REALTIME_INTERNAL_SECRET') !== false ? trim((string)getenv('REALTIME_INTERNAL_SECRET')) : '');
+define('REALTIME_INTERNAL_TIMEOUT_MS', max(100, (int)(getenv('REALTIME_INTERNAL_TIMEOUT_MS') ?: 800)));
 
 $_skinProxyAllowedHostsRaw = trim((string)(getenv('SKIN_PROXY_ALLOWED_HOSTS') ?: 'textures.minecraft.net,sessionserver.mojang.com'));
 $_skinProxyAllowedHosts = [];

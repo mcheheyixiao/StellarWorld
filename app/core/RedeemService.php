@@ -20,6 +20,7 @@ class RedeemService
     private RedeemAdminLog $adminLogModel;
     private RedeemKey $keyModel;
     private RedeemLog $logModel;
+    private RedeemRuleService $ruleService;
     private RedeemCodeGenerator $codeGenerator;
     private PDO $db;
 
@@ -30,6 +31,7 @@ class RedeemService
         $this->adminLogModel = new RedeemAdminLog();
         $this->keyModel = new RedeemKey();
         $this->logModel = new RedeemLog();
+        $this->ruleService = new RedeemRuleService();
         $this->codeGenerator = new RedeemCodeGenerator();
         $this->db = Database::connection();
     }
@@ -229,6 +231,20 @@ class RedeemService
         $commandTemplateInput = trim((string)($input['commandTemplate'] ?? ($input['command_template'] ?? '')));
         $batchName = mb_substr(trim((string)($input['batchName'] ?? ($input['batch_name'] ?? ''))), 0, 128);
         $channel = mb_substr(trim((string)($input['channel'] ?? '')), 0, 128);
+        $allowedServerIds = $this->normalizeAllowedServerIds((string)($input['allowedServerIds'] ?? ($input['allowed_server_ids'] ?? '')));
+        $allowedServerIdsSerialized = $allowedServerIds === [] ? null : $this->encodeJsonArray($allowedServerIds);
+        $boundPlayerUuid = $this->normalizePlayerUuid((string)($input['boundPlayerUuid'] ?? ($input['bound_player_uuid'] ?? '')));
+        $boundPlayerName = mb_substr(trim((string)($input['boundPlayerName'] ?? ($input['bound_player_name'] ?? ''))), 0, 64);
+        $requireBoundAccount = $this->toBoolInt($input['requireBoundAccount'] ?? ($input['require_bound_account'] ?? 0));
+        $requireEmailVerified = $this->toBoolInt($input['requireEmailVerified'] ?? ($input['require_email_verified'] ?? 0));
+        $requireAccountActive = $this->toBoolInt($input['requireAccountActive'] ?? ($input['require_account_active'] ?? 0));
+        $perPlayerLimit = max(0, (int)($input['perPlayerLimit'] ?? ($input['per_player_limit'] ?? 0)));
+        $perAccountLimit = max(0, (int)($input['perAccountLimit'] ?? ($input['per_account_limit'] ?? 0)));
+        $ruleNote = mb_substr(trim((string)($input['ruleNote'] ?? ($input['rule_note'] ?? ''))), 0, 255);
+
+        if ($requireEmailVerified === 1 || $requireAccountActive === 1) {
+            $requireBoundAccount = 1;
+        }
 
         if ($count < 1 || $count > 500) {
             return ['ok' => false, 'status' => 400, 'message' => 'Count must be between 1 and 500'];
@@ -268,8 +284,8 @@ class RedeemService
         $categoryIdValue = $categoryId > 0 ? $categoryId : null;
 
         $insert = $this->db->prepare(
-            'INSERT INTO redeem_keys (category_id, batch_id, channel, code_hash, plain_code, command_template, max_uses, used_count, status, expires_at, remark, created_by, created_at, updated_at) '
-            . 'VALUES (:category_id, :batch_id, :channel, :code_hash, :plain_code, :command_template, :max_uses, 0, :status, :expires_at, :remark, :created_by, NOW(), NOW())'
+            'INSERT INTO redeem_keys (category_id, batch_id, channel, allowed_server_ids, bound_player_uuid, bound_player_name, require_bound_account, require_email_verified, require_account_active, per_player_limit, per_account_limit, rule_note, code_hash, plain_code, command_template, max_uses, used_count, status, expires_at, remark, created_by, created_at, updated_at) '
+            . 'VALUES (:category_id, :batch_id, :channel, :allowed_server_ids, :bound_player_uuid, :bound_player_name, :require_bound_account, :require_email_verified, :require_account_active, :per_player_limit, :per_account_limit, :rule_note, :code_hash, :plain_code, :command_template, :max_uses, 0, :status, :expires_at, :remark, :created_by, NOW(), NOW())'
         );
 
         $items = [];
@@ -300,6 +316,15 @@ class RedeemService
                     $insert->bindValue(':category_id', $categoryIdValue, $categoryIdValue === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
                     $insert->bindValue(':batch_id', $batchId, PDO::PARAM_INT);
                     $insert->bindValue(':channel', $channel, PDO::PARAM_STR);
+                    $insert->bindValue(':allowed_server_ids', $allowedServerIdsSerialized, $allowedServerIdsSerialized === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+                    $insert->bindValue(':bound_player_uuid', $boundPlayerUuid !== '' ? $boundPlayerUuid : null, $boundPlayerUuid !== '' ? PDO::PARAM_STR : PDO::PARAM_NULL);
+                    $insert->bindValue(':bound_player_name', $boundPlayerName !== '' ? $boundPlayerName : null, $boundPlayerName !== '' ? PDO::PARAM_STR : PDO::PARAM_NULL);
+                    $insert->bindValue(':require_bound_account', $requireBoundAccount, PDO::PARAM_INT);
+                    $insert->bindValue(':require_email_verified', $requireEmailVerified, PDO::PARAM_INT);
+                    $insert->bindValue(':require_account_active', $requireAccountActive, PDO::PARAM_INT);
+                    $insert->bindValue(':per_player_limit', $perPlayerLimit, PDO::PARAM_INT);
+                    $insert->bindValue(':per_account_limit', $perAccountLimit, PDO::PARAM_INT);
+                    $insert->bindValue(':rule_note', $ruleNote, PDO::PARAM_STR);
                     $insert->bindValue(':code_hash', $codeHash, PDO::PARAM_STR);
                     $insert->bindValue(':plain_code', $plainCode, PDO::PARAM_STR);
                     $insert->bindValue(':command_template', $resolvedTemplate, PDO::PARAM_STR);
@@ -325,6 +350,15 @@ class RedeemService
                     'batch_no' => $batchNo,
                     'batch_name' => $batchName,
                     'channel' => $channel,
+                    'allowed_server_ids' => $allowedServerIdsSerialized,
+                    'bound_player_uuid' => $boundPlayerUuid,
+                    'bound_player_name' => $boundPlayerName,
+                    'require_bound_account' => $requireBoundAccount,
+                    'require_email_verified' => $requireEmailVerified,
+                    'require_account_active' => $requireAccountActive,
+                    'per_player_limit' => $perPlayerLimit,
+                    'per_account_limit' => $perAccountLimit,
+                    'rule_note' => $ruleNote,
                     'max_uses' => $maxUses,
                     'expires_at' => $expiresAt,
                     'remark' => $remark,
@@ -360,6 +394,28 @@ class RedeemService
                 'category_id' => $categoryIdValue,
                 'count' => count($items),
                 'channel' => $channel,
+            ],
+            $ipAddress
+        );
+        $this->createAdminLog(
+            $createdByValue,
+            'v3_rule_batch_generate',
+            'batch',
+            $batchId,
+            [
+                'batch_no' => $batchNo,
+                'count' => count($items),
+                'rules' => [
+                    'allowed_server_ids' => $allowedServerIds,
+                    'bound_player_uuid' => $boundPlayerUuid,
+                    'bound_player_name' => $boundPlayerName,
+                    'require_bound_account' => $requireBoundAccount,
+                    'require_email_verified' => $requireEmailVerified,
+                    'require_account_active' => $requireAccountActive,
+                    'per_player_limit' => $perPlayerLimit,
+                    'per_account_limit' => $perAccountLimit,
+                    'rule_note' => $ruleNote,
+                ],
             ],
             $ipAddress
         );
@@ -485,6 +541,17 @@ class RedeemService
         $this->createAdminLog(
             $adminId,
             'export_keys_csv',
+            'key',
+            null,
+            [
+                'count' => count($rows),
+                'filters' => $summary,
+            ],
+            $ipAddress
+        );
+        $this->createAdminLog(
+            $adminId,
+            'v3_rule_export',
             'key',
             null,
             [
@@ -664,7 +731,7 @@ class RedeemService
         $codeHash = $this->hashNormalizedCode($code, $pepper);
         $serverId = trim((string)($payload['serverId'] ?? ($payload['server_id'] ?? '')));
         $playerName = trim((string)($payload['playerName'] ?? ($payload['player_name'] ?? '')));
-        $playerUuid = trim((string)($payload['playerUuid'] ?? ($payload['player_uuid'] ?? '')));
+        $playerUuid = $this->normalizePlayerUuid((string)($payload['playerUuid'] ?? ($payload['player_uuid'] ?? '')));
         $world = trim((string)($payload['world'] ?? ($payload['world_name'] ?? '')));
 
         try {
@@ -744,6 +811,79 @@ class RedeemService
                 ];
             }
 
+            $ruleDecision = $this->ruleService->evaluate($key, [
+                'server_id' => $serverId,
+                'player_uuid' => $playerUuid,
+                'player_name' => $playerName,
+            ]);
+
+            $rulePassed = (bool)($ruleDecision['passed'] ?? false);
+            $ruleReason = trim((string)($ruleDecision['reason'] ?? ''));
+            $ruleMessage = trim((string)($ruleDecision['message'] ?? ''));
+            $ruleResult = trim((string)($ruleDecision['result'] ?? 'passed'));
+            if (!in_array($ruleResult, ['passed', 'rejected', 'skipped'], true)) {
+                $ruleResult = $rulePassed ? 'passed' : 'rejected';
+            }
+            $websiteUserId = null;
+            $candidateWebsiteUserId = (int)($ruleDecision['website_user_id'] ?? 0);
+            if ($candidateWebsiteUserId > 0) {
+                $websiteUserId = $candidateWebsiteUserId;
+            }
+            $ruleSnapshotJson = $this->encodeJsonObject($ruleDecision['snapshot'] ?? null);
+
+            if (!$rulePassed) {
+                if ($ruleReason === '') {
+                    $ruleReason = 'rule_invalid';
+                }
+                if ($ruleMessage === '') {
+                    $ruleMessage = 'Redeem rule rejected this claim.';
+                }
+
+                $this->logModel->createRuleRejected([
+                    'key_id' => (int)$key['id'],
+                    'redeem_code_hash' => $codeHash,
+                    'server_id' => $serverId,
+                    'player_uuid' => $playerUuid !== '' ? $playerUuid : null,
+                    'player_name' => $playerName !== '' ? $playerName : null,
+                    'world_name' => $world !== '' ? $world : null,
+                    'rule_reason' => $ruleReason,
+                    'rule_snapshot_json' => $ruleSnapshotJson,
+                    'website_user_id' => $websiteUserId,
+                    'failure_reason' => $ruleMessage,
+                    'admin_status' => 'ignored',
+                ]);
+
+                $this->db->commit();
+
+                RealtimeNotifier::emit('redeem.claim.rejected', [
+                    'key_id' => (int)$key['id'],
+                    'server_id' => $serverId,
+                    'player_uuid' => $playerUuid,
+                    'player_name' => $playerName,
+                    'reason' => $ruleReason,
+                ]);
+                RealtimeNotifier::emit('redeem.rule.denied', [
+                    'key_id' => (int)$key['id'],
+                    'server_id' => $serverId,
+                    'player_uuid' => $playerUuid,
+                    'player_name' => $playerName,
+                    'website_user_id' => $websiteUserId,
+                    'reason' => $ruleReason,
+                ]);
+                RealtimeNotifier::emit('redeem.rule.stats.updated', [
+                    'key_id' => (int)$key['id'],
+                    'result' => 'rejected',
+                    'reason' => $ruleReason,
+                ]);
+                RealtimeNotifier::emit('redeem.stats.updated', $this->getPublishStats());
+
+                return [
+                    'success' => false,
+                    'reason' => $ruleReason,
+                    'message' => $ruleMessage,
+                ];
+            }
+
             $this->keyModel->incrementUsage((int)$key['id']);
 
             $commandSnapshot = $this->encodeJsonArray($commands);
@@ -754,10 +894,26 @@ class RedeemService
                 'player_uuid' => $playerUuid !== '' ? $playerUuid : null,
                 'player_name' => $playerName !== '' ? $playerName : null,
                 'world_name' => $world !== '' ? $world : null,
+                'rule_result' => $ruleResult,
+                'rule_reason' => $ruleReason,
+                'rule_snapshot_json' => $ruleSnapshotJson,
+                'website_user_id' => $websiteUserId,
                 'command_snapshot' => $commandSnapshot,
             ]);
 
             $this->db->commit();
+
+            RealtimeNotifier::emit('redeem.rule.matched', [
+                'key_id' => (int)$key['id'],
+                'server_id' => $serverId,
+                'player_uuid' => $playerUuid,
+                'player_name' => $playerName,
+                'website_user_id' => $websiteUserId,
+            ]);
+            RealtimeNotifier::emit('redeem.rule.stats.updated', [
+                'key_id' => (int)$key['id'],
+                'result' => $ruleResult,
+            ]);
 
             return [
                 'success' => true,
@@ -891,6 +1047,68 @@ class RedeemService
         return $normalized;
     }
 
+    private function normalizePlayerUuid(string $uuid): string
+    {
+        $normalized = strtolower(str_replace('-', '', trim($uuid)));
+        $normalized = preg_replace('/[^0-9a-f]/', '', $normalized) ?? '';
+        return mb_substr($normalized, 0, 64);
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    private function normalizeAllowedServerIds(string $raw): array
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return [];
+        }
+
+        if (str_starts_with($raw, '[')) {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $items = [];
+                foreach ($decoded as $item) {
+                    if (!is_scalar($item)) {
+                        continue;
+                    }
+                    $value = trim((string)$item);
+                    if ($value !== '') {
+                        $items[] = $value;
+                    }
+                }
+                return array_values(array_unique($items));
+            }
+        }
+
+        $parts = preg_split('/[\r\n,]+/', $raw) ?: [];
+        $items = [];
+        foreach ($parts as $part) {
+            $value = trim((string)$part);
+            if ($value !== '') {
+                $items[] = $value;
+            }
+        }
+
+        return array_values(array_unique($items));
+    }
+
+    /**
+     * @param mixed $raw
+     */
+    private function toBoolInt($raw): int
+    {
+        if (is_bool($raw)) {
+            return $raw ? 1 : 0;
+        }
+        if (is_numeric($raw)) {
+            return ((int)$raw) > 0 ? 1 : 0;
+        }
+
+        $value = strtolower(trim((string)$raw));
+        return in_array($value, ['1', 'true', 'yes', 'on'], true) ? 1 : 0;
+    }
+
     private function isCaseInsensitiveEnabled(): bool
     {
         if (!defined('REDEEM_CODE_CASE_INSENSITIVE')) {
@@ -984,12 +1202,25 @@ class RedeemService
     }
 
     /**
+     * @param mixed $value
+     */
+    private function encodeJsonObject($value): ?string
+    {
+        if (!is_array($value)) {
+            return null;
+        }
+
+        $json = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return is_string($json) ? $json : null;
+    }
+
+    /**
      * @param array<int,array<string,mixed>> $items
      */
     private function buildCsv(array $items): string
     {
         $lines = [];
-        $lines[] = 'code,category,max_uses,expires_at,remark,batch_no,batch_name,channel';
+        $lines[] = 'code,category,max_uses,expires_at,remark,batch_no,batch_name,channel,allowed_server_ids,bound_player_uuid,bound_player_name,require_bound_account,require_email_verified,require_account_active,per_player_limit,per_account_limit,rule_note';
 
         foreach ($items as $item) {
             $row = [
@@ -1001,6 +1232,15 @@ class RedeemService
                 (string)($item['batch_no'] ?? ''),
                 (string)($item['batch_name'] ?? ''),
                 (string)($item['channel'] ?? ''),
+                (string)($item['allowed_server_ids'] ?? ''),
+                (string)($item['bound_player_uuid'] ?? ''),
+                (string)($item['bound_player_name'] ?? ''),
+                (string)($item['require_bound_account'] ?? '0'),
+                (string)($item['require_email_verified'] ?? '0'),
+                (string)($item['require_account_active'] ?? '0'),
+                (string)($item['per_player_limit'] ?? '0'),
+                (string)($item['per_account_limit'] ?? '0'),
+                (string)($item['rule_note'] ?? ''),
             ];
 
             $escaped = array_map(static function (string $cell): string {
@@ -1019,7 +1259,7 @@ class RedeemService
     private function buildExportCsv(array $rows): string
     {
         $lines = [];
-        $lines[] = 'id,code,category,batch_no,batch_name,channel,status,max_uses,used_count,expires_at,remark,created_at';
+        $lines[] = 'id,code,category,batch_no,batch_name,channel,status,max_uses,used_count,expires_at,remark,allowed_server_ids,bound_player_uuid,bound_player_name,require_bound_account,require_email_verified,require_account_active,per_player_limit,per_account_limit,rule_note,created_at';
 
         foreach ($rows as $row) {
             $cells = [
@@ -1034,6 +1274,15 @@ class RedeemService
                 (string)($row['used_count'] ?? ''),
                 (string)($row['expires_at'] ?? ''),
                 (string)($row['remark'] ?? ''),
+                (string)($row['allowed_server_ids'] ?? ''),
+                (string)($row['bound_player_uuid'] ?? ''),
+                (string)($row['bound_player_name'] ?? ''),
+                (string)($row['require_bound_account'] ?? '0'),
+                (string)($row['require_email_verified'] ?? '0'),
+                (string)($row['require_account_active'] ?? '0'),
+                (string)($row['per_player_limit'] ?? '0'),
+                (string)($row['per_account_limit'] ?? '0'),
+                (string)($row['rule_note'] ?? ''),
                 (string)($row['created_at'] ?? ''),
             ];
 
@@ -1058,12 +1307,20 @@ class RedeemService
             'category_id',
             'batch_id',
             'channel',
+            'bound_player_uuid',
+            'allowed_server_id',
+            'require_bound_account',
+            'require_email_verified',
+            'require_account_active',
             'q',
             'created_from',
             'created_to',
             'expires_from',
             'expires_to',
             'admin_status',
+            'rule_result',
+            'rule_reason',
+            'website_user_id',
             'server_id',
             'player_uuid',
             'player_name',

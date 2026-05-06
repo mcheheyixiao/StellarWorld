@@ -30,7 +30,7 @@ class RedeemKey extends Model
             $offset = ($page - 1) * $perPage;
         }
 
-        $sql = 'SELECT rk.id, rk.category_id, rk.batch_id, rk.channel, rk.plain_code, rk.max_uses, rk.used_count, rk.status, rk.expires_at, rk.remark, rk.created_by, rk.created_at, rk.updated_at, '
+        $sql = 'SELECT rk.id, rk.category_id, rk.batch_id, rk.channel, rk.allowed_server_ids, rk.bound_player_uuid, rk.bound_player_name, rk.require_bound_account, rk.require_email_verified, rk.require_account_active, rk.per_player_limit, rk.per_account_limit, rk.rule_note, rk.plain_code, rk.max_uses, rk.used_count, rk.status, rk.expires_at, rk.remark, rk.created_by, rk.created_at, rk.updated_at, '
             . 'rc.name AS category_name, rb.batch_no, rb.name AS batch_name '
             . 'FROM redeem_keys rk '
             . 'LEFT JOIN redeem_categories rc ON rc.id = rk.category_id '
@@ -64,7 +64,7 @@ class RedeemKey extends Model
         $limit = max(1, min(20000, $limit));
         [$whereSql, $params] = $this->buildFilterWhere($filters);
 
-        $sql = 'SELECT rk.id, rk.category_id, rk.batch_id, rk.channel, rk.plain_code, rk.max_uses, rk.used_count, rk.status, rk.expires_at, rk.remark, rk.created_by, rk.created_at, rk.updated_at, '
+        $sql = 'SELECT rk.id, rk.category_id, rk.batch_id, rk.channel, rk.allowed_server_ids, rk.bound_player_uuid, rk.bound_player_name, rk.require_bound_account, rk.require_email_verified, rk.require_account_active, rk.per_player_limit, rk.per_account_limit, rk.rule_note, rk.plain_code, rk.max_uses, rk.used_count, rk.status, rk.expires_at, rk.remark, rk.created_by, rk.created_at, rk.updated_at, '
             . 'rc.name AS category_name, rb.batch_no, rb.name AS batch_name '
             . 'FROM redeem_keys rk '
             . 'LEFT JOIN redeem_categories rc ON rc.id = rk.category_id '
@@ -204,6 +204,36 @@ class RedeemKey extends Model
             $params[':channel'] = $channel;
         }
 
+        $boundPlayerUuid = $this->normalizePlayerUuid((string)($filters['bound_player_uuid'] ?? ''));
+        if ($boundPlayerUuid !== '') {
+            $where[] = 'rk.bound_player_uuid = :bound_player_uuid';
+            $params[':bound_player_uuid'] = $boundPlayerUuid;
+        }
+
+        $allowedServerId = trim((string)($filters['allowed_server_id'] ?? ''));
+        if ($allowedServerId !== '') {
+            $where[] = 'rk.allowed_server_ids LIKE :allowed_server_id_like';
+            $params[':allowed_server_id_like'] = '%' . $allowedServerId . '%';
+        }
+
+        $requireBoundAccount = trim((string)($filters['require_bound_account'] ?? ''));
+        if ($requireBoundAccount === '0' || $requireBoundAccount === '1') {
+            $where[] = 'rk.require_bound_account = :require_bound_account';
+            $params[':require_bound_account'] = (int)$requireBoundAccount;
+        }
+
+        $requireEmailVerified = trim((string)($filters['require_email_verified'] ?? ''));
+        if ($requireEmailVerified === '0' || $requireEmailVerified === '1') {
+            $where[] = 'rk.require_email_verified = :require_email_verified';
+            $params[':require_email_verified'] = (int)$requireEmailVerified;
+        }
+
+        $requireAccountActive = trim((string)($filters['require_account_active'] ?? ''));
+        if ($requireAccountActive === '0' || $requireAccountActive === '1') {
+            $where[] = 'rk.require_account_active = :require_account_active';
+            $params[':require_account_active'] = (int)$requireAccountActive;
+        }
+
         $createdFrom = trim((string)($filters['created_from'] ?? ''));
         if ($createdFrom !== '') {
             $where[] = 'rk.created_at >= :created_from';
@@ -236,5 +266,12 @@ class RedeemKey extends Model
 
         $whereSql = $where === [] ? '' : ('WHERE ' . implode(' AND ', $where));
         return [$whereSql, $params];
+    }
+
+    private function normalizePlayerUuid(string $uuid): string
+    {
+        $normalized = strtolower(str_replace('-', '', trim($uuid)));
+        $normalized = preg_replace('/[^0-9a-f]/', '', $normalized) ?? '';
+        return mb_substr($normalized, 0, 64);
     }
 }

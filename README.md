@@ -257,7 +257,7 @@ REALTIME_TICKET_VERIFY_TOKEN=replace-with-internal-service-token
 REALTIME_TICKET_VERIFY_ALLOW_EMPTY_TOKEN=0
 ```
 
-## Redeem V2 (Operations Enhancement on top of V1)
+## Redeem V2 + V3 (Operations + Rule Restrictions on top of V1)
 
 ### Manual SQL Setup
 
@@ -273,7 +273,7 @@ mysql -u <user> -p <database> < database.sql
 - `/admin?tab=redeem`
 - `/admin/redeem` (redirects to the tab above)
 
-### Admin APIs (V1 + V2)
+### Admin APIs (V1 + V2 + V3)
 
 - `GET /api/admin/redeem/categories`
 - `POST /api/admin/redeem/categories`
@@ -281,6 +281,7 @@ mysql -u <user> -p <database> < database.sql
 - `DELETE /api/admin/redeem/categories/{id}`
 
 - `GET /api/admin/redeem/keys`
+  - V3 filter params: `bound_player_uuid`, `allowed_server_id`, `require_bound_account`, `require_email_verified`, `require_account_active`
 - `GET /api/admin/redeem/keys/export` (V2: export current filters to CSV payload)
 - `POST /api/admin/redeem/keys/batch`
 - `PATCH /api/admin/redeem/keys/{id}/revoke`
@@ -293,6 +294,7 @@ mysql -u <user> -p <database> < database.sql
 - `GET /api/admin/redeem/batches/{id}/stats` (V2)
 
 - `GET /api/admin/redeem/logs`
+  - V3 filter params: `rule_result`, `rule_reason`, `website_user_id`
 - `PATCH /api/admin/redeem/logs/{id}/admin-status` (V2: `pending|handled|ignored`)
 - `GET /api/admin/redeem/admin-logs` (V2)
 - `GET /api/admin/redeem/stats/publish`
@@ -342,7 +344,7 @@ Server checks:
 
 ### Realtime Event Hook (Lightweight, best-effort)
 
-Redeem V2 emits lightweight event calls through `Core\RealtimeNotifier::emit(...)`:
+Redeem V2/V3 emits lightweight event calls through `Core\RealtimeNotifier::emit(...)`:
 
 - `redeem.key.generated`
 - `redeem.key.revoked`
@@ -354,14 +356,18 @@ Redeem V2 emits lightweight event calls through `Core\RealtimeNotifier::emit(...
 - `redeem.key.exported` (V2)
 - `redeem.log.admin_status_updated` (V2)
 - `redeem.admin_log.created` (V2)
+- `redeem.claim.rejected` (V3)
+- `redeem.rule.matched` (V3)
+- `redeem.rule.denied` (V3)
+- `redeem.rule.stats.updated` (V3)
 
 By default this is a no-op unless you provide a bridge function like `stellar_realtime_emit`
 or configure `REALTIME_INTERNAL_EVENT_URL` + `REALTIME_INTERNAL_SECRET`.
 
 Realtime forwarding is best-effort and never blocks the main redeem flow.
-V2 event payloads avoid secret/pepper/plain-code leakage and do not include CSV file contents.
+V2/V3 event payloads avoid secret/pepper/plain-code leakage and do not include CSV file contents.
 
-### V2 Added Operations Features
+### V2/V3 Added Features
 
 - batch management (`redeem_batches`)
 - channel/source field on keys (`redeem_keys.channel`)
@@ -370,14 +376,32 @@ V2 event payloads avoid secret/pepper/plain-code leakage and do not include CSV 
 - key CSV export for current filters
 - enhanced filters for keys/logs
 - batch statistics
+- server restriction rules (`redeem_keys.allowed_server_ids`)
+- player restriction rules (`redeem_keys.bound_player_uuid`, optional `bound_player_name`)
+- bound-account requirements (`require_bound_account`, `require_email_verified`, `require_account_active`)
+- per-player and per-account limits (`per_player_limit`, `per_account_limit`)
+- rule result logging (`redeem_logs.rule_result/rule_reason/rule_snapshot_json/website_user_id`)
+- V3 admin actions: `v3_rule_batch_generate`, `v3_rule_export`
 
-### V2 Still Not Included
+### V3 Rule Result Semantics
+
+- `rule_result = passed`: rule check enabled and passed, then usage is incremented and log enters `executing`.
+- `rule_result = rejected`: rule denied claim, usage is not incremented and commands are not executed.
+- `rule_result = skipped`: key has no V3 restriction enabled.
+
+Per-limit counting policy:
+
+- `per_player_limit` / `per_account_limit` count `redeem_logs.status IN ('executing','success')`.
+- `failed` is not counted automatically; failed command execution still needs manual admin handling in V2 flow.
+
+### V3 Still Not Included
 
 - no offline reward queue
 - no automatic command rollback on plugin fail callback
+- no complete reward center
+- no independent per-server inventory matrix
 - no PlaceholderAPI expansion service on website side
-- no multi-server rules matrix
-- no player binding restrictions beyond plugin payload checks
+- no QQ-binding strong verification enforcement (reserved for future extension)
 - failed records do not automatically roll back `used_count`
 
 ### Rollback

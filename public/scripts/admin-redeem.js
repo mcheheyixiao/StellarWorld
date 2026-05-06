@@ -48,6 +48,36 @@
         return '';
     }
 
+    function parseServerIds(raw) {
+        if (!raw) return [];
+        if (Array.isArray(raw)) {
+            return raw.map(function (x) { return String(x).trim(); }).filter(Boolean);
+        }
+        if (typeof raw === 'string') {
+            var text = raw.trim();
+            if (!text) return [];
+            if (text.charAt(0) === '[') {
+                var parsed = parseJsonSafe(text);
+                if (Array.isArray(parsed)) {
+                    return parsed.map(function (x) { return String(x).trim(); }).filter(Boolean);
+                }
+            }
+            return text.split(/[\r\n,]+/).map(function (x) { return String(x).trim(); }).filter(Boolean);
+        }
+        return [];
+    }
+
+    function parseRuleSnapshot(raw) {
+        if (!raw) return '';
+        if (typeof raw === 'string') {
+            var parsed = parseJsonSafe(raw);
+            if (parsed && typeof parsed === 'object') return JSON.stringify(parsed);
+            return raw;
+        }
+        if (typeof raw === 'object') return JSON.stringify(raw);
+        return String(raw || '');
+    }
+
     function toApiDatetime(value) {
         var v = String(value || '').trim();
         if (!v) return '';
@@ -205,6 +235,11 @@
             category_id: byId('redeem-keys-filter-category').value,
             batch_id: byId('redeem-keys-filter-batch').value,
             channel: byId('redeem-keys-filter-channel').value,
+            bound_player_uuid: byId('redeem-keys-filter-bound-player-uuid').value,
+            allowed_server_id: byId('redeem-keys-filter-allowed-server-id').value,
+            require_bound_account: byId('redeem-keys-filter-require-bound-account').value,
+            require_email_verified: byId('redeem-keys-filter-require-email-verified').value,
+            require_account_active: byId('redeem-keys-filter-require-account-active').value,
             q: byId('redeem-keys-filter-q').value,
             created_from: toApiDatetime(byId('redeem-keys-filter-created-from').value),
             created_to: toApiDatetime(byId('redeem-keys-filter-created-to').value),
@@ -233,11 +268,19 @@
         tbody.innerHTML = '';
         if (!items.length) {
             var emptyTr = document.createElement('tr');
-            emptyTr.innerHTML = '<td colspan="12" class="ta-help-text">No keys</td>';
+            emptyTr.innerHTML = '<td colspan="18" class="ta-help-text">No keys</td>';
             tbody.appendChild(emptyTr);
             return;
         }
         items.forEach(function (item) {
+            var serverIds = parseServerIds(item.allowed_server_ids);
+            var limitedPlayer = [];
+            if (item.bound_player_uuid) limitedPlayer.push('UUID: ' + String(item.bound_player_uuid));
+            if (item.bound_player_name) limitedPlayer.push('Name: ' + String(item.bound_player_name));
+            var bindingRequirements = [];
+            if (Number(item.require_bound_account || 0) === 1) bindingRequirements.push('bound');
+            if (Number(item.require_email_verified || 0) === 1) bindingRequirements.push('email');
+            if (Number(item.require_account_active || 0) === 1) bindingRequirements.push('active');
             var tr = document.createElement('tr');
             tr.innerHTML = ''
                 + '<td><input type="checkbox" class="redeem-key-select" value="' + Number(item.id) + '"></td>'
@@ -246,6 +289,12 @@
                 + '<td>' + escapeHtml(String(item.category_name || '-')) + '</td>'
                 + '<td>' + escapeHtml(String(item.batch_no || '-')) + '</td>'
                 + '<td>' + escapeHtml(String(item.channel || '-')) + '</td>'
+                + '<td>' + escapeHtml(serverIds.length ? serverIds.join(', ') : 'all') + '</td>'
+                + '<td>' + escapeHtml(limitedPlayer.length ? limitedPlayer.join(' | ') : '-') + '</td>'
+                + '<td>' + escapeHtml(bindingRequirements.length ? bindingRequirements.join('+') : '-') + '</td>'
+                + '<td>' + (Number(item.per_player_limit || 0) > 0 ? Number(item.per_player_limit || 0) : 'unlimited') + '</td>'
+                + '<td>' + (Number(item.per_account_limit || 0) > 0 ? Number(item.per_account_limit || 0) : 'unlimited') + '</td>'
+                + '<td>' + escapeHtml(String(item.rule_note || '-')) + '</td>'
                 + '<td>' + escapeHtml(String(item.status || '-')) + '</td>'
                 + '<td>' + Number(item.used_count || 0) + ' / ' + Number(item.max_uses || 0) + '</td>'
                 + '<td>' + escapeHtml(String(item.created_at || '-')) + '</td>'
@@ -266,6 +315,11 @@
             category_id: filters.category_id,
             batch_id: filters.batch_id,
             channel: filters.channel,
+            bound_player_uuid: filters.bound_player_uuid,
+            allowed_server_id: filters.allowed_server_id,
+            require_bound_account: filters.require_bound_account,
+            require_email_verified: filters.require_email_verified,
+            require_account_active: filters.require_account_active,
             q: filters.q,
             created_from: filters.created_from,
             created_to: filters.created_to,
@@ -288,6 +342,9 @@
             status: byId('redeem-logs-filter-status').value,
             admin_status: byId('redeem-logs-filter-admin-status').value,
             category_id: byId('redeem-logs-filter-category').value,
+            rule_result: byId('redeem-logs-filter-rule-result').value,
+            rule_reason: byId('redeem-logs-filter-rule-reason').value,
+            website_user_id: byId('redeem-logs-filter-website-user-id').value,
             server_id: byId('redeem-logs-filter-server-id').value,
             player_uuid: byId('redeem-logs-filter-player-uuid').value,
             player_name: byId('redeem-logs-filter-player-name').value,
@@ -310,7 +367,7 @@
         tbody.innerHTML = '';
         if (!items.length) {
             var emptyTr = document.createElement('tr');
-            emptyTr.innerHTML = '<td colspan="13" class="ta-help-text">No logs</td>';
+            emptyTr.innerHTML = '<td colspan="17" class="ta-help-text">No logs</td>';
             tbody.appendChild(emptyTr);
             return;
         }
@@ -318,6 +375,7 @@
         items.forEach(function (item) {
             var commandSnapshot = parseCommandSnapshot(item.command_snapshot);
             var executedCommands = parseCommandSnapshot(item.executed_commands);
+            var ruleSnapshot = parseRuleSnapshot(item.rule_snapshot_json);
             var combined = commandSnapshot;
             if (executedCommands) combined += (combined ? '\n---\n' : '') + executedCommands;
 
@@ -346,9 +404,13 @@
                 + '<td>' + escapeHtml(String(item.world_name || '-')) + '</td>'
                 + '<td>' + escapeHtml(String(item.status || '-')) + '</td>'
                 + '<td>' + escapeHtml(String(item.admin_status || '-')) + '</td>'
+                + '<td>' + escapeHtml(String(item.rule_result || '-')) + '</td>'
+                + '<td>' + escapeHtml(String(item.rule_reason || '-')) + '</td>'
+                + '<td>' + escapeHtml(String(item.website_user_id || '-')) + '</td>'
                 + '<td>' + escapeHtml(String((item.batch_no || '-') + ' / ' + (item.channel || '-'))) + '</td>'
                 + '<td>' + escapeHtml(String(item.failure_reason || '-')) + '</td>'
                 + '<td>' + escapeHtml(adminNote || '-') + '</td>'
+                + '<td><textarea rows="4" readonly>' + escapeHtml(ruleSnapshot || '-') + '</textarea></td>'
                 + '<td><textarea rows="4" readonly>' + escapeHtml(combined || '-') + '</textarea></td>'
                 + '<td>' + actionHtml + '</td>';
             tbody.appendChild(tr);
@@ -364,6 +426,9 @@
             status: filters.status,
             admin_status: filters.admin_status,
             category_id: filters.category_id,
+            rule_result: filters.rule_result,
+            rule_reason: filters.rule_reason,
+            website_user_id: filters.website_user_id,
             server_id: filters.server_id,
             player_uuid: filters.player_uuid,
             player_name: filters.player_name,
@@ -539,6 +604,11 @@
             category_id: filters.category_id,
             batch_id: filters.batch_id,
             channel: filters.channel,
+            bound_player_uuid: filters.bound_player_uuid,
+            allowed_server_id: filters.allowed_server_id,
+            require_bound_account: filters.require_bound_account,
+            require_email_verified: filters.require_email_verified,
+            require_account_active: filters.require_account_active,
             q: filters.q,
             created_from: filters.created_from,
             created_to: filters.created_to,
@@ -585,12 +655,15 @@
         byId('redeem-keys-filter-status').addEventListener('change', function () { loadKeys(1); });
         byId('redeem-keys-filter-category').addEventListener('change', function () { loadKeys(1); });
         byId('redeem-keys-filter-batch').addEventListener('change', function () { loadKeys(1); });
+        byId('redeem-keys-filter-require-bound-account').addEventListener('change', function () { loadKeys(1); });
+        byId('redeem-keys-filter-require-email-verified').addEventListener('change', function () { loadKeys(1); });
+        byId('redeem-keys-filter-require-account-active').addEventListener('change', function () { loadKeys(1); });
         byId('redeem-keys-filter-per-page').addEventListener('change', function () { loadKeys(1); });
         byId('redeem-keys-filter-created-from').addEventListener('change', function () { loadKeys(1); });
         byId('redeem-keys-filter-created-to').addEventListener('change', function () { loadKeys(1); });
         byId('redeem-keys-filter-expires-from').addEventListener('change', function () { loadKeys(1); });
         byId('redeem-keys-filter-expires-to').addEventListener('change', function () { loadKeys(1); });
-        ['redeem-keys-filter-channel', 'redeem-keys-filter-q'].forEach(function (id) {
+        ['redeem-keys-filter-channel', 'redeem-keys-filter-bound-player-uuid', 'redeem-keys-filter-allowed-server-id', 'redeem-keys-filter-q'].forEach(function (id) {
             byId(id).addEventListener('keydown', function (event) {
                 if (event.key === 'Enter') { event.preventDefault(); loadKeys(1); }
             });
@@ -640,6 +713,15 @@
                 batchName: String(formData.get('batchName') || '').trim(),
                 channel: String(formData.get('channel') || '').trim(),
                 remark: String(formData.get('remark') || '').trim(),
+                allowedServerIds: String(formData.get('allowedServerIds') || '').trim(),
+                boundPlayerUuid: String(formData.get('boundPlayerUuid') || '').trim(),
+                boundPlayerName: String(formData.get('boundPlayerName') || '').trim(),
+                requireBoundAccount: formData.get('requireBoundAccount') ? 1 : 0,
+                requireEmailVerified: formData.get('requireEmailVerified') ? 1 : 0,
+                requireAccountActive: formData.get('requireAccountActive') ? 1 : 0,
+                perPlayerLimit: Number(formData.get('perPlayerLimit') || 0),
+                perAccountLimit: Number(formData.get('perAccountLimit') || 0),
+                ruleNote: String(formData.get('ruleNote') || '').trim(),
                 commandTemplate: String(formData.get('commandTemplate') || '').trim()
             };
             if (payload.categoryId === '') payload.categoryId = null;
@@ -730,9 +812,9 @@
         });
 
         byId('redeem-logs-refresh-btn').addEventListener('click', function () { loadLogs(1); });
-        ['redeem-logs-filter-status', 'redeem-logs-filter-admin-status', 'redeem-logs-filter-category', 'redeem-logs-filter-per-page', 'redeem-logs-filter-created-from', 'redeem-logs-filter-created-to']
+        ['redeem-logs-filter-status', 'redeem-logs-filter-admin-status', 'redeem-logs-filter-category', 'redeem-logs-filter-rule-result', 'redeem-logs-filter-per-page', 'redeem-logs-filter-created-from', 'redeem-logs-filter-created-to']
             .forEach(function (id) { byId(id).addEventListener('change', function () { loadLogs(1); }); });
-        ['redeem-logs-filter-server-id', 'redeem-logs-filter-player-uuid', 'redeem-logs-filter-player-name', 'redeem-logs-filter-q']
+        ['redeem-logs-filter-server-id', 'redeem-logs-filter-player-uuid', 'redeem-logs-filter-player-name', 'redeem-logs-filter-rule-reason', 'redeem-logs-filter-website-user-id', 'redeem-logs-filter-q']
             .forEach(function (id) {
                 byId(id).addEventListener('keydown', function (event) {
                     if (event.key === 'Enter') { event.preventDefault(); loadLogs(1); }

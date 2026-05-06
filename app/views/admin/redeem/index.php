@@ -84,6 +84,38 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
                 <input type="text" id="redeem-keys-filter-channel" placeholder="如 sponsor / bilibili">
             </label>
             <label>
+                <span class="ta-help-text">限定玩家 UUID</span>
+                <input type="text" id="redeem-keys-filter-bound-player-uuid" placeholder="精确匹配">
+            </label>
+            <label>
+                <span class="ta-help-text">允许服务器 ID</span>
+                <input type="text" id="redeem-keys-filter-allowed-server-id" placeholder="按服务器规则筛选">
+            </label>
+            <label>
+                <span class="ta-help-text">要求绑定账号</span>
+                <select id="redeem-keys-filter-require-bound-account">
+                    <option value="">全部</option>
+                    <option value="1">是</option>
+                    <option value="0">否</option>
+                </select>
+            </label>
+            <label>
+                <span class="ta-help-text">要求邮箱验证</span>
+                <select id="redeem-keys-filter-require-email-verified">
+                    <option value="">全部</option>
+                    <option value="1">是</option>
+                    <option value="0">否</option>
+                </select>
+            </label>
+            <label>
+                <span class="ta-help-text">要求账号正常</span>
+                <select id="redeem-keys-filter-require-account-active">
+                    <option value="">全部</option>
+                    <option value="1">是</option>
+                    <option value="0">否</option>
+                </select>
+            </label>
+            <label>
                 <span class="ta-help-text">关键字</span>
                 <input type="text" id="redeem-keys-filter-q" placeholder="按卡密/备注/批次筛选">
             </label>
@@ -123,6 +155,12 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
                     <th>分类</th>
                     <th>批次</th>
                     <th>渠道</th>
+                    <th>限制服务器</th>
+                    <th>限定玩家</th>
+                    <th>绑定要求</th>
+                    <th>玩家限制</th>
+                    <th>账号限制</th>
+                    <th>规则备注</th>
                     <th>状态</th>
                     <th>次数</th>
                     <th>创建时间</th>
@@ -185,6 +223,51 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
                 <label>
                     <span class="ta-help-text">备注</span>
                     <input type="text" name="remark" maxlength="255">
+                </label>
+            </div>
+
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <label>
+                    <span class="ta-help-text">允许服务器 ID（每行一个或逗号分隔，留空=不限）</span>
+                    <textarea name="allowedServerIds" rows="3" placeholder="survival-1&#10;resource-1"></textarea>
+                </label>
+                <label>
+                    <span class="ta-help-text">规则备注</span>
+                    <input type="text" name="ruleNote" maxlength="255" placeholder="用于运营说明">
+                </label>
+            </div>
+
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <label>
+                    <span class="ta-help-text">限定玩家 UUID</span>
+                    <input type="text" name="boundPlayerUuid" maxlength="64" placeholder="不填则不限">
+                </label>
+                <label>
+                    <span class="ta-help-text">限定玩家名（辅助）</span>
+                    <input type="text" name="boundPlayerName" maxlength="64" placeholder="仅辅助校验/显示">
+                </label>
+                <label>
+                    <span class="ta-help-text">每个玩家最多兑换次数</span>
+                    <input type="number" name="perPlayerLimit" min="0" value="0">
+                </label>
+                <label>
+                    <span class="ta-help-text">每个网站账号最多兑换次数</span>
+                    <input type="number" name="perAccountLimit" min="0" value="0">
+                </label>
+            </div>
+
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <label class="inline-flex items-center gap-2">
+                    <input type="checkbox" name="requireBoundAccount" value="1">
+                    <span class="ta-help-text">要求绑定网站账号</span>
+                </label>
+                <label class="inline-flex items-center gap-2">
+                    <input type="checkbox" name="requireEmailVerified" value="1">
+                    <span class="ta-help-text">要求邮箱已验证</span>
+                </label>
+                <label class="inline-flex items-center gap-2">
+                    <input type="checkbox" name="requireAccountActive" value="1">
+                    <span class="ta-help-text">要求账号状态正常</span>
                 </label>
             </div>
 
@@ -331,6 +414,23 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
                 </select>
             </label>
             <label>
+                <span class="ta-help-text">规则结果</span>
+                <select id="redeem-logs-filter-rule-result">
+                    <option value="">全部</option>
+                    <option value="passed">passed</option>
+                    <option value="rejected">rejected</option>
+                    <option value="skipped">skipped</option>
+                </select>
+            </label>
+            <label>
+                <span class="ta-help-text">规则原因</span>
+                <input type="text" id="redeem-logs-filter-rule-reason" placeholder="如 server_not_allowed">
+            </label>
+            <label>
+                <span class="ta-help-text">网站用户ID</span>
+                <input type="number" id="redeem-logs-filter-website-user-id" min="1" placeholder="精确匹配">
+            </label>
+            <label>
                 <span class="ta-help-text">服务器ID</span>
                 <input type="text" id="redeem-logs-filter-server-id" placeholder="精确筛选">
             </label>
@@ -376,9 +476,13 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
                     <th>世界</th>
                     <th>状态</th>
                     <th>人工状态</th>
+                    <th>规则结果</th>
+                    <th>规则原因</th>
+                    <th>网站用户ID</th>
                     <th>批次/渠道</th>
                     <th>失败原因</th>
                     <th>管理员备注</th>
+                    <th>规则快照</th>
                     <th>命令快照</th>
                     <th>操作</th>
                 </tr>

@@ -936,3 +936,274 @@ CREATE TABLE IF NOT EXISTS redeem_admin_logs (
     KEY idx_redeem_admin_logs_target (target_type, target_id),
     KEY idx_redeem_admin_logs_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Redeem V3: precise delivery / restricted redeem / multi-server rules
+SET @sql_add_redeem_keys_allowed_server_ids = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND COLUMN_NAME = 'allowed_server_ids'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD COLUMN allowed_server_ids TEXT NULL COMMENT ''JSON array or comma separated server ids; empty means all servers allowed'' AFTER channel',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_keys_allowed_server_ids FROM @sql_add_redeem_keys_allowed_server_ids;
+EXECUTE stmt_add_redeem_keys_allowed_server_ids;
+DEALLOCATE PREPARE stmt_add_redeem_keys_allowed_server_ids;
+
+SET @sql_add_redeem_keys_bound_player_uuid = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND COLUMN_NAME = 'bound_player_uuid'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD COLUMN bound_player_uuid VARCHAR(64) NULL DEFAULT NULL COMMENT ''Only this Minecraft UUID can redeem'' AFTER allowed_server_ids',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_keys_bound_player_uuid FROM @sql_add_redeem_keys_bound_player_uuid;
+EXECUTE stmt_add_redeem_keys_bound_player_uuid;
+DEALLOCATE PREPARE stmt_add_redeem_keys_bound_player_uuid;
+
+SET @sql_add_redeem_keys_bound_player_name = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND COLUMN_NAME = 'bound_player_name'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD COLUMN bound_player_name VARCHAR(64) NULL DEFAULT NULL COMMENT ''Display/helper only; UUID is authoritative'' AFTER bound_player_uuid',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_keys_bound_player_name FROM @sql_add_redeem_keys_bound_player_name;
+EXECUTE stmt_add_redeem_keys_bound_player_name;
+DEALLOCATE PREPARE stmt_add_redeem_keys_bound_player_name;
+
+SET @sql_add_redeem_keys_require_bound_account = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND COLUMN_NAME = 'require_bound_account'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD COLUMN require_bound_account TINYINT(1) NOT NULL DEFAULT 0 COMMENT ''Require website user account bound to mc_uuid'' AFTER bound_player_name',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_keys_require_bound_account FROM @sql_add_redeem_keys_require_bound_account;
+EXECUTE stmt_add_redeem_keys_require_bound_account;
+DEALLOCATE PREPARE stmt_add_redeem_keys_require_bound_account;
+
+SET @sql_add_redeem_keys_require_email_verified = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND COLUMN_NAME = 'require_email_verified'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD COLUMN require_email_verified TINYINT(1) NOT NULL DEFAULT 0 COMMENT ''Require bound website user email verified'' AFTER require_bound_account',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_keys_require_email_verified FROM @sql_add_redeem_keys_require_email_verified;
+EXECUTE stmt_add_redeem_keys_require_email_verified;
+DEALLOCATE PREPARE stmt_add_redeem_keys_require_email_verified;
+
+SET @sql_add_redeem_keys_require_account_active = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND COLUMN_NAME = 'require_account_active'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD COLUMN require_account_active TINYINT(1) NOT NULL DEFAULT 0 COMMENT ''Require bound website user status=active'' AFTER require_email_verified',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_keys_require_account_active FROM @sql_add_redeem_keys_require_account_active;
+EXECUTE stmt_add_redeem_keys_require_account_active;
+DEALLOCATE PREPARE stmt_add_redeem_keys_require_account_active;
+
+SET @sql_add_redeem_keys_per_player_limit = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND COLUMN_NAME = 'per_player_limit'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD COLUMN per_player_limit INT UNSIGNED NOT NULL DEFAULT 0 COMMENT ''0 means unlimited by player uuid'' AFTER require_account_active',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_keys_per_player_limit FROM @sql_add_redeem_keys_per_player_limit;
+EXECUTE stmt_add_redeem_keys_per_player_limit;
+DEALLOCATE PREPARE stmt_add_redeem_keys_per_player_limit;
+
+SET @sql_add_redeem_keys_per_account_limit = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND COLUMN_NAME = 'per_account_limit'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD COLUMN per_account_limit INT UNSIGNED NOT NULL DEFAULT 0 COMMENT ''0 means unlimited by website user id'' AFTER per_player_limit',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_keys_per_account_limit FROM @sql_add_redeem_keys_per_account_limit;
+EXECUTE stmt_add_redeem_keys_per_account_limit;
+DEALLOCATE PREPARE stmt_add_redeem_keys_per_account_limit;
+
+SET @sql_add_redeem_keys_rule_note = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND COLUMN_NAME = 'rule_note'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD COLUMN rule_note VARCHAR(255) NOT NULL DEFAULT '''' COMMENT ''Admin note for V3 restriction rules'' AFTER per_account_limit',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_keys_rule_note FROM @sql_add_redeem_keys_rule_note;
+EXECUTE stmt_add_redeem_keys_rule_note;
+DEALLOCATE PREPARE stmt_add_redeem_keys_rule_note;
+
+SET @sql_add_idx_redeem_keys_bound_player_uuid = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND INDEX_NAME = 'idx_redeem_keys_bound_player_uuid'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD KEY idx_redeem_keys_bound_player_uuid (bound_player_uuid)',
+    'SELECT 1'
+);
+PREPARE stmt_add_idx_redeem_keys_bound_player_uuid FROM @sql_add_idx_redeem_keys_bound_player_uuid;
+EXECUTE stmt_add_idx_redeem_keys_bound_player_uuid;
+DEALLOCATE PREPARE stmt_add_idx_redeem_keys_bound_player_uuid;
+
+SET @sql_add_idx_redeem_keys_require_bound_account = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND INDEX_NAME = 'idx_redeem_keys_require_bound_account'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD KEY idx_redeem_keys_require_bound_account (require_bound_account)',
+    'SELECT 1'
+);
+PREPARE stmt_add_idx_redeem_keys_require_bound_account FROM @sql_add_idx_redeem_keys_require_bound_account;
+EXECUTE stmt_add_idx_redeem_keys_require_bound_account;
+DEALLOCATE PREPARE stmt_add_idx_redeem_keys_require_bound_account;
+
+SET @sql_add_redeem_logs_rule_result = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_logs'
+          AND COLUMN_NAME = 'rule_result'
+    ) = 0,
+    'ALTER TABLE redeem_logs ADD COLUMN rule_result ENUM(''passed'',''rejected'',''skipped'') NOT NULL DEFAULT ''skipped'' AFTER admin_status',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_logs_rule_result FROM @sql_add_redeem_logs_rule_result;
+EXECUTE stmt_add_redeem_logs_rule_result;
+DEALLOCATE PREPARE stmt_add_redeem_logs_rule_result;
+
+SET @sql_add_redeem_logs_rule_reason = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_logs'
+          AND COLUMN_NAME = 'rule_reason'
+    ) = 0,
+    'ALTER TABLE redeem_logs ADD COLUMN rule_reason VARCHAR(128) NOT NULL DEFAULT '''' AFTER rule_result',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_logs_rule_reason FROM @sql_add_redeem_logs_rule_reason;
+EXECUTE stmt_add_redeem_logs_rule_reason;
+DEALLOCATE PREPARE stmt_add_redeem_logs_rule_reason;
+
+SET @sql_add_redeem_logs_rule_snapshot_json = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_logs'
+          AND COLUMN_NAME = 'rule_snapshot_json'
+    ) = 0,
+    'ALTER TABLE redeem_logs ADD COLUMN rule_snapshot_json JSON NULL AFTER rule_reason',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_logs_rule_snapshot_json FROM @sql_add_redeem_logs_rule_snapshot_json;
+EXECUTE stmt_add_redeem_logs_rule_snapshot_json;
+DEALLOCATE PREPARE stmt_add_redeem_logs_rule_snapshot_json;
+
+SET @sql_add_redeem_logs_website_user_id = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_logs'
+          AND COLUMN_NAME = 'website_user_id'
+    ) = 0,
+    'ALTER TABLE redeem_logs ADD COLUMN website_user_id INT UNSIGNED NULL AFTER rule_snapshot_json',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_logs_website_user_id FROM @sql_add_redeem_logs_website_user_id;
+EXECUTE stmt_add_redeem_logs_website_user_id;
+DEALLOCATE PREPARE stmt_add_redeem_logs_website_user_id;
+
+SET @sql_add_idx_redeem_logs_rule_result = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_logs'
+          AND INDEX_NAME = 'idx_redeem_logs_rule_result'
+    ) = 0,
+    'ALTER TABLE redeem_logs ADD KEY idx_redeem_logs_rule_result (rule_result)',
+    'SELECT 1'
+);
+PREPARE stmt_add_idx_redeem_logs_rule_result FROM @sql_add_idx_redeem_logs_rule_result;
+EXECUTE stmt_add_idx_redeem_logs_rule_result;
+DEALLOCATE PREPARE stmt_add_idx_redeem_logs_rule_result;
+
+SET @sql_add_idx_redeem_logs_rule_reason = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_logs'
+          AND INDEX_NAME = 'idx_redeem_logs_rule_reason'
+    ) = 0,
+    'ALTER TABLE redeem_logs ADD KEY idx_redeem_logs_rule_reason (rule_reason)',
+    'SELECT 1'
+);
+PREPARE stmt_add_idx_redeem_logs_rule_reason FROM @sql_add_idx_redeem_logs_rule_reason;
+EXECUTE stmt_add_idx_redeem_logs_rule_reason;
+DEALLOCATE PREPARE stmt_add_idx_redeem_logs_rule_reason;
+
+SET @sql_add_idx_redeem_logs_website_user_id = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_logs'
+          AND INDEX_NAME = 'idx_redeem_logs_website_user_id'
+    ) = 0,
+    'ALTER TABLE redeem_logs ADD KEY idx_redeem_logs_website_user_id (website_user_id)',
+    'SELECT 1'
+);
+PREPARE stmt_add_idx_redeem_logs_website_user_id FROM @sql_add_idx_redeem_logs_website_user_id;
+EXECUTE stmt_add_idx_redeem_logs_website_user_id;
+DEALLOCATE PREPARE stmt_add_idx_redeem_logs_website_user_id;

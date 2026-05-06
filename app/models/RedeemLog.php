@@ -14,8 +14,8 @@ class RedeemLog extends Model
     public function createExecuting(array $data): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO redeem_logs (key_id, redeem_code_hash, server_id, player_uuid, player_name, world_name, status, failure_reason, command_snapshot, executed_commands, created_at, completed_at) '
-            . 'VALUES (:key_id, :redeem_code_hash, :server_id, :player_uuid, :player_name, :world_name, :status, :failure_reason, :command_snapshot, :executed_commands, NOW(), NULL)'
+            'INSERT INTO redeem_logs (key_id, redeem_code_hash, server_id, player_uuid, player_name, world_name, status, admin_status, rule_result, rule_reason, rule_snapshot_json, website_user_id, failure_reason, command_snapshot, executed_commands, created_at, completed_at) '
+            . 'VALUES (:key_id, :redeem_code_hash, :server_id, :player_uuid, :player_name, :world_name, :status, :admin_status, :rule_result, :rule_reason, :rule_snapshot_json, :website_user_id, :failure_reason, :command_snapshot, :executed_commands, NOW(), NULL)'
         );
 
         $stmt->bindValue(':key_id', $data['key_id'] ?? null, ($data['key_id'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
@@ -25,9 +25,40 @@ class RedeemLog extends Model
         $stmt->bindValue(':player_name', $data['player_name'] ?? null, ($data['player_name'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
         $stmt->bindValue(':world_name', $data['world_name'] ?? null, ($data['world_name'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
         $stmt->bindValue(':status', 'executing', PDO::PARAM_STR);
+        $stmt->bindValue(':admin_status', 'pending', PDO::PARAM_STR);
+        $stmt->bindValue(':rule_result', (string)($data['rule_result'] ?? 'passed'), PDO::PARAM_STR);
+        $stmt->bindValue(':rule_reason', (string)($data['rule_reason'] ?? ''), PDO::PARAM_STR);
+        $stmt->bindValue(':rule_snapshot_json', $data['rule_snapshot_json'] ?? null, ($data['rule_snapshot_json'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+        $stmt->bindValue(':website_user_id', $data['website_user_id'] ?? null, ($data['website_user_id'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
         $stmt->bindValue(':failure_reason', null, PDO::PARAM_NULL);
         $stmt->bindValue(':command_snapshot', $data['command_snapshot'] ?? null, ($data['command_snapshot'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
         $stmt->bindValue(':executed_commands', null, PDO::PARAM_NULL);
+        $stmt->execute();
+
+        return (int)$this->db->lastInsertId();
+    }
+
+    /**
+     * @param array<string,mixed> $data
+     */
+    public function createRuleRejected(array $data): int
+    {
+        $stmt = $this->db->prepare(
+            'INSERT INTO redeem_logs (key_id, redeem_code_hash, server_id, player_uuid, player_name, world_name, status, admin_status, rule_result, rule_reason, rule_snapshot_json, website_user_id, failure_reason, command_snapshot, executed_commands, created_at, completed_at) '
+            . "VALUES (:key_id, :redeem_code_hash, :server_id, :player_uuid, :player_name, :world_name, 'failed', :admin_status, 'rejected', :rule_reason, :rule_snapshot_json, :website_user_id, :failure_reason, NULL, NULL, NOW(), NOW())"
+        );
+
+        $stmt->bindValue(':key_id', $data['key_id'] ?? null, ($data['key_id'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $stmt->bindValue(':redeem_code_hash', (string)($data['redeem_code_hash'] ?? ''), PDO::PARAM_STR);
+        $stmt->bindValue(':server_id', (string)($data['server_id'] ?? ''), PDO::PARAM_STR);
+        $stmt->bindValue(':player_uuid', $data['player_uuid'] ?? null, ($data['player_uuid'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+        $stmt->bindValue(':player_name', $data['player_name'] ?? null, ($data['player_name'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+        $stmt->bindValue(':world_name', $data['world_name'] ?? null, ($data['world_name'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+        $stmt->bindValue(':admin_status', (string)($data['admin_status'] ?? 'ignored'), PDO::PARAM_STR);
+        $stmt->bindValue(':rule_reason', (string)($data['rule_reason'] ?? ''), PDO::PARAM_STR);
+        $stmt->bindValue(':rule_snapshot_json', $data['rule_snapshot_json'] ?? null, ($data['rule_snapshot_json'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+        $stmt->bindValue(':website_user_id', $data['website_user_id'] ?? null, ($data['website_user_id'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $stmt->bindValue(':failure_reason', (string)($data['failure_reason'] ?? ''), PDO::PARAM_STR);
         $stmt->execute();
 
         return (int)$this->db->lastInsertId();
@@ -110,7 +141,7 @@ class RedeemLog extends Model
             $offset = ($page - 1) * $perPage;
         }
 
-        $sql = 'SELECT rl.id, rl.key_id, rl.server_id, rl.player_uuid, rl.player_name, rl.world_name, rl.status, rl.admin_status, rl.admin_note, rl.handled_by, rl.handled_at, rl.failure_reason, rl.command_snapshot, rl.executed_commands, rl.created_at, rl.completed_at, '
+        $sql = 'SELECT rl.id, rl.key_id, rl.server_id, rl.player_uuid, rl.player_name, rl.world_name, rl.status, rl.admin_status, rl.admin_note, rl.handled_by, rl.handled_at, rl.rule_result, rl.rule_reason, rl.rule_snapshot_json, rl.website_user_id, rl.failure_reason, rl.command_snapshot, rl.executed_commands, rl.created_at, rl.completed_at, '
             . 'rk.plain_code, rk.channel, rc.name AS category_name, rb.batch_no '
             . 'FROM redeem_logs rl '
             . 'LEFT JOIN redeem_keys rk ON rk.id = rl.key_id '
@@ -177,6 +208,24 @@ class RedeemLog extends Model
         if ($adminStatus !== '' && in_array($adminStatus, ['pending', 'handled', 'ignored'], true)) {
             $where[] = 'rl.admin_status = :admin_status';
             $params[':admin_status'] = $adminStatus;
+        }
+
+        $ruleResult = strtolower(trim((string)($filters['rule_result'] ?? '')));
+        if ($ruleResult !== '' && in_array($ruleResult, ['passed', 'rejected', 'skipped'], true)) {
+            $where[] = 'rl.rule_result = :rule_result';
+            $params[':rule_result'] = $ruleResult;
+        }
+
+        $ruleReason = trim((string)($filters['rule_reason'] ?? ''));
+        if ($ruleReason !== '') {
+            $where[] = 'rl.rule_reason LIKE :rule_reason';
+            $params[':rule_reason'] = '%' . $ruleReason . '%';
+        }
+
+        $websiteUserId = (int)($filters['website_user_id'] ?? 0);
+        if ($websiteUserId > 0) {
+            $where[] = 'rl.website_user_id = :website_user_id';
+            $params[':website_user_id'] = $websiteUserId;
         }
 
         $categoryId = (int)($filters['category_id'] ?? 0);

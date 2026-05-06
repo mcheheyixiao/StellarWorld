@@ -62,12 +62,19 @@ $router->patch('/api/admin/redeem/categories/{id}', [AdminRedeemApiController::c
 $router->delete('/api/admin/redeem/categories/{id}', [AdminRedeemApiController::class, 'deleteCategory']);
 
 $router->get('/api/admin/redeem/keys', [AdminRedeemApiController::class, 'keys']);
+$router->get('/api/admin/redeem/keys/export', [AdminRedeemApiController::class, 'exportKeys']);
 $router->post('/api/admin/redeem/keys/batch', [AdminRedeemApiController::class, 'batchGenerateKeys']);
 $router->patch('/api/admin/redeem/keys/{id}/revoke', [AdminRedeemApiController::class, 'revokeKey']);
 $router->post('/api/admin/redeem/keys/revoke-batch', [AdminRedeemApiController::class, 'revokeBatchKeys']);
 $router->post('/api/admin/redeem/keys/delete-batch', [AdminRedeemApiController::class, 'deleteBatchKeys']);
 
+$router->get('/api/admin/redeem/batches', [AdminRedeemApiController::class, 'batches']);
+$router->get('/api/admin/redeem/batches/{id}', [AdminRedeemApiController::class, 'batchDetail']);
+$router->get('/api/admin/redeem/batches/{id}/stats', [AdminRedeemApiController::class, 'batchStats']);
+
 $router->get('/api/admin/redeem/logs', [AdminRedeemApiController::class, 'logs']);
+$router->patch('/api/admin/redeem/logs/{id}/admin-status', [AdminRedeemApiController::class, 'updateLogAdminStatus']);
+$router->get('/api/admin/redeem/admin-logs', [AdminRedeemApiController::class, 'adminLogs']);
 $router->get('/api/admin/redeem/stats/publish', [AdminRedeemApiController::class, 'statsPublish']);
 
 // Minecraft redeem APIs

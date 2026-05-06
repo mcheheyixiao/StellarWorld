@@ -36,6 +36,17 @@ class RedeemLog extends Model
     /**
      * @return array<string,mixed>|null
      */
+    public function findById(int $id): ?array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM redeem_logs WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return is_array($row) ? $row : null;
+    }
+
+    /**
+     * @return array<string,mixed>|null
+     */
     public function findByIdForUpdate(int $id): ?array
     {
         $stmt = $this->db->prepare('SELECT * FROM redeem_logs WHERE id = :id LIMIT 1 FOR UPDATE');
@@ -61,6 +72,21 @@ class RedeemLog extends Model
         $stmt->execute();
     }
 
+    public function markAdminStatus(int $id, string $adminStatus, string $adminNote, ?int $handledBy, ?string $handledAt): void
+    {
+        $stmt = $this->db->prepare(
+            'UPDATE redeem_logs '
+            . 'SET admin_status = :admin_status, admin_note = :admin_note, handled_by = :handled_by, handled_at = :handled_at '
+            . 'WHERE id = :id'
+        );
+        $stmt->bindValue(':admin_status', $adminStatus, PDO::PARAM_STR);
+        $stmt->bindValue(':admin_note', $adminNote, PDO::PARAM_STR);
+        $stmt->bindValue(':handled_by', $handledBy, $handledBy === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $stmt->bindValue(':handled_at', $handledAt, $handledAt === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+    }
+
     /**
      * @param array<string,mixed> $filters
      * @return array{items:array<int,array<string,mixed>>,total:int,page:int,per_page:int,total_pages:int}
@@ -71,28 +97,7 @@ class RedeemLog extends Model
         $perPage = max(1, min(100, $perPage));
         $offset = ($page - 1) * $perPage;
 
-        $where = [];
-        $params = [];
-
-        $status = strtolower(trim((string)($filters['status'] ?? '')));
-        if ($status !== '' && in_array($status, ['executing', 'success', 'failed'], true)) {
-            $where[] = 'rl.status = :status';
-            $params[':status'] = $status;
-        }
-
-        $categoryId = (int)($filters['category_id'] ?? 0);
-        if ($categoryId > 0) {
-            $where[] = 'rk.category_id = :category_id';
-            $params[':category_id'] = $categoryId;
-        }
-
-        $keyword = trim((string)($filters['q'] ?? ''));
-        if ($keyword !== '') {
-            $where[] = '(rl.player_name LIKE :kw OR rl.player_uuid LIKE :kw OR rl.server_id LIKE :kw)';
-            $params[':kw'] = '%' . $keyword . '%';
-        }
-
-        $whereSql = $where === [] ? '' : ('WHERE ' . implode(' AND ', $where));
+        [$whereSql, $params] = $this->buildFilterWhere($filters);
 
         $countSql = 'SELECT COUNT(*) FROM redeem_logs rl LEFT JOIN redeem_keys rk ON rk.id = rl.key_id ' . $whereSql;
         $countStmt = $this->db->prepare($countSql);
@@ -105,10 +110,12 @@ class RedeemLog extends Model
             $offset = ($page - 1) * $perPage;
         }
 
-        $sql = 'SELECT rl.id, rl.key_id, rl.server_id, rl.player_uuid, rl.player_name, rl.world_name, rl.status, rl.failure_reason, rl.command_snapshot, rl.executed_commands, rl.created_at, rl.completed_at, rk.plain_code, rc.name AS category_name '
+        $sql = 'SELECT rl.id, rl.key_id, rl.server_id, rl.player_uuid, rl.player_name, rl.world_name, rl.status, rl.admin_status, rl.admin_note, rl.handled_by, rl.handled_at, rl.failure_reason, rl.command_snapshot, rl.executed_commands, rl.created_at, rl.completed_at, '
+            . 'rk.plain_code, rk.channel, rc.name AS category_name, rb.batch_no '
             . 'FROM redeem_logs rl '
             . 'LEFT JOIN redeem_keys rk ON rk.id = rl.key_id '
             . 'LEFT JOIN redeem_categories rc ON rc.id = rk.category_id '
+            . 'LEFT JOIN redeem_batches rb ON rb.id = rk.batch_id '
             . $whereSql
             . ' ORDER BY rl.id DESC LIMIT :limit OFFSET :offset';
 
@@ -132,5 +139,89 @@ class RedeemLog extends Model
     public function countFailed(): int
     {
         return (int)$this->db->query("SELECT COUNT(*) FROM redeem_logs WHERE status = 'failed'")->fetchColumn();
+    }
+
+    public function countFailedPending(): int
+    {
+        return (int)$this->db->query("SELECT COUNT(*) FROM redeem_logs WHERE status = 'failed' AND admin_status = 'pending'")->fetchColumn();
+    }
+
+    public function countTodayByStatus(string $status): int
+    {
+        $status = strtolower(trim($status));
+        if (!in_array($status, ['success', 'failed'], true)) {
+            return 0;
+        }
+
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM redeem_logs WHERE status = :status AND DATE(created_at) = CURDATE()');
+        $stmt->execute([':status' => $status]);
+        return (int)$stmt->fetchColumn();
+    }
+
+    /**
+     * @param array<string,mixed> $filters
+     * @return array{0:string,1:array<string,mixed>}
+     */
+    private function buildFilterWhere(array $filters): array
+    {
+        $where = [];
+        $params = [];
+
+        $status = strtolower(trim((string)($filters['status'] ?? '')));
+        if ($status !== '' && in_array($status, ['executing', 'success', 'failed'], true)) {
+            $where[] = 'rl.status = :status';
+            $params[':status'] = $status;
+        }
+
+        $adminStatus = strtolower(trim((string)($filters['admin_status'] ?? '')));
+        if ($adminStatus !== '' && in_array($adminStatus, ['pending', 'handled', 'ignored'], true)) {
+            $where[] = 'rl.admin_status = :admin_status';
+            $params[':admin_status'] = $adminStatus;
+        }
+
+        $categoryId = (int)($filters['category_id'] ?? 0);
+        if ($categoryId > 0) {
+            $where[] = 'rk.category_id = :category_id';
+            $params[':category_id'] = $categoryId;
+        }
+
+        $serverId = trim((string)($filters['server_id'] ?? ''));
+        if ($serverId !== '') {
+            $where[] = 'rl.server_id = :server_id';
+            $params[':server_id'] = $serverId;
+        }
+
+        $playerUuid = trim((string)($filters['player_uuid'] ?? ''));
+        if ($playerUuid !== '') {
+            $where[] = 'rl.player_uuid = :player_uuid';
+            $params[':player_uuid'] = $playerUuid;
+        }
+
+        $playerName = trim((string)($filters['player_name'] ?? ''));
+        if ($playerName !== '') {
+            $where[] = 'rl.player_name LIKE :player_name';
+            $params[':player_name'] = '%' . $playerName . '%';
+        }
+
+        $createdFrom = trim((string)($filters['created_from'] ?? ''));
+        if ($createdFrom !== '') {
+            $where[] = 'rl.created_at >= :created_from';
+            $params[':created_from'] = $createdFrom;
+        }
+
+        $createdTo = trim((string)($filters['created_to'] ?? ''));
+        if ($createdTo !== '') {
+            $where[] = 'rl.created_at <= :created_to';
+            $params[':created_to'] = $createdTo;
+        }
+
+        $keyword = trim((string)($filters['q'] ?? ''));
+        if ($keyword !== '') {
+            $where[] = '(rl.player_name LIKE :kw OR rl.player_uuid LIKE :kw OR rl.server_id LIKE :kw OR rb.batch_no LIKE :kw OR rk.channel LIKE :kw)';
+            $params[':kw'] = '%' . $keyword . '%';
+        }
+
+        $whereSql = $where === [] ? '' : ('WHERE ' . implode(' AND ', $where));
+        return [$whereSql, $params];
     }
 }

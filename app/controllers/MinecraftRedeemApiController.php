@@ -60,20 +60,7 @@ class MinecraftRedeemApiController extends Controller
 
         $body = $this->readJsonBody();
         $result = $this->redeemService->complete((int)$redeemId, $body);
-
-        $status = 200;
-        if (empty($result['success'])) {
-            $message = (string)($result['message'] ?? '');
-            if (str_contains($message, '不存在')) {
-                $status = 404;
-            } elseif (str_contains($message, '内部错误')) {
-                $status = 500;
-            } else {
-                $status = 409;
-            }
-        }
-
-        $this->respondPluginJson($result, $status);
+        $this->respondPluginJson($result, $this->statusFromRedeemResult($result));
     }
 
     public function fail(string $redeemId): void
@@ -88,20 +75,7 @@ class MinecraftRedeemApiController extends Controller
 
         $body = $this->readJsonBody();
         $result = $this->redeemService->fail((int)$redeemId, $body);
-
-        $status = 200;
-        if (empty($result['success'])) {
-            $message = (string)($result['message'] ?? '');
-            if (str_contains($message, '不存在')) {
-                $status = 404;
-            } elseif (str_contains($message, '内部错误')) {
-                $status = 500;
-            } else {
-                $status = 409;
-            }
-        }
-
-        $this->respondPluginJson($result, $status);
+        $this->respondPluginJson($result, $this->statusFromRedeemResult($result));
     }
 
     public function heartbeat(): void
@@ -171,6 +145,30 @@ class MinecraftRedeemApiController extends Controller
         }
 
         return true;
+    }
+
+    /**
+     * @param array<string,mixed> $result
+     */
+    private function statusFromRedeemResult(array $result): int
+    {
+        if (!empty($result['success'])) {
+            return 200;
+        }
+
+        $message = strtolower(trim((string)($result['message'] ?? '')));
+        if ($message === '') {
+            return 409;
+        }
+
+        if (str_contains($message, 'not found') || str_contains($message, '不存在')) {
+            return 404;
+        }
+        if (str_contains($message, 'internal') || str_contains($message, '内部')) {
+            return 500;
+        }
+
+        return 409;
     }
 
     private function getRawBody(): string

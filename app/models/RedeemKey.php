@@ -18,28 +18,7 @@ class RedeemKey extends Model
         $perPage = max(1, min(100, $perPage));
         $offset = ($page - 1) * $perPage;
 
-        $where = [];
-        $params = [];
-
-        $status = strtolower(trim((string)($filters['status'] ?? '')));
-        if ($status !== '' && in_array($status, ['available', 'revoked', 'deleted'], true)) {
-            $where[] = 'rk.status = :status';
-            $params[':status'] = $status;
-        }
-
-        $categoryId = (int)($filters['category_id'] ?? 0);
-        if ($categoryId > 0) {
-            $where[] = 'rk.category_id = :category_id';
-            $params[':category_id'] = $categoryId;
-        }
-
-        $keyword = trim((string)($filters['q'] ?? ''));
-        if ($keyword !== '') {
-            $where[] = '(rk.plain_code LIKE :kw OR rk.remark LIKE :kw)';
-            $params[':kw'] = '%' . $keyword . '%';
-        }
-
-        $whereSql = $where === [] ? '' : ('WHERE ' . implode(' AND ', $where));
+        [$whereSql, $params] = $this->buildFilterWhere($filters);
 
         $countStmt = $this->db->prepare('SELECT COUNT(*) FROM redeem_keys rk ' . $whereSql);
         $countStmt->execute($params);
@@ -51,9 +30,11 @@ class RedeemKey extends Model
             $offset = ($page - 1) * $perPage;
         }
 
-        $sql = 'SELECT rk.id, rk.category_id, rk.plain_code, rk.max_uses, rk.used_count, rk.status, rk.expires_at, rk.remark, rk.created_by, rk.created_at, rk.updated_at, rc.name AS category_name '
+        $sql = 'SELECT rk.id, rk.category_id, rk.batch_id, rk.channel, rk.plain_code, rk.max_uses, rk.used_count, rk.status, rk.expires_at, rk.remark, rk.created_by, rk.created_at, rk.updated_at, '
+            . 'rc.name AS category_name, rb.batch_no, rb.name AS batch_name '
             . 'FROM redeem_keys rk '
             . 'LEFT JOIN redeem_categories rc ON rc.id = rk.category_id '
+            . 'LEFT JOIN redeem_batches rb ON rb.id = rk.batch_id '
             . $whereSql
             . ' ORDER BY rk.id DESC LIMIT :limit OFFSET :offset';
 
@@ -72,6 +53,33 @@ class RedeemKey extends Model
             'per_page' => $perPage,
             'total_pages' => $totalPages,
         ];
+    }
+
+    /**
+     * @param array<string,mixed> $filters
+     * @return array<int,array<string,mixed>>
+     */
+    public function listForExport(array $filters, int $limit = 5000): array
+    {
+        $limit = max(1, min(20000, $limit));
+        [$whereSql, $params] = $this->buildFilterWhere($filters);
+
+        $sql = 'SELECT rk.id, rk.category_id, rk.batch_id, rk.channel, rk.plain_code, rk.max_uses, rk.used_count, rk.status, rk.expires_at, rk.remark, rk.created_by, rk.created_at, rk.updated_at, '
+            . 'rc.name AS category_name, rb.batch_no, rb.name AS batch_name '
+            . 'FROM redeem_keys rk '
+            . 'LEFT JOIN redeem_categories rc ON rc.id = rk.category_id '
+            . 'LEFT JOIN redeem_batches rb ON rb.id = rk.batch_id '
+            . $whereSql
+            . ' ORDER BY rk.id DESC LIMIT :limit';
+
+        $stmt = $this->db->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     /**
@@ -161,5 +169,72 @@ class RedeemKey extends Model
             . "AND (rk.category_id IS NULL OR rc.status = 'enabled')"
         );
         return (int)$stmt->fetchColumn();
+    }
+
+    /**
+     * @param array<string,mixed> $filters
+     * @return array{0:string,1:array<string,mixed>}
+     */
+    private function buildFilterWhere(array $filters): array
+    {
+        $where = [];
+        $params = [];
+
+        $status = strtolower(trim((string)($filters['status'] ?? '')));
+        if ($status !== '' && in_array($status, ['available', 'revoked', 'deleted'], true)) {
+            $where[] = 'rk.status = :status';
+            $params[':status'] = $status;
+        }
+
+        $categoryId = (int)($filters['category_id'] ?? 0);
+        if ($categoryId > 0) {
+            $where[] = 'rk.category_id = :category_id';
+            $params[':category_id'] = $categoryId;
+        }
+
+        $batchId = (int)($filters['batch_id'] ?? 0);
+        if ($batchId > 0) {
+            $where[] = 'rk.batch_id = :batch_id';
+            $params[':batch_id'] = $batchId;
+        }
+
+        $channel = trim((string)($filters['channel'] ?? ''));
+        if ($channel !== '') {
+            $where[] = 'rk.channel = :channel';
+            $params[':channel'] = $channel;
+        }
+
+        $createdFrom = trim((string)($filters['created_from'] ?? ''));
+        if ($createdFrom !== '') {
+            $where[] = 'rk.created_at >= :created_from';
+            $params[':created_from'] = $createdFrom;
+        }
+
+        $createdTo = trim((string)($filters['created_to'] ?? ''));
+        if ($createdTo !== '') {
+            $where[] = 'rk.created_at <= :created_to';
+            $params[':created_to'] = $createdTo;
+        }
+
+        $expiresFrom = trim((string)($filters['expires_from'] ?? ''));
+        if ($expiresFrom !== '') {
+            $where[] = 'rk.expires_at IS NOT NULL AND rk.expires_at >= :expires_from';
+            $params[':expires_from'] = $expiresFrom;
+        }
+
+        $expiresTo = trim((string)($filters['expires_to'] ?? ''));
+        if ($expiresTo !== '') {
+            $where[] = 'rk.expires_at IS NOT NULL AND rk.expires_at <= :expires_to';
+            $params[':expires_to'] = $expiresTo;
+        }
+
+        $keyword = trim((string)($filters['q'] ?? ''));
+        if ($keyword !== '') {
+            $where[] = '(rk.plain_code LIKE :kw OR rk.remark LIKE :kw OR rb.batch_no LIKE :kw OR rb.name LIKE :kw)';
+            $params[':kw'] = '%' . $keyword . '%';
+        }
+
+        $whereSql = $where === [] ? '' : ('WHERE ' . implode(' AND ', $where));
+        return [$whereSql, $params];
     }
 }

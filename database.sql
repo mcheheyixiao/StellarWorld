@@ -768,3 +768,171 @@ CREATE TABLE IF NOT EXISTS redeem_logs (
     KEY idx_redeem_logs_server (server_id),
     CONSTRAINT fk_redeem_logs_key FOREIGN KEY (key_id) REFERENCES redeem_keys(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Redeem V2: operations enhancement (batch/channel/admin logs/manual failure handling)
+CREATE TABLE IF NOT EXISTS redeem_batches (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    batch_no VARCHAR(64) NOT NULL,
+    name VARCHAR(128) NOT NULL DEFAULT '',
+    channel VARCHAR(128) NOT NULL DEFAULT '',
+    category_id INT UNSIGNED NULL,
+    total_count INT UNSIGNED NOT NULL DEFAULT 0,
+    created_by INT UNSIGNED NULL,
+    remark VARCHAR(255) NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_redeem_batches_batch_no (batch_no),
+    KEY idx_redeem_batches_channel (channel),
+    KEY idx_redeem_batches_category_id (category_id),
+    KEY idx_redeem_batches_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET @sql_add_redeem_keys_batch_id = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND COLUMN_NAME = 'batch_id'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD COLUMN batch_id BIGINT UNSIGNED NULL AFTER category_id',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_keys_batch_id FROM @sql_add_redeem_keys_batch_id;
+EXECUTE stmt_add_redeem_keys_batch_id;
+DEALLOCATE PREPARE stmt_add_redeem_keys_batch_id;
+
+SET @sql_add_redeem_keys_channel = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND COLUMN_NAME = 'channel'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD COLUMN channel VARCHAR(128) NOT NULL DEFAULT '''' AFTER batch_id',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_keys_channel FROM @sql_add_redeem_keys_channel;
+EXECUTE stmt_add_redeem_keys_channel;
+DEALLOCATE PREPARE stmt_add_redeem_keys_channel;
+
+SET @sql_add_idx_redeem_keys_batch_id = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND INDEX_NAME = 'idx_redeem_keys_batch_id'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD KEY idx_redeem_keys_batch_id (batch_id)',
+    'SELECT 1'
+);
+PREPARE stmt_add_idx_redeem_keys_batch_id FROM @sql_add_idx_redeem_keys_batch_id;
+EXECUTE stmt_add_idx_redeem_keys_batch_id;
+DEALLOCATE PREPARE stmt_add_idx_redeem_keys_batch_id;
+
+SET @sql_add_idx_redeem_keys_channel = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_keys'
+          AND INDEX_NAME = 'idx_redeem_keys_channel'
+    ) = 0,
+    'ALTER TABLE redeem_keys ADD KEY idx_redeem_keys_channel (channel)',
+    'SELECT 1'
+);
+PREPARE stmt_add_idx_redeem_keys_channel FROM @sql_add_idx_redeem_keys_channel;
+EXECUTE stmt_add_idx_redeem_keys_channel;
+DEALLOCATE PREPARE stmt_add_idx_redeem_keys_channel;
+
+SET @sql_add_redeem_logs_admin_status = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_logs'
+          AND COLUMN_NAME = 'admin_status'
+    ) = 0,
+    'ALTER TABLE redeem_logs ADD COLUMN admin_status ENUM(''pending'',''handled'',''ignored'') NOT NULL DEFAULT ''pending'' AFTER status',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_logs_admin_status FROM @sql_add_redeem_logs_admin_status;
+EXECUTE stmt_add_redeem_logs_admin_status;
+DEALLOCATE PREPARE stmt_add_redeem_logs_admin_status;
+
+SET @sql_add_redeem_logs_admin_note = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_logs'
+          AND COLUMN_NAME = 'admin_note'
+    ) = 0,
+    'ALTER TABLE redeem_logs ADD COLUMN admin_note VARCHAR(500) NOT NULL DEFAULT '''' AFTER admin_status',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_logs_admin_note FROM @sql_add_redeem_logs_admin_note;
+EXECUTE stmt_add_redeem_logs_admin_note;
+DEALLOCATE PREPARE stmt_add_redeem_logs_admin_note;
+
+SET @sql_add_redeem_logs_handled_by = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_logs'
+          AND COLUMN_NAME = 'handled_by'
+    ) = 0,
+    'ALTER TABLE redeem_logs ADD COLUMN handled_by INT UNSIGNED NULL AFTER admin_note',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_logs_handled_by FROM @sql_add_redeem_logs_handled_by;
+EXECUTE stmt_add_redeem_logs_handled_by;
+DEALLOCATE PREPARE stmt_add_redeem_logs_handled_by;
+
+SET @sql_add_redeem_logs_handled_at = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_logs'
+          AND COLUMN_NAME = 'handled_at'
+    ) = 0,
+    'ALTER TABLE redeem_logs ADD COLUMN handled_at DATETIME NULL AFTER handled_by',
+    'SELECT 1'
+);
+PREPARE stmt_add_redeem_logs_handled_at FROM @sql_add_redeem_logs_handled_at;
+EXECUTE stmt_add_redeem_logs_handled_at;
+DEALLOCATE PREPARE stmt_add_redeem_logs_handled_at;
+
+SET @sql_add_idx_redeem_logs_admin_status = IF(
+    (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'redeem_logs'
+          AND INDEX_NAME = 'idx_redeem_logs_admin_status'
+    ) = 0,
+    'ALTER TABLE redeem_logs ADD KEY idx_redeem_logs_admin_status (admin_status)',
+    'SELECT 1'
+);
+PREPARE stmt_add_idx_redeem_logs_admin_status FROM @sql_add_idx_redeem_logs_admin_status;
+EXECUTE stmt_add_idx_redeem_logs_admin_status;
+DEALLOCATE PREPARE stmt_add_idx_redeem_logs_admin_status;
+
+CREATE TABLE IF NOT EXISTS redeem_admin_logs (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    admin_id INT UNSIGNED NULL,
+    action VARCHAR(64) NOT NULL,
+    target_type VARCHAR(64) NOT NULL,
+    target_id BIGINT UNSIGNED NULL,
+    detail_json JSON NULL,
+    ip_address VARCHAR(64) NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    KEY idx_redeem_admin_logs_admin_id (admin_id),
+    KEY idx_redeem_admin_logs_action (action),
+    KEY idx_redeem_admin_logs_target (target_type, target_id),
+    KEY idx_redeem_admin_logs_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

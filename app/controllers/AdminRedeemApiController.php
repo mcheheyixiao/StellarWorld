@@ -34,7 +34,7 @@ class AdminRedeemApiController extends Controller
             $this->json([
                 'success' => false,
                 'code' => ApiCode::SERVER_ERROR,
-                'message' => '卡密分类读取失败，请先执行 redeem_v1.sql',
+                'message' => 'Failed to load categories',
             ], 500);
         }
     }
@@ -47,7 +47,7 @@ class AdminRedeemApiController extends Controller
 
         $input = $this->readInput();
         try {
-            $result = $this->redeemService->createCategory($input);
+            $result = $this->redeemService->createCategory($input, $this->currentAdminId(), $this->getClientIp());
             $this->json([
                 'success' => (bool)$result['ok'],
                 'message' => (string)$result['message'],
@@ -57,7 +57,7 @@ class AdminRedeemApiController extends Controller
             $this->json([
                 'success' => false,
                 'code' => ApiCode::SERVER_ERROR,
-                'message' => '创建分类失败',
+                'message' => 'Failed to create category',
             ], 500);
         }
     }
@@ -70,7 +70,7 @@ class AdminRedeemApiController extends Controller
 
         $input = $this->readInput();
         try {
-            $result = $this->redeemService->updateCategory((int)$id, $input);
+            $result = $this->redeemService->updateCategory((int)$id, $input, $this->currentAdminId(), $this->getClientIp());
             $this->json([
                 'success' => (bool)$result['ok'],
                 'message' => (string)$result['message'],
@@ -79,7 +79,7 @@ class AdminRedeemApiController extends Controller
             $this->json([
                 'success' => false,
                 'code' => ApiCode::SERVER_ERROR,
-                'message' => '更新分类失败',
+                'message' => 'Failed to update category',
             ], 500);
         }
     }
@@ -91,7 +91,7 @@ class AdminRedeemApiController extends Controller
         }
 
         try {
-            $result = $this->redeemService->deleteCategory((int)$id);
+            $result = $this->redeemService->deleteCategory((int)$id, $this->currentAdminId(), $this->getClientIp());
             $this->json([
                 'success' => (bool)$result['ok'],
                 'message' => (string)$result['message'],
@@ -100,7 +100,7 @@ class AdminRedeemApiController extends Controller
             $this->json([
                 'success' => false,
                 'code' => ApiCode::SERVER_ERROR,
-                'message' => '删除分类失败',
+                'message' => 'Failed to delete category',
             ], 500);
         }
     }
@@ -113,7 +113,13 @@ class AdminRedeemApiController extends Controller
         $filters = [
             'status' => (string)($_GET['status'] ?? ''),
             'category_id' => (int)($_GET['category_id'] ?? 0),
+            'batch_id' => (int)($_GET['batch_id'] ?? 0),
+            'channel' => (string)($_GET['channel'] ?? ''),
             'q' => (string)($_GET['q'] ?? ''),
+            'created_from' => (string)($_GET['created_from'] ?? ''),
+            'created_to' => (string)($_GET['created_to'] ?? ''),
+            'expires_from' => (string)($_GET['expires_from'] ?? ''),
+            'expires_to' => (string)($_GET['expires_to'] ?? ''),
         ];
 
         try {
@@ -125,7 +131,38 @@ class AdminRedeemApiController extends Controller
         } catch (\Throwable $e) {
             $this->json([
                 'success' => false,
-                'message' => '卡密列表读取失败',
+                'message' => 'Failed to load keys',
+            ], 500);
+        }
+    }
+
+    public function exportKeys(): void
+    {
+        $filters = [
+            'status' => (string)($_GET['status'] ?? ''),
+            'category_id' => (int)($_GET['category_id'] ?? 0),
+            'batch_id' => (int)($_GET['batch_id'] ?? 0),
+            'channel' => (string)($_GET['channel'] ?? ''),
+            'q' => (string)($_GET['q'] ?? ''),
+            'created_from' => (string)($_GET['created_from'] ?? ''),
+            'created_to' => (string)($_GET['created_to'] ?? ''),
+            'expires_from' => (string)($_GET['expires_from'] ?? ''),
+            'expires_to' => (string)($_GET['expires_to'] ?? ''),
+        ];
+
+        try {
+            $result = $this->redeemService->exportKeysCsv($filters, $this->currentAdminId(), $this->getClientIp());
+            $this->json([
+                'success' => (bool)$result['ok'],
+                'message' => (string)$result['message'],
+                'csv' => (string)($result['csv'] ?? ''),
+                'filename' => (string)($result['filename'] ?? ('redeem_keys_export_' . date('Ymd_His') . '.csv')),
+                'count' => (int)($result['count'] ?? 0),
+            ], (int)$result['status']);
+        } catch (\Throwable $e) {
+            $this->json([
+                'success' => false,
+                'message' => 'Failed to export keys',
             ], 500);
         }
     }
@@ -137,10 +174,8 @@ class AdminRedeemApiController extends Controller
         }
 
         $input = $this->readInput();
-        $adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
-
         try {
-            $result = $this->redeemService->batchGenerateKeys($input, $adminId);
+            $result = $this->redeemService->batchGenerateKeys($input, $this->currentAdminId(), $this->getClientIp());
             $payload = [
                 'success' => (bool)$result['ok'],
                 'message' => (string)$result['message'],
@@ -152,11 +187,14 @@ class AdminRedeemApiController extends Controller
                 $payload['csv'] = (string)$result['csv'];
                 $payload['filename'] = 'redeem_keys_' . date('Ymd_His') . '.csv';
             }
+            if (isset($result['batch']) && is_array($result['batch'])) {
+                $payload['batch'] = $result['batch'];
+            }
             $this->json($payload, (int)$result['status']);
         } catch (\Throwable $e) {
             $this->json([
                 'success' => false,
-                'message' => '批量生成失败',
+                'message' => 'Failed to batch generate keys',
             ], 500);
         }
     }
@@ -168,7 +206,7 @@ class AdminRedeemApiController extends Controller
         }
 
         try {
-            $result = $this->redeemService->revokeKey((int)$id);
+            $result = $this->redeemService->revokeKey((int)$id, $this->currentAdminId(), $this->getClientIp());
             $this->json([
                 'success' => (bool)$result['ok'],
                 'message' => (string)$result['message'],
@@ -176,7 +214,7 @@ class AdminRedeemApiController extends Controller
         } catch (\Throwable $e) {
             $this->json([
                 'success' => false,
-                'message' => '吊销失败',
+                'message' => 'Failed to revoke key',
             ], 500);
         }
     }
@@ -196,7 +234,7 @@ class AdminRedeemApiController extends Controller
         }
 
         try {
-            $result = $this->redeemService->revokeKeys($ids);
+            $result = $this->redeemService->revokeKeys($ids, $this->currentAdminId(), $this->getClientIp());
             $this->json([
                 'success' => (bool)$result['ok'],
                 'message' => (string)$result['message'],
@@ -205,7 +243,7 @@ class AdminRedeemApiController extends Controller
         } catch (\Throwable $e) {
             $this->json([
                 'success' => false,
-                'message' => '批量吊销失败',
+                'message' => 'Failed to batch revoke keys',
             ], 500);
         }
     }
@@ -225,7 +263,7 @@ class AdminRedeemApiController extends Controller
         }
 
         try {
-            $result = $this->redeemService->deleteKeys($ids);
+            $result = $this->redeemService->deleteKeys($ids, $this->currentAdminId(), $this->getClientIp());
             $this->json([
                 'success' => (bool)$result['ok'],
                 'message' => (string)$result['message'],
@@ -234,7 +272,80 @@ class AdminRedeemApiController extends Controller
         } catch (\Throwable $e) {
             $this->json([
                 'success' => false,
-                'message' => '批量删除失败',
+                'message' => 'Failed to batch soft-delete keys',
+            ], 500);
+        }
+    }
+
+    public function batches(): void
+    {
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = max(1, min(100, (int)($_GET['per_page'] ?? 20)));
+        $filters = [
+            'category_id' => (int)($_GET['category_id'] ?? 0),
+            'channel' => (string)($_GET['channel'] ?? ''),
+            'q' => (string)($_GET['q'] ?? ''),
+            'created_from' => (string)($_GET['created_from'] ?? ''),
+            'created_to' => (string)($_GET['created_to'] ?? ''),
+        ];
+
+        try {
+            $result = $this->redeemService->listBatches($filters, $page, $perPage);
+            $this->json([
+                'success' => true,
+                'data' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            $this->json([
+                'success' => false,
+                'message' => 'Failed to load batches',
+            ], 500);
+        }
+    }
+
+    public function batchDetail(string $id): void
+    {
+        try {
+            $batch = $this->redeemService->findBatchById((int)$id);
+            if ($batch === null) {
+                $this->json([
+                    'success' => false,
+                    'message' => 'Batch not found',
+                ], 404);
+                return;
+            }
+
+            $this->json([
+                'success' => true,
+                'data' => $batch,
+            ]);
+        } catch (\Throwable $e) {
+            $this->json([
+                'success' => false,
+                'message' => 'Failed to load batch detail',
+            ], 500);
+        }
+    }
+
+    public function batchStats(string $id): void
+    {
+        try {
+            $stats = $this->redeemService->statsByBatch((int)$id);
+            if ($stats === null) {
+                $this->json([
+                    'success' => false,
+                    'message' => 'Batch not found',
+                ], 404);
+                return;
+            }
+            $this->json([
+                'success' => true,
+                'data' => $stats,
+            ]);
+        } catch (\Throwable $e) {
+            $this->json([
+                'success' => false,
+                'message' => 'Failed to load batch stats',
             ], 500);
         }
     }
@@ -247,7 +358,13 @@ class AdminRedeemApiController extends Controller
         $filters = [
             'status' => (string)($_GET['status'] ?? ''),
             'category_id' => (int)($_GET['category_id'] ?? 0),
+            'admin_status' => (string)($_GET['admin_status'] ?? ''),
+            'server_id' => (string)($_GET['server_id'] ?? ''),
+            'player_uuid' => (string)($_GET['player_uuid'] ?? ''),
+            'player_name' => (string)($_GET['player_name'] ?? ''),
             'q' => (string)($_GET['q'] ?? ''),
+            'created_from' => (string)($_GET['created_from'] ?? ''),
+            'created_to' => (string)($_GET['created_to'] ?? ''),
         ];
 
         try {
@@ -259,7 +376,56 @@ class AdminRedeemApiController extends Controller
         } catch (\Throwable $e) {
             $this->json([
                 'success' => false,
-                'message' => '日志读取失败',
+                'message' => 'Failed to load logs',
+            ], 500);
+        }
+    }
+
+    public function updateLogAdminStatus(string $id): void
+    {
+        if (!$this->validateApiCsrf()) {
+            return;
+        }
+
+        $input = $this->readInput();
+        try {
+            $result = $this->redeemService->updateLogAdminStatus((int)$id, $input, $this->currentAdminId(), $this->getClientIp());
+            $this->json([
+                'success' => (bool)$result['ok'],
+                'message' => (string)$result['message'],
+                'data' => $result['data'] ?? [],
+            ], (int)$result['status']);
+        } catch (\Throwable $e) {
+            $this->json([
+                'success' => false,
+                'message' => 'Failed to update admin status',
+            ], 500);
+        }
+    }
+
+    public function adminLogs(): void
+    {
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = max(1, min(100, (int)($_GET['per_page'] ?? 20)));
+
+        $filters = [
+            'action' => (string)($_GET['action'] ?? ''),
+            'target_type' => (string)($_GET['target_type'] ?? ''),
+            'q' => (string)($_GET['q'] ?? ''),
+            'created_from' => (string)($_GET['created_from'] ?? ''),
+            'created_to' => (string)($_GET['created_to'] ?? ''),
+        ];
+
+        try {
+            $result = $this->redeemService->listAdminLogs($filters, $page, $perPage);
+            $this->json([
+                'success' => true,
+                'data' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            $this->json([
+                'success' => false,
+                'message' => 'Failed to load admin logs',
             ], 500);
         }
     }
@@ -274,7 +440,7 @@ class AdminRedeemApiController extends Controller
         } catch (\Throwable $e) {
             $this->json([
                 'success' => false,
-                'message' => '统计读取失败',
+                'message' => 'Failed to load publish stats',
             ], 500);
         }
     }
@@ -330,6 +496,12 @@ class AdminRedeemApiController extends Controller
         return true;
     }
 
+    private function currentAdminId(): ?int
+    {
+        $id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+        return $id > 0 ? $id : null;
+    }
+
     /**
      * @param mixed $raw
      * @return array<int,int>
@@ -361,14 +533,14 @@ class AdminRedeemApiController extends Controller
         if ($count === 0) {
             return [
                 'success' => false,
-                'message' => '请选择要操作的卡密',
+                'message' => 'Please select keys to operate',
             ];
         }
 
         if ($count > 500) {
             return [
                 'success' => false,
-                'message' => '单次最多操作 500 条卡密',
+                'message' => 'A maximum of 500 keys can be processed per request',
             ];
         }
 

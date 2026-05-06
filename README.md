@@ -257,7 +257,7 @@ REALTIME_TICKET_VERIFY_TOKEN=replace-with-internal-service-token
 REALTIME_TICKET_VERIFY_ALLOW_EMPTY_TOKEN=0
 ```
 
-## Redeem V1 (Card Code Exchange)
+## Redeem V2 (Operations Enhancement on top of V1)
 
 ### Manual SQL Setup
 
@@ -273,7 +273,7 @@ mysql -u <user> -p <database> < database.sql
 - `/admin?tab=redeem`
 - `/admin/redeem` (redirects to the tab above)
 
-### New Admin APIs
+### Admin APIs (V1 + V2)
 
 - `GET /api/admin/redeem/categories`
 - `POST /api/admin/redeem/categories`
@@ -281,13 +281,20 @@ mysql -u <user> -p <database> < database.sql
 - `DELETE /api/admin/redeem/categories/{id}`
 
 - `GET /api/admin/redeem/keys`
+- `GET /api/admin/redeem/keys/export` (V2: export current filters to CSV payload)
 - `POST /api/admin/redeem/keys/batch`
 - `PATCH /api/admin/redeem/keys/{id}/revoke`
 - `POST /api/admin/redeem/keys/revoke-batch`
 - `POST /api/admin/redeem/keys/delete-batch`
   - `delete-batch` is a soft delete only (`redeem_keys.status` -> `deleted`), not a physical row delete.
 
+- `GET /api/admin/redeem/batches` (V2)
+- `GET /api/admin/redeem/batches/{id}` (V2)
+- `GET /api/admin/redeem/batches/{id}/stats` (V2)
+
 - `GET /api/admin/redeem/logs`
+- `PATCH /api/admin/redeem/logs/{id}/admin-status` (V2: `pending|handled|ignored`)
+- `GET /api/admin/redeem/admin-logs` (V2)
 - `GET /api/admin/redeem/stats/publish`
 
 ### New Minecraft Plugin APIs
@@ -333,9 +340,9 @@ Server checks:
 - timestamp window validation
 - constant-time signature comparison
 
-### Realtime Event Hook (Lightweight)
+### Realtime Event Hook (Lightweight, best-effort)
 
-Redeem V1 emits lightweight event calls through `Core\RealtimeNotifier::emit(...)`:
+Redeem V2 emits lightweight event calls through `Core\RealtimeNotifier::emit(...)`:
 
 - `redeem.key.generated`
 - `redeem.key.revoked`
@@ -343,21 +350,35 @@ Redeem V1 emits lightweight event calls through `Core\RealtimeNotifier::emit(...
 - `redeem.claim.failed`
 - `redeem.stats.updated`
 - `redeem.plugin.heartbeat` (from `POST /api/minecraft/redeem/heartbeat`)
+- `redeem.batch.generated` (V2)
+- `redeem.key.exported` (V2)
+- `redeem.log.admin_status_updated` (V2)
+- `redeem.admin_log.created` (V2)
 
 By default this is a no-op unless you provide a bridge function like `stellar_realtime_emit`
 or configure `REALTIME_INTERNAL_EVENT_URL` + `REALTIME_INTERNAL_SECRET`.
 
 Realtime forwarding is best-effort and never blocks the main redeem flow.
+V2 event payloads avoid secret/pepper/plain-code leakage and do not include CSV file contents.
 
-### Known V1 Limits
+### V2 Added Operations Features
+
+- batch management (`redeem_batches`)
+- channel/source field on keys (`redeem_keys.channel`)
+- admin operation logs (`redeem_admin_logs`)
+- failed redeem manual handling (`redeem_logs.admin_status/admin_note/handled_by/handled_at`)
+- key CSV export for current filters
+- enhanced filters for keys/logs
+- batch statistics
+
+### V2 Still Not Included
 
 - no offline reward queue
 - no automatic command rollback on plugin fail callback
-- failed records do not automatically roll back `used_count` in V1
-- no placeholder expansion service on website side
+- no PlaceholderAPI expansion service on website side
 - no multi-server rules matrix
 - no player binding restrictions beyond plugin payload checks
-- `plain_code` is stored for admin export convenience in V1
+- failed records do not automatically roll back `used_count`
 
 ### Rollback
 
@@ -368,4 +389,6 @@ Realtime forwarding is best-effort and never blocks the main redeem flow.
    - `DROP TABLE redeem_logs;`
    - `DROP TABLE redeem_keys;`
    - `DROP TABLE redeem_categories;`
+   - `DROP TABLE redeem_batches;`
+   - `DROP TABLE redeem_admin_logs;`
 5. remove redeem env vars from deployment config

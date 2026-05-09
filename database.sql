@@ -1207,3 +1207,52 @@ SET @sql_add_idx_redeem_logs_website_user_id = IF(
 PREPARE stmt_add_idx_redeem_logs_website_user_id FROM @sql_add_idx_redeem_logs_website_user_id;
 EXECUTE stmt_add_idx_redeem_logs_website_user_id;
 DEALLOCATE PREPARE stmt_add_idx_redeem_logs_website_user_id;
+
+-- -----------------------------------------------------------------------------
+-- LiteSignIn bridge tables (website cache + audit). Legacy check-in tables are
+-- intentionally kept for backward data compatibility and marked as deprecated.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `stellar_signin_requests` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `request_id` VARCHAR(80) NOT NULL,
+  `website_user_id` INT UNSIGNED NOT NULL,
+  `player_uuid` VARCHAR(64) NOT NULL,
+  `player_name` VARCHAR(64) NOT NULL,
+  `server_id` VARCHAR(64) NOT NULL,
+  `source` VARCHAR(32) NOT NULL DEFAULT 'web',
+  `status` VARCHAR(32) NOT NULL DEFAULT 'requested',
+  `message` VARCHAR(255) NOT NULL DEFAULT '',
+  `result_payload_json` LONGTEXT NULL,
+  `ip` VARCHAR(64) NULL,
+  `user_agent` VARCHAR(255) NULL,
+  `created_at` DATETIME NOT NULL,
+  `updated_at` DATETIME NOT NULL,
+  `completed_at` DATETIME NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_stellar_signin_requests_request_id` (`request_id`),
+  KEY `idx_stellar_signin_requests_user_created` (`website_user_id`, `created_at`),
+  KEY `idx_stellar_signin_requests_status_created` (`status`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `stellar_signin_daily_cache` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `request_id` VARCHAR(80) NULL,
+  `player_uuid` VARCHAR(64) NOT NULL,
+  `player_name` VARCHAR(64) NOT NULL,
+  `website_user_id` INT UNSIGNED NOT NULL,
+  `server_id` VARCHAR(64) NOT NULL,
+  `sign_date` DATE NOT NULL,
+  `signed_today` TINYINT(1) NOT NULL DEFAULT 0,
+  `continuous` INT UNSIGNED NOT NULL DEFAULT 0,
+  `total` INT UNSIGNED NOT NULL DEFAULT 0,
+  `last_signin_at` DATETIME NULL,
+  `last_source` VARCHAR(32) NOT NULL DEFAULT 'litesignin_cache',
+  `raw_payload_json` LONGTEXT NULL,
+  `created_at` DATETIME NOT NULL,
+  `updated_at` DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_stellar_signin_daily_cache_identity` (`player_uuid`, `server_id`, `sign_date`),
+  KEY `idx_stellar_signin_daily_cache_user` (`website_user_id`),
+  KEY `idx_stellar_signin_daily_cache_request_id` (`request_id`),
+  KEY `idx_stellar_signin_daily_cache_updated_at` (`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -152,14 +152,15 @@ class PageController extends Controller
                 // Public timeline only keeps whitelisted public events.
                 $stmt = $db->prepare('
                     SELECT
-                        created_at AS event_time,
+                        COALESCE(last_signin_at, CONCAT(sign_date, " 00:00:00")) AS event_time,
                         "checkin" AS event_type,
-                        checkin_date AS checkin_date,
+                        sign_date AS checkin_date,
                         NULL AS action,
                         NULL AS details_json
-                    FROM user_checkins
-                    WHERE user_id = :user_id
-                    ORDER BY event_time DESC
+                    FROM stellar_signin_daily_cache
+                    WHERE website_user_id = :user_id
+                      AND signed_today = 1
+                    ORDER BY sign_date DESC, updated_at DESC
                     LIMIT 10
                 ');
                 $stmt->execute([':user_id' => $userIdInt]);

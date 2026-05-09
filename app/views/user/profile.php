@@ -1408,6 +1408,7 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                         id="panel-player"
                         data-profile-panel
                         data-checkin-csrf="<?= htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                        data-checkin-user-id="<?= (int)($_SESSION['user_id'] ?? 0) ?>"
                         class="rounded-xl border border-slate-700/80 bg-slate-800/60 p-6"
                     >
                         <h3 class="text-lg font-semibold text-slate-100">玩家签到系统</h3>
@@ -1775,6 +1776,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const csrfToken = String(root.getAttribute('data-checkin-csrf') || '');
+    const userId = Number(root.getAttribute('data-checkin-user-id') || '0');
+    const isLoggedIn = Number.isFinite(userId) && userId > 0;
     const today = new Date();
     let historyItems = [];
 
@@ -1796,13 +1799,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return payload;
     };
 
-    const escapeHtml = (value) => String(value == null ? '' : value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-
     const setButtonState = (mode, text, disabled) => {
         actionBtn.dataset.state = mode;
         actionBtn.disabled = !!disabled;
@@ -1811,58 +1807,31 @@ document.addEventListener('DOMContentLoaded', () => {
         actionBtn.textContent = text;
     };
 
-    const createRewardNode = (icon, text) => {
-        const item = document.createElement('div');
-        item.className = 'checkin-reward-item';
-        item.innerHTML = '<span class="checkin-reward-icon" aria-hidden="true">' + icon + '</span><span class="checkin-reward-text">' + escapeHtml(text) + '</span>';
-        return item;
-    };
+    const renderStatusRows = (status) => {
+        const bound = !!status.bound;
+        const playerName = String(status.playerName || '--');
+        const serverOnline = !!status.serverOnline;
+        const pluginOnline = !!status.pluginOnline;
+        const playerOnline = !!status.playerOnline;
 
-    const renderRewards = (reward, isBound) => {
         rewardList.innerHTML = '';
+        const rows = [
+            { icon: '🔒', text: bound ? ('绑定状态：已绑定 ' + playerName) : '绑定状态：未绑定游戏账号' },
+            { icon: '🌐', text: serverOnline ? '服务器状态：在线' : '服务器状态：离线' },
+            { icon: '⚙️', text: pluginOnline ? '插件状态：在线' : '插件状态：离线' },
+            { icon: '🧭', text: bound ? (playerOnline ? '玩家在线：在线' : '玩家在线：离线') : '玩家在线：未知' }
+        ];
 
-        if (!isBound) {
-            rewardList.appendChild(createRewardNode('🔒', '绑定 MC 账号后可预览奖励'));
-            return;
-        }
-
-        if (!reward || typeof reward !== 'object') {
-            rewardList.appendChild(createRewardNode('🎁', '当前没有可发放的奖励规则'));
-            return;
-        }
-
-        let hasAny = false;
-
-        if (Number(reward.coins || 0) > 0) {
-            rewardList.appendChild(createRewardNode('🪙', '金币 x' + Number(reward.coins || 0)));
-            hasAny = true;
-        }
-
-        if (Number(reward.points || 0) > 0) {
-            rewardList.appendChild(createRewardNode('⭐', '积分 x' + Number(reward.points || 0)));
-            hasAny = true;
-        }
-
-        if (Array.isArray(reward.items)) {
-            reward.items.forEach((item) => {
-                const itemId = String((item && (item.id || item.name)) || '').trim();
-                if (!itemId) {
-                    return;
-                }
-                const amount = Math.max(1, Number((item && item.amount) || 1));
-                rewardList.appendChild(createRewardNode('📦', itemId + ' x' + amount));
-                hasAny = true;
-            });
-        }
-
-        if (Array.isArray(reward.commands) && reward.commands.length > 0) {
-            rewardList.appendChild(createRewardNode('⚙️', '命令 x' + reward.commands.length));
-            hasAny = true;
-        }
-
-        if (!hasAny) {
-            rewardList.appendChild(createRewardNode('🎁', '今日没有额外奖励'));
-        }
+        rows.forEach((row) => {
+            const item = document.createElement('div');
+            item.className = 'checkin-reward-item';
+            item.innerHTML = '<span class="checkin-reward-icon" aria-hidden="true"></span><span class="checkin-reward-text"></span>';
+            const icon = item.querySelector('.checkin-reward-icon');
+            const text = item.querySelector('.checkin-reward-text');
+            if (icon) icon.textContent = row.icon;
+            if (text) text.textContent = row.text;
+            rewardList.appendChild(item);
+        });
     };
 
     const renderCalendar = () => {
@@ -1873,7 +1842,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const mondayIndex = (firstDay.getDay() + 6) % 7;
         const signedDays = new Set(
             historyItems
-                .map((item) => String(item.checkin_date || ''))
+                .map((item) => String(item.signDate || ''))
                 .filter((date) => date.startsWith(String(year) + '-' + String(month + 1).padStart(2, '0') + '-'))
                 .map((date) => Number(date.slice(-2)))
                 .filter((day) => Number.isFinite(day) && day > 0)
@@ -1902,40 +1871,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 node.classList.add('is-missed');
             }
 
-            if (isSigned && isToday) {
-                node.classList.add('is-today');
-            }
-
             node.textContent = String(day);
             calendarGrid.appendChild(node);
         }
     };
 
-    const rewardSummaryText = (reward) => {
-        if (!reward || typeof reward !== 'object') {
-            return '无奖励';
-        }
-
-        const parts = [];
-        if (Number(reward.coins || 0) > 0) {
-            parts.push('金币 +' + Number(reward.coins || 0));
-        }
-        if (Number(reward.points || 0) > 0) {
-            parts.push('积分 +' + Number(reward.points || 0));
-        }
-        if (Array.isArray(reward.items) && reward.items.length > 0) {
-            parts.push('物品 x' + reward.items.length);
-        }
-        if (Array.isArray(reward.commands) && reward.commands.length > 0) {
-            parts.push('命令 x' + reward.commands.length);
-        }
-        return parts.length > 0 ? parts.join(' / ') : '无奖励';
-    };
-
     const renderHistory = () => {
         historyList.querySelectorAll('.checkin-history-item').forEach((node) => node.remove());
 
-        if (historyItems.length === 0) {
+        if (!Array.isArray(historyItems) || historyItems.length === 0) {
             historyEmpty.hidden = false;
             historyEmpty.textContent = '暂无签到记录';
             return;
@@ -1945,33 +1889,76 @@ document.addEventListener('DOMContentLoaded', () => {
         historyItems.forEach((item) => {
             const row = document.createElement('div');
             row.className = 'checkin-history-item';
-            row.textContent = String(item.checkin_date || '--') + ' | 连续 ' + Number(item.streak_days || 0) + ' 天 | ' + rewardSummaryText(item.reward);
+            const signDate = String(item.signDate || '--');
+            const continuous = Number(item.continuous || 0);
+            const total = Number(item.total || 0);
+            row.textContent = signDate + ' | 连续 ' + continuous + ' 天 | 累计 ' + total + ' 次';
             historyList.appendChild(row);
         });
     };
 
     const applyStatus = (status) => {
-        const isBound = !!status.bound_mc;
-        const checkedIn = !!status.checked_in_today;
-        const deliveryStatus = status.latest_delivery_status ? String(status.latest_delivery_status) : '--';
+        const bound = !!status.bound;
+        const signedToday = !!status.signedToday;
+        const serverOnline = !!status.serverOnline;
+        const pluginOnline = !!status.pluginOnline;
+        const playerOnline = !!status.playerOnline;
+        const accountStatus = String(status.accountStatus || 'guest');
+        const continuous = Math.max(0, Number(status.continuous || 0));
+        const total = Math.max(0, Number(status.total || 0));
+        const lastSignInAt = String(status.lastSignInAt || '--');
+        const source = String(status.source || 'litesignin_cache');
 
-        statusText.textContent = checkedIn ? '今日状态：已签到' : '今日状态：未签到';
-        streakText.textContent = String(Number(status.streak_days || 0)) + ' 天';
-        monthCountText.textContent = String(Number(status.month_days || 0)) + ' 次';
-        summaryTip.textContent = '累计签到 ' + String(Number(status.total_days || 0)) + ' 天，最近发放状态 ' + deliveryStatus;
+        statusText.textContent = signedToday ? '今日状态：已签到' : '今日状态：未签到';
+        streakText.textContent = String(continuous) + ' 天';
+        monthCountText.textContent = String(total) + ' 次';
+        summaryTip.textContent = '最近签到：' + lastSignInAt + ' | 数据源：' + source;
+        renderStatusRows(status);
 
-        if (!isBound) {
-            bindHint.textContent = '请先在上一个标签页绑定有效的 MC 用户名和 UUID。';
-            setButtonState('idle', '先绑定 MC 账号', true);
-        } else if (checkedIn) {
-            bindHint.textContent = '奖励已进入发放队列，等待插件拉取并 ACK。';
-            setButtonState('done', '今日已签到', true);
-        } else {
-            bindHint.textContent = '会校验今日是否已签到，并创建一条 pending 奖励发放任务。';
-            setButtonState('idle', '立即签到', false);
+        if (!isLoggedIn) {
+            bindHint.textContent = '请先登录后再进行签到。';
+            setButtonState('idle', '请先登录', true);
+            return;
         }
 
-        renderRewards(status.today_reward || null, isBound);
+        if (accountStatus !== 'active') {
+            bindHint.textContent = '账号状态异常，请联系管理员。';
+            setButtonState('idle', '账号状态异常', true);
+            return;
+        }
+
+        if (!bound) {
+            bindHint.textContent = '请先绑定游戏账号';
+            setButtonState('idle', '请先绑定游戏账号', true);
+            return;
+        }
+
+        if (!serverOnline) {
+            bindHint.textContent = '服务器暂不可用';
+            setButtonState('idle', '服务器暂不可用', true);
+            return;
+        }
+
+        if (!pluginOnline) {
+            bindHint.textContent = '签到服务暂不可用';
+            setButtonState('idle', '签到服务暂不可用', true);
+            return;
+        }
+
+        if (!playerOnline) {
+            bindHint.textContent = '请先进入服务器后再签到';
+            setButtonState('idle', '请先进入服务器后再签到', true);
+            return;
+        }
+
+        if (signedToday) {
+            bindHint.textContent = '今日契约已完成，愿繁星庇佑你的旅途。';
+            setButtonState('done', '今日已签到', true);
+            return;
+        }
+
+        bindHint.textContent = '晨星已点亮，点击按钮领取今日签到。';
+        setButtonState('idle', '立即签到', false);
     };
 
     const loadCheckinData = async () => {
@@ -1992,7 +1979,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const historyPayload = await parseJson(historyRes);
-        historyItems = historyPayload.success ? (unwrap(historyPayload).items || []) : [];
+        const historyData = unwrap(historyPayload);
+        historyItems = historyPayload.success && Array.isArray(historyData.items) ? historyData.items : [];
 
         applyStatus(unwrap(statusPayload));
         renderCalendar();
@@ -2004,7 +1992,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        setButtonState('idle', '签到中...', true);
+        setButtonState('idle', '请求处理中...', true);
         try {
             const formData = new FormData();
             formData.append('csrf_token', csrfToken);
@@ -2023,14 +2011,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             await loadCheckinData();
-            alert(payload.message || '签到成功');
+            alert(payload.message || '签到成功，愿繁星庇佑你的旅途');
         } catch (error) {
-            console.error('Check-in request failed', error);
             alert(error instanceof Error ? error.message : '签到失败');
             try {
                 await loadCheckinData();
             } catch (reloadError) {
-                console.error('Reload check-in state failed', reloadError);
             }
         }
     });
@@ -2042,11 +2028,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     loadCheckinData().catch((error) => {
-        console.error('Load check-in state failed', error);
         statusText.textContent = '今日状态：加载失败';
         summaryTip.textContent = '签到状态读取失败，请稍后重试。';
         bindHint.textContent = error instanceof Error ? error.message : '加载失败';
-        renderRewards(null, false);
+        renderStatusRows({});
         renderCalendar();
         renderHistory();
     });

@@ -1781,9 +1781,6 @@ function editTeamMember(id, username, role) {
     var map = {
         dashboard: 'tab-dashboard',
         realtime: 'tab-realtime',
-        'checkin-rewards': 'tab-checkin-rewards',
-        'checkin-logs': 'tab-checkin-logs',
-        'checkin-stats': 'tab-checkin-stats',
         redeem: 'tab-redeem',
         players: 'tab-players',
         users: 'tab-players',

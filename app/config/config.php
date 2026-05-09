@@ -96,6 +96,15 @@ define('REDEEM_PLUGIN_TIME_WINDOW_SECONDS', max(60, (int)(getenv('REDEEM_PLUGIN_
 define('REALTIME_INTERNAL_EVENT_URL', getenv('REALTIME_INTERNAL_EVENT_URL') !== false ? trim((string)getenv('REALTIME_INTERNAL_EVENT_URL')) : '');
 define('REALTIME_INTERNAL_SECRET', getenv('REALTIME_INTERNAL_SECRET') !== false ? trim((string)getenv('REALTIME_INTERNAL_SECRET')) : '');
 define('REALTIME_INTERNAL_TIMEOUT_MS', max(100, (int)(getenv('REALTIME_INTERNAL_TIMEOUT_MS') ?: 800)));
+$_realtimeInternalUrl = getenv('REALTIME_INTERNAL_URL') !== false ? trim((string)getenv('REALTIME_INTERNAL_URL')) : '';
+if ($_realtimeInternalUrl === '') {
+    $_realtimeInternalUrl = 'http://127.0.0.1:3001';
+}
+define('REALTIME_INTERNAL_URL', $_realtimeInternalUrl);
+unset($_realtimeInternalUrl);
+define('SIGNIN_SERVER_ID', getenv('SIGNIN_SERVER_ID') !== false ? trim((string)getenv('SIGNIN_SERVER_ID')) : 'survival-1');
+define('SIGNIN_REQUIRE_PLAYER_ONLINE', filter_var((string)(getenv('SIGNIN_REQUIRE_PLAYER_ONLINE') ?: '1'), FILTER_VALIDATE_BOOLEAN));
+define('SIGNIN_REQUEST_TIMEOUT_MS', max(500, (int)(getenv('SIGNIN_REQUEST_TIMEOUT_MS') ?: 5000)));
 
 $_skinProxyAllowedHostsRaw = trim((string)(getenv('SKIN_PROXY_ALLOWED_HOSTS') ?: 'textures.minecraft.net,sessionserver.mojang.com'));
 $_skinProxyAllowedHosts = [];

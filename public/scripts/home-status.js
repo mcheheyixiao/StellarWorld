@@ -294,6 +294,85 @@
                 .split('\n');
         }
 
+        function firstDefinedValue(node, keys) {
+            if (!node || typeof node !== 'object' || !Array.isArray(keys)) {
+                return undefined;
+            }
+
+            for (var i = 0; i < keys.length; i += 1) {
+                var key = keys[i];
+                if (Object.prototype.hasOwnProperty.call(node, key) && node[key] !== undefined && node[key] !== null) {
+                    return node[key];
+                }
+            }
+
+            return undefined;
+        }
+
+        function normalizePlayerCount(value) {
+            if (value === undefined || value === null || value === '') {
+                return null;
+            }
+
+            var parsed = Number(value);
+            if (!Number.isFinite(parsed)) {
+                return null;
+            }
+
+            return Math.max(0, Math.floor(parsed));
+        }
+
+        function normalizePlayersMaxValue(value) {
+            if (value === undefined || value === null) {
+                return null;
+            }
+
+            if (typeof value === 'string') {
+                var text = value.trim();
+                if (!text) {
+                    return null;
+                }
+
+                var numericText = normalizePlayerCount(text);
+                return numericText !== null ? numericText : text;
+            }
+
+            var parsed = normalizePlayerCount(value);
+            return parsed !== null ? parsed : null;
+        }
+
+        function applyMotdPlaceholders(textValue, context) {
+            var text = String(textValue == null ? '' : textValue);
+            if (!text) {
+                return '';
+            }
+
+            var onlinePlayers = normalizePlayerCount(context && context.onlinePlayers);
+            var maxPlayers = normalizePlayersMaxValue(context && context.maxPlayers);
+            var replacements = {
+                '<online>': String(onlinePlayers !== null ? onlinePlayers : 0),
+                '<players_online>': String(onlinePlayers !== null ? onlinePlayers : 0),
+                '%online%': String(onlinePlayers !== null ? onlinePlayers : 0),
+                '%players_online%': String(onlinePlayers !== null ? onlinePlayers : 0),
+                '{online}': String(onlinePlayers !== null ? onlinePlayers : 0),
+                '{players_online}': String(onlinePlayers !== null ? onlinePlayers : 0),
+                '<max>': String(maxPlayers !== null ? maxPlayers : '?'),
+                '<players_max>': String(maxPlayers !== null ? maxPlayers : '?'),
+                '%max%': String(maxPlayers !== null ? maxPlayers : '?'),
+                '%players_max%': String(maxPlayers !== null ? maxPlayers : '?'),
+                '{max}': String(maxPlayers !== null ? maxPlayers : '?'),
+                '{players_max}': String(maxPlayers !== null ? maxPlayers : '?')
+            };
+
+            Object.keys(replacements).forEach(function (placeholder) {
+                if (text.indexOf(placeholder) !== -1) {
+                    text = text.split(placeholder).join(replacements[placeholder]);
+                }
+            });
+
+            return text;
+        }
+
         function applyMiniMessageTag(rawTag, state) {
             var content = String(rawTag || '').slice(1, -1).trim();
             if (!content) {
@@ -515,8 +594,8 @@
             return output;
         }
 
-        function renderMiniMessageLine(textLine) {
-            var segments = parseMiniMessageSegments(textLine);
+        function renderMiniMessageLine(textLine, context) {
+            var segments = parseMiniMessageSegments(applyMotdPlaceholders(textLine, context));
             var html = '';
 
             segments.forEach(function (segment) {
@@ -656,7 +735,7 @@
             }).join('');
         }
 
-        function renderMotdHtml(motdNode) {
+        function renderMotdHtml(motdNode, context) {
             var motd = normalizeMotdPayload(motdNode);
             if (!motd) {
                 return '<div class="motd-line">--</div>';
@@ -668,27 +747,27 @@
             if (hasMiniMessageLines) {
                 return motd.lines.map(function (line) {
                     var mini = String(line.miniMessage || '').trim();
-                    var fallbackText = String(line.clean || line.plain || '').trim();
-                    var rendered = mini ? renderMiniMessageLine(mini) : escapeHtml(fallbackText);
+                    var fallbackText = applyMotdPlaceholders(String(line.clean || line.plain || '').trim(), context);
+                    var rendered = mini ? renderMiniMessageLine(mini, context) : escapeHtml(fallbackText);
                     return '<div class="motd-line">' + rendered + '</div>';
                 }).join('');
             }
 
             if (motd.miniMessage) {
-                var miniLines = splitMotdLines(motd.miniMessage);
+                var miniLines = splitMotdLines(applyMotdPlaceholders(motd.miniMessage, context));
                 return miniLines.map(function (lineText) {
-                    return '<div class="motd-line">' + renderMiniMessageLine(lineText) + '</div>';
+                    return '<div class="motd-line">' + renderMiniMessageLine(lineText, context) + '</div>';
                 }).join('');
             }
 
             if (motd.html) {
-                var sanitizedHtml = sanitizeMotdHtml(motd.html);
+                var sanitizedHtml = sanitizeMotdHtml(applyMotdPlaceholders(motd.html, context));
                 if (sanitizedHtml) {
                     return sanitizedHtml;
                 }
             }
 
-            var textFallback = String(motd.clean || motd.plain || '').trim();
+            var textFallback = applyMotdPlaceholders(String(motd.clean || motd.plain || '').trim(), context);
             if (!textFallback) {
                 return '<div class="motd-line">--</div>';
             }
@@ -714,6 +793,177 @@
                 var name = String(player.name_clean || '').trim();
                 return name && name !== 'Anonymous Player' && name.toLowerCase().indexOf('anonymous') === -1;
             });
+        }
+
+        function normalizePlayersEndpointPayload(payload) {
+            var source = payload;
+            if (Array.isArray(source)) {
+                source = { list: source };
+            }
+            if (!source || typeof source !== 'object') {
+                source = {};
+            }
+
+            var nestedPlayers = source.players && typeof source.players === 'object' && !Array.isArray(source.players)
+                ? source.players
+                : null;
+
+            var listSource = [];
+            if (Array.isArray(source.list)) {
+                listSource = source.list;
+            } else if (Array.isArray(source.sample)) {
+                listSource = source.sample;
+            } else if (Array.isArray(source.players)) {
+                listSource = source.players;
+            } else if (nestedPlayers && Array.isArray(nestedPlayers.list)) {
+                listSource = nestedPlayers.list;
+            } else if (nestedPlayers && Array.isArray(nestedPlayers.sample)) {
+                listSource = nestedPlayers.sample;
+            } else if (nestedPlayers && Array.isArray(nestedPlayers.players)) {
+                listSource = nestedPlayers.players;
+            }
+
+            var list = normalizePlayerList(listSource);
+            var online = normalizePlayerCount(firstDefinedValue(source, ['online', 'onlinePlayers', 'playerCount', 'player_count']));
+            if (online === null && nestedPlayers) {
+                online = normalizePlayerCount(firstDefinedValue(nestedPlayers, ['online', 'onlinePlayers', 'playerCount', 'player_count']));
+            }
+            if (online === null) {
+                online = list.length;
+            }
+            if (online === 0 && list.length > 0) {
+                online = list.length;
+            }
+
+            var max = normalizePlayersMaxValue(firstDefinedValue(source, ['max', 'maxPlayers', 'playerMax', 'player_max']));
+            if (max === null && nestedPlayers) {
+                max = normalizePlayersMaxValue(firstDefinedValue(nestedPlayers, ['max', 'maxPlayers', 'playerMax', 'player_max']));
+            }
+
+            return {
+                online: online,
+                max: max,
+                list: list,
+                players: list
+            };
+        }
+
+        function extractPlayersPayload(payload) {
+            var candidate = unwrapApiPayload(payload);
+            if (Array.isArray(candidate)) {
+                return normalizePlayersEndpointPayload({ list: candidate });
+            }
+            if (!candidate || typeof candidate !== 'object') {
+                return normalizePlayersEndpointPayload({});
+            }
+
+            if (candidate.players && typeof candidate.players === 'object' && !Array.isArray(candidate.players)) {
+                var hasTopLevelPlayersShape = (
+                    candidate.online !== undefined
+                    || candidate.max !== undefined
+                    || candidate.onlinePlayers !== undefined
+                    || candidate.maxPlayers !== undefined
+                    || Array.isArray(candidate.list)
+                    || Array.isArray(candidate.sample)
+                );
+                if (!hasTopLevelPlayersShape) {
+                    return normalizePlayersEndpointPayload(candidate.players);
+                }
+            }
+
+            return normalizePlayersEndpointPayload(candidate);
+        }
+
+        function getStatusOnlinePlayers(statusPayload, playersPayload) {
+            var normalizedPlayers = playersPayload || extractPlayersPayload(statusPayload);
+            var onlinePlayers = normalizedPlayers.online;
+
+            if (statusPayload && statusPayload.stats && typeof statusPayload.stats === 'object') {
+                var statsOnline = normalizePlayerCount(firstDefinedValue(
+                    statusPayload.stats,
+                    ['onlinePlayers', 'online_players', 'online', 'playerCount', 'player_count']
+                ));
+                if (statsOnline !== null) {
+                    onlinePlayers = statsOnline;
+                }
+            }
+
+            if ((onlinePlayers === null || onlinePlayers === 0) && normalizedPlayers.list.length > 0) {
+                onlinePlayers = normalizedPlayers.list.length;
+            }
+
+            return onlinePlayers === null ? 0 : onlinePlayers;
+        }
+
+        function getStatusMaxPlayers(statusPayload, playersPayload) {
+            var normalizedPlayers = playersPayload || extractPlayersPayload(statusPayload);
+            var maxPlayers = normalizedPlayers.max;
+
+            if (statusPayload && statusPayload.stats && typeof statusPayload.stats === 'object') {
+                var statsMax = normalizePlayersMaxValue(firstDefinedValue(
+                    statusPayload.stats,
+                    ['maxPlayers', 'max_players', 'max', 'playerMax', 'player_max']
+                ));
+                if (statsMax !== null) {
+                    maxPlayers = statsMax;
+                }
+            }
+
+            return maxPlayers !== null ? maxPlayers : '?';
+        }
+
+        function needsPlayersFallback(statusPayload) {
+            if (!statusPayload || typeof statusPayload !== 'object') {
+                return false;
+            }
+
+            var playersPayload = extractPlayersPayload(statusPayload);
+            var onlinePlayers = getStatusOnlinePlayers(statusPayload, playersPayload);
+            return onlinePlayers > 0 && playersPayload.list.length === 0;
+        }
+
+        function mergePlayersFallbackIntoStatus(statusPayload, playersPayload) {
+            var normalizedPlayers = normalizePlayersEndpointPayload(playersPayload);
+            var patch = { players: {} };
+            var currentOnlinePlayers = getStatusOnlinePlayers(statusPayload);
+            var currentMaxPlayers = getStatusMaxPlayers(statusPayload);
+
+            if (normalizedPlayers.list.length > 0) {
+                patch.players.list = normalizedPlayers.list;
+            }
+            if ((currentOnlinePlayers === 0 || currentOnlinePlayers === null) && normalizedPlayers.online > 0) {
+                patch.players.online = normalizedPlayers.online;
+            }
+            if ((currentMaxPlayers === '?' || currentMaxPlayers === null) && normalizedPlayers.max !== null) {
+                patch.players.max = normalizedPlayers.max;
+            }
+
+            if (Object.keys(patch.players).length === 0) {
+                return statusPayload;
+            }
+
+            return mergeStatusPatch(statusPayload, patch);
+        }
+
+        function renderPlayersListHtml(options) {
+            var normalizedPlayers = normalizePlayerList((options && options.players) || []);
+            var onlinePlayers = normalizePlayerCount(options && options.onlinePlayers);
+
+            if ((onlinePlayers === null || onlinePlayers === 0) && normalizedPlayers.length > 0) {
+                onlinePlayers = normalizedPlayers.length;
+            }
+
+            if (normalizedPlayers.length > 0) {
+                return normalizedPlayers.map(function (player) {
+                    return '<div class="player-item">' + escapeHtml(player.name_clean) + '</div>';
+                }).join('');
+            }
+
+            if (onlinePlayers !== null && onlinePlayers > 0) {
+                return '<div class="no-players">Player list unavailable (' + escapeHtml(String(onlinePlayers)) + ' online)</div>';
+            }
+
+            return '<div class="no-players">No players online</div>';
         }
 
         function mergeStatusPatch(base, patch) {
@@ -818,28 +1068,18 @@
                 versionDisplay.textContent = verText;
             }
 
-            var onlinePlayers = data.players && data.players.online ? Number(data.players.online) : 0;
-            var maxPlayers = (data.players && data.players.max !== undefined && data.players.max !== null) ? data.players.max : '?';
+            var playersPayload = extractPlayersPayload(data);
+            var onlinePlayers = getStatusOnlinePlayers(data, playersPayload);
+            var maxPlayers = getStatusMaxPlayers(data, playersPayload);
             var tpsValue = null;
 
             if (data.stats && typeof data.stats === 'object') {
-                if (data.stats.onlinePlayers !== undefined && data.stats.onlinePlayers !== null) {
-                    onlinePlayers = Number(data.stats.onlinePlayers) || onlinePlayers;
-                }
-                if (data.stats.maxPlayers !== undefined && data.stats.maxPlayers !== null) {
-                    maxPlayers = data.stats.maxPlayers;
-                }
                 if (data.stats.tps !== undefined && data.stats.tps !== null) {
                     tpsValue = Number(data.stats.tps);
                 }
             }
             if (tpsValue === null && data.tps !== undefined && data.tps !== null) {
                 tpsValue = Number(data.tps);
-            }
-
-            var realPlayers = normalizePlayerList((data.players && data.players.list) || []);
-            if (onlinePlayers === 0 && realPlayers.length > 0) {
-                onlinePlayers = realPlayers.length;
             }
 
             if (playersDisplay) {
@@ -853,20 +1093,41 @@
             }
 
             if (motdDisplay) {
-                motdDisplay.innerHTML = renderMotdHtml(data.motd);
+                motdDisplay.innerHTML = renderMotdHtml(data.motd, {
+                    onlinePlayers: onlinePlayers,
+                    maxPlayers: maxPlayers
+                });
             }
 
             if (playersList) {
-                if (realPlayers.length > 0) {
-                    playersList.innerHTML = realPlayers.map(function (player) {
-                        return '<div class="player-item">' + escapeHtml(player.name_clean) + '</div>';
-                    }).join('');
-                } else {
-                    playersList.innerHTML = '<div class="no-players">No players online</div>';
-                }
+                playersList.innerHTML = renderPlayersListHtml({
+                    onlinePlayers: onlinePlayers,
+                    players: playersPayload.list
+                });
             }
         }
         window.updateServerStatusUI = updateServerStatusUI;
+
+        async function fetchPlayersFallback(statusData, timestamp) {
+            if (!needsPlayersFallback(statusData)) {
+                return statusData;
+            }
+
+            try {
+                var playersResponse = await fetch('/api/players?t=' + timestamp, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!playersResponse.ok) {
+                    return statusData;
+                }
+
+                var playersData = extractPlayersPayload(await playersResponse.json());
+                return mergePlayersFallbackIntoStatus(statusData, playersData);
+            } catch (error) {
+                console.warn('Fetch players fallback failed', error);
+                return statusData;
+            }
+        }
 
         async function fetchServerStatus() {
             window.isFreshestDataFetched = false;
@@ -897,6 +1158,7 @@
                     var internalFreshData = await internalResponse.json();
                     internalStatusData = unwrapApiPayload(internalFreshData);
                     if (internalStatusData && internalStatusData.online === true) {
+                        internalStatusData = await fetchPlayersFallback(internalStatusData, timestamp);
                         window.isFreshestDataFetched = true;
                         updateServerStatusUI(internalStatusData);
                         return;
@@ -908,30 +1170,8 @@
                 clearTimeout(internalTimeoutId);
             }
 
-            var fallbackController = new AbortController();
-            var fallbackTimeoutId = setTimeout(function () {
-                fallbackController.abort();
-            }, 5000);
-
-            try {
-                var directUrl = 'https://api.mcstatus.io/v2/status/java/mc.stellarvan.cn:11051?t=' + timestamp;
-                var fallbackResponse = await fetch(directUrl, {
-                    signal: fallbackController.signal,
-                    headers: { 'Accept': 'application/json' }
-                });
-                if (fallbackResponse.ok) {
-                    var fallbackData = await fallbackResponse.json();
-                    window.isFreshestDataFetched = true;
-                    updateServerStatusUI(unwrapApiPayload(fallbackData));
-                    return;
-                }
-            } catch (error) {
-                console.warn('Fetch external fallback status failed, keep cache/internal view');
-            } finally {
-                clearTimeout(fallbackTimeoutId);
-            }
-
             if (internalStatusData) {
+                internalStatusData = await fetchPlayersFallback(internalStatusData, timestamp);
                 window.isFreshestDataFetched = true;
                 updateServerStatusUI(internalStatusData);
             }

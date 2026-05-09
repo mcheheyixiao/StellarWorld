@@ -50,10 +50,7 @@ $router->get('/api/avatar', [ApiController::class, 'avatar']);
 $router->get('/api/checkin/status', [ApiController::class, 'checkinStatus']);
 $router->post('/api/checkin/claim', [ApiController::class, 'checkinClaim']);
 $router->get('/api/checkin/history', [ApiController::class, 'checkinHistory']);
-$router->get('/api/checkin/rewards', [ApiController::class, 'checkinRewards']);
-$router->get('/api/plugin/checkin/deliveries', [ApiController::class, 'pluginCheckinDeliveries']);
-$router->post('/api/plugin/checkin/deliveries', [ApiController::class, 'pluginCheckinDeliveries']);
-$router->post('/api/plugin/checkin/deliveries/ack', [ApiController::class, 'pluginCheckinDeliveriesAck']);
+$router->post('/internal/realtime/signin-result', [ApiController::class, 'realtimeSigninResult']);
 
 // Admin redeem APIs
 $router->get('/api/admin/redeem/categories', [AdminRedeemApiController::class, 'categories']);
@@ -111,7 +108,6 @@ $router->get('/admin/feedback/attachment', [AdminController::class, 'feedbackAtt
 $router->post('/admin/players/update', [AdminController::class, 'playerUpdate']);
 $router->post('/admin/players/delete', [AdminController::class, 'playerDelete']);
 $router->post('/admin/players/unbind', [AdminController::class, 'playerUnbind']);
-$router->post('/admin/checkin/rewards/save', [AdminController::class, 'checkinRewardSave']);
 $router->post('/admin/announcements/save', [AdminController::class, 'announcementSave']);
 $router->post('/admin/announcements/delete', [AdminController::class, 'announcementDelete']);
 $router->post('/admin/milestones/save', [AdminController::class, 'milestoneSave']);

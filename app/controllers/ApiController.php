@@ -9,6 +9,7 @@ use Core\ApiResponse;
 use Core\Database;
 use Core\LeaderboardSnapshot;
 use Model\Checkin;
+use Model\SigninGateway;
 use PDOException;
 
 /**
@@ -29,6 +30,7 @@ class ApiController extends Controller
     private static bool $avatarCacheTableReady = false;
     private static bool $serverStatusHistoryTableReady = false;
     private Checkin $checkins;
+    private SigninGateway $signinGateway;
     private ?array $jsonRequestBody = null;
     private ?string $rawRequestBody = null;
     private bool $pluginAuthUsedQueryToken = false;
@@ -41,6 +43,7 @@ class ApiController extends Controller
     {
         parent::__construct();
         $this->checkins = new Checkin();
+        $this->signinGateway = new SigninGateway();
     }
 
     public function avatar(): void
@@ -460,14 +463,21 @@ class ApiController extends Controller
     public function checkinStatus(): void
     {
         $userId = (int)($_SESSION['user_id'] ?? 0);
-        $status = $userId > 0
-            ? $this->checkins->getStatusForUser($userId)
-            : $this->checkins->getStatusForUser(0);
+        try {
+            $status = $userId > 0
+                ? $this->signinGateway->getStatusForUser($userId)
+                : $this->signinGateway->getStatusForUser(0);
 
-        $this->json([
-            'success' => true,
-            'data' => $status,
-        ]);
+            $this->json([
+                'success' => true,
+                'data' => $status,
+            ]);
+        } catch (\Throwable $e) {
+            $this->json([
+                'success' => false,
+                'message' => 'Check-in status unavailable',
+            ], 500);
+        }
     }
 
     public function checkinClaim(): void
@@ -484,25 +494,30 @@ class ApiController extends Controller
 
         $this->validateCsrfToken();
 
-        $result = $this->checkins->claimForUser(
-            $userId,
-            $this->getClientIp(),
-            (string)($_SERVER['HTTP_USER_AGENT'] ?? '')
-        );
+        try {
+            $result = $this->signinGateway->claimForUser(
+                $userId,
+                $this->getClientIp(),
+                (string)($_SERVER['HTTP_USER_AGENT'] ?? '')
+            );
 
-        $payload = [
-            'success' => (bool)($result['ok'] ?? false),
-            'message' => (string)($result['message'] ?? 'Check-in failed'),
-        ];
-
-        if (isset($result['record']) && is_array($result['record'])) {
-            $payload['record'] = $result['record'];
+            $this->json([
+                'success' => (bool)($result['ok'] ?? false),
+                'ok' => (bool)($result['ok'] ?? false),
+                'message' => (string)($result['message'] ?? 'Check-in failed'),
+                'data' => [
+                    'status' => (string)($result['status'] ?? 'failed'),
+                    'requestId' => (string)($result['request_id'] ?? ''),
+                    'statusData' => isset($result['status_data']) && is_array($result['status_data']) ? $result['status_data'] : null,
+                ],
+            ], (int)($result['http_status'] ?? 500));
+        } catch (\Throwable $e) {
+            $this->json([
+                'success' => false,
+                'ok' => false,
+                'message' => 'Check-in request failed',
+            ], 500);
         }
-        if (isset($result['delivery']) && is_array($result['delivery'])) {
-            $payload['delivery'] = $result['delivery'];
-        }
-
-        $this->json($payload, (int)($result['status'] ?? 500));
     }
 
     public function checkinHistory(): void
@@ -517,13 +532,55 @@ class ApiController extends Controller
             return;
         }
 
-        $items = $this->checkins->getHistoryForUser($userId, 30);
+        try {
+            $items = $this->signinGateway->getHistoryForUser($userId, 30);
+            $this->json([
+                'success' => true,
+                'data' => [
+                    'items' => $items,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            $this->json([
+                'success' => false,
+                'message' => 'Check-in history unavailable',
+            ], 500);
+        }
+    }
+
+    public function realtimeSigninResult(): void
+    {
+        $secret = defined('REALTIME_INTERNAL_SECRET') ? trim((string)REALTIME_INTERNAL_SECRET) : '';
+        if ($secret === '') {
+            $this->json([
+                'success' => false,
+                'ok' => false,
+                'message' => 'Realtime secret is not configured',
+            ], 503);
+            return;
+        }
+
+        $provided = trim((string)($_SERVER['HTTP_X_STELLAR_REALTIME_SECRET'] ?? ''));
+        if ($provided === '' || !hash_equals($secret, $provided)) {
+            $this->json([
+                'success' => false,
+                'ok' => false,
+                'code' => ApiCode::AUTH_INVALID,
+                'message' => 'Unauthorized',
+            ], 401);
+            return;
+        }
+
+        $body = $this->readJsonRequestBody();
+        $result = $this->signinGateway->handleRealtimeCallback($body, $this->getClientIp());
+        $ok = (bool)($result['ok'] ?? false);
+        $status = (int)($result['http_status'] ?? ($ok ? 200 : 400));
+
         $this->json([
-            'success' => true,
-            'data' => [
-                'items' => $items,
-            ],
-        ]);
+            'success' => $ok,
+            'ok' => $ok,
+            'message' => (string)($result['message'] ?? ($ok ? 'accepted' : 'failed')),
+        ], $status);
     }
 
     public function checkinRewards(): void

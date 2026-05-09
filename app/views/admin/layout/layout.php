@@ -136,20 +136,7 @@ $feedbackCategoryLabels = [
         <?php endif; ?>
 
         <!-- 玩家管理 Tab -->
-        <!-- Check-in Rewards Tab -->
-        <div id="tab-checkin-rewards" class="ta-tab-content tab-hidden">
-            <?php include BASE_PATH . '/app/views/admin/checkin/rewards.php'; ?>
-        </div>
-
-        <!-- Check-in Logs Tab -->
-        <div id="tab-checkin-logs" class="ta-tab-content tab-hidden">
-            <?php include BASE_PATH . '/app/views/admin/checkin/logs.php'; ?>
-        </div>
-
-        <!-- Check-in Stats Tab -->
-        <div id="tab-checkin-stats" class="ta-tab-content tab-hidden">
-            <?php include BASE_PATH . '/app/views/admin/checkin/stats.php'; ?>
-        </div>
+        <!-- Deprecated independent check-in admin tabs removed -->
 
         <div id="tab-redeem" class="ta-tab-content tab-hidden">
             <?php include BASE_PATH . '/app/views/admin/redeem/index.php'; ?>

@@ -55,57 +55,7 @@ $checkinExpanded = $checkinActiveTarget !== '' || strpos($adminCurrentPath, '/ad
             </button>
         <?php endif; ?>
 
-        <div class="space-y-1" data-checkin-group>
-            <button
-                type="button"
-                class="ta-sidebar-item <?= $checkinExpanded ? 'active' : '' ?>"
-                data-checkin-toggle
-                aria-expanded="<?= $checkinExpanded ? 'true' : 'false' ?>"
-                aria-controls="checkin-menu-children"
-            >
-                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M4 19h16M6 15h4m4 0h4M6 11h12M8 7h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <span class="flex-1 text-left">签到系统</span>
-                <svg
-                    class="h-5 w-5 transition-all duration-200 <?= $checkinExpanded ? 'rotate-90' : 'rotate-0' ?>"
-                    viewBox="0 0 20 20"
-                    fill="none"
-                    aria-hidden="true"
-                    data-checkin-chevron
-                    style="width: 1rem; height: 1rem;"
-                >
-                    <path d="m7 5 6 5-6 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-            </button>
-
-            <div id="checkin-menu-children" class="mt-1 space-y-1 <?= $checkinExpanded ? '' : 'hidden' ?>" data-checkin-children>
-                <button
-                    type="button"
-                    class="admin-tab-btn ta-sidebar-item ta-sidebar-subitem pl-8 text-sm <?= $checkinActiveTarget === 'tab-checkin-rewards' ? 'active' : '' ?>"
-                    data-tab-target="tab-checkin-rewards"
-                    data-checkin-item="tab-checkin-rewards"
-                >
-                    <span>奖励配置</span>
-                </button>
-                <button
-                    type="button"
-                    class="admin-tab-btn ta-sidebar-item ta-sidebar-subitem pl-8 text-sm <?= $checkinActiveTarget === 'tab-checkin-logs' ? 'active' : '' ?>"
-                    data-tab-target="tab-checkin-logs"
-                    data-checkin-item="tab-checkin-logs"
-                >
-                    <span>签到记录</span>
-                </button>
-                <button
-                    type="button"
-                    class="admin-tab-btn ta-sidebar-item ta-sidebar-subitem pl-8 text-sm <?= $checkinActiveTarget === 'tab-checkin-stats' ? 'active' : '' ?>"
-                    data-tab-target="tab-checkin-stats"
-                    data-checkin-item="tab-checkin-stats"
-                >
-                    <span>统计分析</span>
-                </button>
-            </div>
-        </div>
+        <!-- Deprecated independent check-in admin menu removed -->
 
         <button type="button" class="admin-tab-btn ta-sidebar-item" data-tab-target="tab-redeem">
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">

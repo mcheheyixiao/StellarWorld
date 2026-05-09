@@ -8,7 +8,6 @@ use Core\ApiCode;
 use Core\ApiResponse;
 use Core\Database;
 use Core\LeaderboardSnapshot;
-use Model\Checkin;
 use Model\SigninGateway;
 use PDOException;
 
@@ -29,7 +28,6 @@ class ApiController extends Controller
 
     private static bool $avatarCacheTableReady = false;
     private static bool $serverStatusHistoryTableReady = false;
-    private Checkin $checkins;
     private SigninGateway $signinGateway;
     private ?array $jsonRequestBody = null;
     private ?string $rawRequestBody = null;
@@ -42,7 +40,6 @@ class ApiController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->checkins = new Checkin();
         $this->signinGateway = new SigninGateway();
     }
 
@@ -501,14 +498,17 @@ class ApiController extends Controller
                 (string)($_SERVER['HTTP_USER_AGENT'] ?? '')
             );
 
+            $status = $this->normalizeSigninStatus((string)($result['status'] ?? 'failed'));
+            $message = $this->resolveSigninUserMessage($status, (string)($result['message'] ?? ''));
+
             $this->json([
                 'success' => (bool)($result['ok'] ?? false),
                 'ok' => (bool)($result['ok'] ?? false),
-                'message' => (string)($result['message'] ?? 'Check-in failed'),
+                'message' => $message,
                 'data' => [
-                    'status' => (string)($result['status'] ?? 'failed'),
+                    'status' => $status,
                     'requestId' => (string)($result['request_id'] ?? ''),
-                    'statusData' => isset($result['status_data']) && is_array($result['status_data']) ? $result['status_data'] : null,
+                    'statusData' => isset($result['status_data']) && is_array($result['status_data']) ? $result['status_data'] : [],
                 ],
             ], (int)($result['http_status'] ?? 500));
         } catch (\Throwable $e) {
@@ -518,6 +518,38 @@ class ApiController extends Controller
                 'message' => 'Check-in request failed',
             ], 500);
         }
+    }
+
+    private function normalizeSigninStatus(string $status): string
+    {
+        $normalized = strtolower(trim($status));
+        if ($normalized === '' || preg_match('/^[a-z0-9_]+$/', $normalized) !== 1) {
+            return 'failed';
+        }
+
+        return $normalized;
+    }
+
+    private function resolveSigninUserMessage(string $status, string $fallback): string
+    {
+        $mapped = match ($status) {
+            'player_offline' => '请先进入服务器后再签到',
+            'plugin_missing_litesignin', 'plugin_missing' => '签到服务未安装或未启用，请联系管理员',
+            'litesignin_api_failed' => '签到插件执行失败，请联系管理员',
+            'server_offline', 'bridge_disabled' => '服务器暂不可用',
+            'timeout' => '签到请求超时，请稍后重试',
+            'already_signed' => '今日已签到',
+            'signed' => '签到成功',
+            'too_frequent', 'pending_limit_reached' => '请求过于频繁，请稍后再试',
+            default => '',
+        };
+
+        if ($mapped !== '') {
+            return $mapped;
+        }
+
+        $message = trim($fallback);
+        return $message !== '' ? $message : '签到失败，请稍后重试';
     }
 
     public function checkinHistory(): void
@@ -586,125 +618,28 @@ class ApiController extends Controller
     public function checkinRewards(): void
     {
         $this->json([
-            'success' => true,
-            'data' => $this->checkins->getRewardRulesForCurrentMonth(),
-        ]);
+            'success' => false,
+            'ok' => false,
+            'message' => 'Legacy check-in reward API is no longer available',
+        ], 410);
     }
 
     public function pluginCheckinDeliveries(): void
     {
-        $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
-        if ($method !== 'GET' && $method !== 'POST') {
-            $this->respondPluginJson([
-                'success' => false,
-                'message' => 'Method Not Allowed',
-            ], 405);
-            return;
-        }
-
-        $this->pluginDeliveriesUsedGetMethod = $method === 'GET';
-        if ($this->pluginDeliveriesUsedGetMethod && !(defined('PLUGIN_ALLOW_GET_DELIVERIES') ? (bool)PLUGIN_ALLOW_GET_DELIVERIES : false)) {
-            header('Allow: POST');
-            $this->respondPluginJson([
-                'success' => false,
-                'message' => 'GET deliveries is disabled, use POST /api/plugin/checkin/deliveries',
-                'expected_method' => 'POST',
-                'endpoint' => '/api/plugin/checkin/deliveries',
-                'hint' => 'Update StellarStatsSync CheckinDeliveryClient.fetchPendingDeliveries() to POST JSON body {"limit":20}.',
-            ], 405);
-            return;
-        }
-
-        if (!$this->isPluginAuthorized($this->pluginDeliveriesUsedGetMethod ? 'deliveries_get' : 'deliveries_post')) {
-            $this->respondPluginJson([
-                'success' => false,
-                'code' => ApiCode::AUTH_INVALID,
-                'message' => $this->pluginAuthFailureMessage ?? 'Unauthorized',
-            ], $this->pluginAuthFailureStatus ?? 401);
-            return;
-        }
-
-        try {
-            $body = $this->readJsonRequestBody();
-            $limit = (int)($body['limit'] ?? ($_POST['limit'] ?? ($_GET['limit'] ?? 20)));
-            $items = $this->checkins->pullPendingDeliveries($limit, $this->resolvePluginAckActor());
-            $deliveries = $this->formatPluginCheckinDeliveries($items);
-
-            $this->respondPluginJson([
-                'success' => true,
-                'deliveries' => $deliveries,
-                'count' => count($deliveries),
-                'data' => [
-                    'items' => $items,
-                    'count' => count($items),
-                ],
-            ]);
-        } catch (\Throwable $e) {
-            error_log('[Checkin] plugin deliveries failed: ' . $e->getMessage());
-            $this->respondPluginJson([
-                'success' => false,
-                'message' => 'Checkin delivery service unavailable',
-            ], 500);
-        }
+        $this->json([
+            'success' => false,
+            'ok' => false,
+            'message' => 'Legacy check-in delivery API is no longer available',
+        ], 410);
     }
 
     public function pluginCheckinDeliveriesAck(): void
     {
-        $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'POST'));
-        if ($method !== 'POST') {
-            $this->respondPluginJson([
-                'success' => false,
-                'message' => 'Method Not Allowed',
-            ], 405);
-            return;
-        }
-
-        if (!$this->isPluginAuthorized('deliveries_ack')) {
-            $this->respondPluginJson([
-                'success' => false,
-                'code' => ApiCode::AUTH_INVALID,
-                'message' => $this->pluginAuthFailureMessage ?? 'Unauthorized',
-            ], $this->pluginAuthFailureStatus ?? 401);
-            return;
-        }
-
-        try {
-            $body = $this->readJsonRequestBody();
-            $deliveryId = (int)($body['delivery_id'] ?? ($_POST['delivery_id'] ?? 0));
-            $success = $this->parseBooleanValue($body['success'] ?? ($_POST['success'] ?? null));
-            $message = trim((string)($body['message'] ?? ($_POST['message'] ?? '')));
-            $ackToken = $this->extractDeliveryAckToken($body);
-            $ackedBy = $this->resolvePluginAckActor();
-
-            if ($deliveryId <= 0 || $success === null) {
-                $this->respondPluginJson([
-                    'success' => false,
-                    'message' => 'delivery_id and success are required',
-                ], 400);
-                return;
-            }
-
-            $result = $this->checkins->ackDelivery($deliveryId, $success, $message, $ackToken, $ackedBy);
-            if (!empty($result['legacy_ack'])) {
-                $this->pluginAckUsedLegacyToken = true;
-                error_log('[Plugin API] Deprecated legacy ACK without ack_token detected for delivery #' . $deliveryId);
-            }
-            $payload = [
-                'success' => (bool)($result['ok'] ?? false),
-                'message' => (string)($result['message'] ?? 'Delivery ack failed'),
-            ];
-            if (isset($result['delivery']) && is_array($result['delivery'])) {
-                $payload['delivery'] = $result['delivery'];
-            }
-
-            $this->respondPluginJson($payload, (int)($result['status'] ?? 500));
-        } catch (\Throwable $e) {
-            error_log('[Checkin] plugin deliveries ack failed: ' . $e->getMessage());
-            $this->respondPluginJson([
-                'success' => false,
-                'message' => 'Checkin delivery acknowledgement unavailable',
-            ], 500);
-        }
+        $this->json([
+            'success' => false,
+            'ok' => false,
+            'message' => 'Legacy check-in delivery ACK API is no longer available',
+        ], 410);
     }
 
     private function formatPluginCheckinDeliveries(array $items): array

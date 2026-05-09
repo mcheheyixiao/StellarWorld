@@ -981,26 +981,11 @@ class AdminController extends Controller
 
     public function checkinRewardSave(): void
     {
-        $this->validateCsrfForFormPost('/admin?tab=checkin-rewards');
-        $result = $this->checkins->saveRewardRule($_POST);
-
-        if (($result['ok'] ?? false) !== true) {
-            if ($this->isAjaxRequest() || array_key_exists('ajax', $_GET) || array_key_exists('ajax', $_POST)) {
-                http_response_code((int)($result['status'] ?? 400));
-                header('Content-Type: application/json; charset=utf-8');
-                echo ApiResponse::error(ApiCode::SERVER_ERROR, (string)($result['message'] ?? 'Save failed'));
-                exit;
-            }
-
-            header('Location: /admin?tab=checkin-rewards&err=checkin_rule');
-            exit;
-        }
-
-        $this->completeAdminAction(
-            '/admin?tab=checkin-rewards&saved=1',
-            ['rule_id' => (int)($result['rule_id'] ?? 0)],
-            (string)($result['message'] ?? 'Reward rule saved')
-        );
+        $this->json([
+            'success' => false,
+            'ok' => false,
+            'message' => 'Legacy check-in reward save endpoint is no longer available',
+        ], 410);
     }
 
     public function announcementSave(): void

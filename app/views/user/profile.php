@@ -1961,6 +1961,48 @@ document.addEventListener('DOMContentLoaded', () => {
         setButtonState('idle', '立即签到', false);
     };
 
+    const applyClaimStatusHint = (statusCode) => {
+        const status = String(statusCode || '').toLowerCase();
+        if (status === '') {
+            return;
+        }
+
+        if (status === 'player_offline') {
+            bindHint.textContent = '请先进入服务器后再签到';
+            setButtonState('idle', '请先进入服务器', true);
+            return;
+        }
+        if (status === 'plugin_missing_litesignin' || status === 'plugin_missing') {
+            bindHint.textContent = '签到服务维护中';
+            setButtonState('idle', '签到服务维护中', true);
+            return;
+        }
+        if (status === 'litesignin_api_failed') {
+            bindHint.textContent = '签到失败，请联系管理员';
+            setButtonState('idle', '签到失败，请联系管理员', true);
+            return;
+        }
+        if (status === 'server_offline' || status === 'bridge_disabled') {
+            bindHint.textContent = '服务器离线';
+            setButtonState('idle', '服务器离线', true);
+            return;
+        }
+        if (status === 'timeout') {
+            bindHint.textContent = '请求超时，请稍后重试';
+            setButtonState('idle', '请求超时', false);
+            return;
+        }
+        if (status === 'already_signed') {
+            bindHint.textContent = '今日已签到';
+            setButtonState('done', '今日已签到', true);
+            return;
+        }
+        if (status === 'signed') {
+            bindHint.textContent = '签到成功';
+            setButtonState('done', '签到成功', true);
+        }
+    };
+
     const loadCheckinData = async () => {
         setButtonState('idle', '加载中...', true);
 
@@ -2007,6 +2049,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const payload = await parseJson(res);
             if (!payload.success) {
+                const claimData = payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object'
+                    ? payload.data
+                    : {};
+                applyClaimStatusHint(claimData.status || '');
                 throw new Error(payload.message || '签到失败');
             }
 

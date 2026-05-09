@@ -17,12 +17,20 @@ class SigninGateway extends Model
         'player_offline',
         'server_offline',
         'plugin_missing',
+        'plugin_missing_litesignin',
+        'litesignin_api_failed',
+        'bridge_disabled',
+        'invalid_request',
+        'invalid_payload',
+        'invalid_player_uuid',
         'timeout',
         'failed',
         'requested',
         'accepted',
         'unknown',
         'too_frequent',
+        'pending_limit_reached',
+        'duplicate_request_id',
     ];
 
     private static bool $schemaReady = false;
@@ -184,10 +192,24 @@ class SigninGateway extends Model
 
         $dispatch = $this->dispatchInternalPluginCommand($requestPayload);
         if (!$dispatch['ok']) {
-            $status = $dispatch['status'] === 'timeout' ? 'timeout' : 'failed';
-            $message = $dispatch['message'];
+            $normalizedFailure = $this->normalizeRealtimeResponse([
+                'status' => (string)($dispatch['status'] ?? ''),
+                'message' => (string)($dispatch['message'] ?? ''),
+                'payload' => isset($dispatch['payload']) && is_array($dispatch['payload']) ? $dispatch['payload'] : [],
+                'ok' => false,
+            ]);
+            $status = $normalizedFailure['status'];
+            $message = $normalizedFailure['message'];
             $this->finalizeRequest($requestId, $status, $message, $dispatch['payload'] ?? null, true);
-            $code = $status === 'timeout' ? 504 : 500;
+            $code = $this->httpStatusForSigninStatus($status);
+            if ($code < 400) {
+                $reportedHttp = (int)($dispatch['http_status'] ?? 0);
+                if ($reportedHttp >= 400 && $reportedHttp <= 599) {
+                    $code = $reportedHttp;
+                } else {
+                    $code = 500;
+                }
+            }
             return $this->errorResult($code, $status, $message, $requestId);
         }
 
@@ -195,7 +217,7 @@ class SigninGateway extends Model
         $status = $normalized['status'];
         $message = $normalized['message'];
         $payload = $normalized['payload'];
-        $terminal = in_array($status, ['signed', 'already_signed', 'player_offline', 'server_offline', 'plugin_missing', 'timeout', 'failed'], true);
+        $terminal = $this->isTerminalSigninStatus($status);
 
         $this->finalizeRequest($requestId, $status, $message, $dispatch['payload'] ?? null, $terminal);
         if (in_array($status, ['signed', 'already_signed'], true)) {
@@ -249,8 +271,11 @@ class SigninGateway extends Model
                 $linked = $this->findUserIdByPlayerUuid($playerUuid);
                 $userId = $linked > 0 ? $linked : 0;
             }
-            if ($userId <= 0 || $playerUuid === '' || $playerName === '') {
+            if ($playerUuid === '' || $playerName === '') {
                 return ['ok' => false, 'http_status' => 400, 'message' => 'Invalid signin.updated payload'];
+            }
+            if ($userId <= 0) {
+                return ['ok' => false, 'http_status' => 404, 'message' => 'Website user not found for signin.updated payload'];
             }
 
             $this->upsertDailyCache([
@@ -290,7 +315,7 @@ class SigninGateway extends Model
             $serverId = $this->signinServerId();
         }
 
-        $terminal = in_array($status, ['signed', 'already_signed', 'player_offline', 'server_offline', 'plugin_missing', 'timeout', 'failed'], true);
+        $terminal = $this->isTerminalSigninStatus($status);
         $this->finalizeRequest($requestId, $status, $message, $body, $terminal);
 
         if ($userId > 0 && $playerUuid !== '' && $playerName !== '') {
@@ -665,7 +690,7 @@ class SigninGateway extends Model
     {
         $body = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if (!is_string($body)) {
-            return ['ok' => false, 'status' => 'failed', 'message' => 'JSON encode failed'];
+            return ['ok' => false, 'status' => 'failed', 'message' => 'JSON encode failed', 'http_status' => 500];
         }
 
         if (function_exists('curl_init')) {
@@ -687,25 +712,71 @@ class SigninGateway extends Model
                 $errorNo = (int)curl_errno($ch);
                 curl_close($ch);
 
-                if ($response === false) {
-                    return ['ok' => false, 'status' => $errorNo === 28 ? 'timeout' : 'failed', 'message' => 'Internal request failed'];
-                }
-
                 $decoded = json_decode((string)$response, true);
                 $decodedArr = is_array($decoded) ? $decoded : [];
-                if ($errorNo !== 0) {
-                    return ['ok' => false, 'status' => $errorNo === 28 ? 'timeout' : 'failed', 'message' => 'Internal request failed', 'payload' => $decodedArr];
-                }
-                if ($httpCode < 200 || $httpCode >= 300) {
+                $normalized = $this->normalizeRealtimeResponse($decodedArr);
+
+                if ($response === false) {
                     return [
                         'ok' => false,
-                        'status' => $httpCode === 504 ? 'timeout' : 'failed',
-                        'message' => trim((string)($decodedArr['message'] ?? 'Internal request rejected')) ?: 'Internal request rejected',
+                        'status' => $errorNo === 28 ? 'timeout' : 'failed',
+                        'message' => $errorNo === 28 ? 'Sign-in request timed out' : 'Internal request failed',
                         'payload' => $decodedArr,
+                        'http_status' => $errorNo === 28 ? 504 : ($httpCode > 0 ? $httpCode : 500),
                     ];
                 }
 
-                return ['ok' => true, 'status' => 'accepted', 'message' => 'Accepted', 'payload' => $decodedArr];
+                if ($errorNo !== 0) {
+                    $status = $errorNo === 28 ? 'timeout' : $normalized['status'];
+                    if ($status === 'unknown') {
+                        $status = $errorNo === 28 ? 'timeout' : 'failed';
+                    }
+                    $message = trim($normalized['message']);
+                    if ($message === '') {
+                        $message = $errorNo === 28 ? 'Sign-in request timed out' : 'Internal request failed';
+                    }
+                    return [
+                        'ok' => false,
+                        'status' => $status,
+                        'message' => $message,
+                        'payload' => $decodedArr,
+                        'http_status' => $errorNo === 28 ? 504 : ($httpCode > 0 ? $httpCode : 500),
+                    ];
+                }
+                if ($httpCode < 200 || $httpCode >= 300) {
+                    $status = $normalized['status'];
+                    if ($status === 'unknown') {
+                        $status = $httpCode === 504 ? 'timeout' : 'failed';
+                    }
+                    $message = trim($normalized['message']);
+                    if ($message === '') {
+                        $message = $httpCode === 504 ? 'Sign-in request timed out' : 'Internal request rejected';
+                    }
+                    return [
+                        'ok' => false,
+                        'status' => $status,
+                        'message' => $message,
+                        'payload' => $decodedArr,
+                        'http_status' => $httpCode,
+                    ];
+                }
+
+                $status = $normalized['status'];
+                if ($status === 'unknown' && $decodedArr === []) {
+                    $status = 'accepted';
+                }
+                $message = trim($normalized['message']);
+                if ($message === '') {
+                    $message = $status === 'accepted' ? 'Accepted' : $this->defaultMessageForStatus($status);
+                }
+
+                return [
+                    'ok' => true,
+                    'status' => $status,
+                    'message' => $message,
+                    'payload' => $decodedArr,
+                    'http_status' => $httpCode > 0 ? $httpCode : 200,
+                ];
             }
         }
 
@@ -719,13 +790,68 @@ class SigninGateway extends Model
             ],
         ]);
         $response = @file_get_contents($url, false, $context);
+        $responseHeaders = isset($http_response_header) && is_array($http_response_header) ? $http_response_header : [];
+        $httpCode = $this->extractHttpResponseCodeFromHeaders($responseHeaders);
         if (!is_string($response)) {
-            return ['ok' => false, 'status' => 'failed', 'message' => 'Internal request failed'];
+            return [
+                'ok' => false,
+                'status' => $httpCode === 504 ? 'timeout' : 'failed',
+                'message' => $httpCode === 504 ? 'Sign-in request timed out' : 'Internal request failed',
+                'http_status' => $httpCode > 0 ? $httpCode : 500,
+            ];
         }
 
         $decoded = json_decode($response, true);
         $decodedArr = is_array($decoded) ? $decoded : [];
-        return ['ok' => true, 'status' => 'accepted', 'message' => 'Accepted', 'payload' => $decodedArr];
+        $normalized = $this->normalizeRealtimeResponse($decodedArr);
+
+        if ($httpCode > 0 && ($httpCode < 200 || $httpCode >= 300)) {
+            $status = $normalized['status'];
+            if ($status === 'unknown') {
+                $status = $httpCode === 504 ? 'timeout' : 'failed';
+            }
+            $message = trim($normalized['message']);
+            if ($message === '') {
+                $message = $httpCode === 504 ? 'Sign-in request timed out' : 'Internal request rejected';
+            }
+
+            return [
+                'ok' => false,
+                'status' => $status,
+                'message' => $message,
+                'payload' => $decodedArr,
+                'http_status' => $httpCode,
+            ];
+        }
+
+        $status = $normalized['status'];
+        if ($status === 'unknown' && $decodedArr === []) {
+            $status = 'accepted';
+        }
+        $message = trim($normalized['message']);
+        if ($message === '') {
+            $message = $status === 'accepted' ? 'Accepted' : $this->defaultMessageForStatus($status);
+        }
+
+        return [
+            'ok' => true,
+            'status' => $status,
+            'message' => $message,
+            'payload' => $decodedArr,
+            'http_status' => $httpCode > 0 ? $httpCode : 200,
+        ];
+    }
+
+    private function extractHttpResponseCodeFromHeaders(array $headers): int
+    {
+        foreach ($headers as $headerLine) {
+            $line = trim((string)$headerLine);
+            if (preg_match('#^HTTP/\d+(?:\.\d+)?\s+(\d{3})#i', $line, $matches) === 1) {
+                return (int)$matches[1];
+            }
+        }
+
+        return 0;
     }
 
     private function unwrapPayload(array $payload): array
@@ -793,8 +919,17 @@ class SigninGateway extends Model
             'player_offline' => 'Please join the server before signing in',
             'server_offline' => 'Server is currently unavailable',
             'plugin_missing' => 'Sign-in service is unavailable',
+            'plugin_missing_litesignin' => 'LiteSignIn plugin is missing or disabled',
+            'litesignin_api_failed' => 'LiteSignIn API execution failed',
+            'bridge_disabled' => 'Website sign-in bridge is disabled',
+            'invalid_request' => 'Invalid sign-in request',
+            'invalid_payload' => 'Invalid sign-in payload',
+            'invalid_player_uuid' => 'Invalid player UUID',
             'timeout' => 'Sign-in request timed out',
-            'accepted', 'requested' => 'Request accepted and processing',
+            'too_frequent' => 'Requests are too frequent, please retry later',
+            'pending_limit_reached' => 'Too many pending requests, please retry later',
+            'duplicate_request_id' => 'Duplicate request id',
+            'accepted', 'requested', 'unknown' => 'Request accepted and processing',
             default => 'Sign-in failed, please retry later',
         };
     }
@@ -809,11 +944,19 @@ class SigninGateway extends Model
         return match ($status) {
             'signed', 'already_signed', 'accepted', 'requested', 'unknown' => 200,
             'player_offline' => 409,
-            'server_offline', 'plugin_missing' => 503,
+            'server_offline', 'plugin_missing', 'plugin_missing_litesignin', 'bridge_disabled' => 503,
+            'litesignin_api_failed' => 502,
+            'invalid_request', 'invalid_payload', 'invalid_player_uuid' => 400,
+            'duplicate_request_id' => 409,
             'timeout' => 504,
-            'too_frequent' => 429,
+            'too_frequent', 'pending_limit_reached' => 429,
             default => 500,
         };
+    }
+
+    private function isTerminalSigninStatus(string $status): bool
+    {
+        return !in_array($status, ['requested', 'accepted', 'unknown'], true);
     }
 
     private function createSigninRequest(array $row): void

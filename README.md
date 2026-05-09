@@ -322,6 +322,28 @@ REALTIME_INTERNAL_SECRET=replace-with-same-secret-as-StellarRealtime
 REALTIME_INTERNAL_TIMEOUT_MS=800
 ```
 
+### Website Sign-in Gateway (LiteSignIn Bridge)
+
+Required env for website sign-in gateway:
+
+```dotenv
+REALTIME_INTERNAL_URL=http://127.0.0.1:3001
+REALTIME_INTERNAL_SECRET=replace-with-long-random-secret
+SIGNIN_SERVER_ID=survival-1
+SIGNIN_REQUIRE_PLAYER_ONLINE=true
+SIGNIN_REQUEST_TIMEOUT_MS=5000
+WS_STATUS_API_BASE=http://127.0.0.1:3001
+WS_STATUS_API_TOKEN=replace-with-api-token
+```
+
+Operational notes:
+
+- Website only sends `signin.request` to Realtime `/internal/plugin-command`.
+- Website does not write LiteSignIn database tables directly.
+- Website does not deliver in-game sign-in rewards.
+- `stellar_signin_daily_cache` is display cache only.
+- LiteSignIn plugin remains the source of truth for check-in results.
+
 ### Plugin Auth Contract (Redeem API)
 
 Headers:

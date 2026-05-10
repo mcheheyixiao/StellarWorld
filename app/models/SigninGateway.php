@@ -54,7 +54,10 @@ class SigninGateway extends Model
         $today = date('Y-m-d');
         $todayCache = $isBound ? $this->findDailyCache($userId, $serverId, $today) : null;
         $latestCache = $isBound ? ($todayCache ?? $this->findLatestDailyCache($userId, $serverId)) : null;
-        $runtime = $this->fetchRuntimeStatus($isBound ? $user['mc_username'] : '');
+        $runtime = $this->fetchRuntimeStatus(
+            $isBound ? $user['mc_username'] : '',
+            $isBound ? $user['mc_uuid'] : ''
+        );
 
         $signedToday = $todayCache !== null && (int)($todayCache['signed_today'] ?? 0) === 1;
         $continuous = (int)($latestCache['continuous'] ?? 0);
@@ -151,7 +154,7 @@ class SigninGateway extends Model
             }
         }
 
-        $runtime = $this->fetchRuntimeStatus($user['mc_username']);
+        $runtime = $this->fetchRuntimeStatus($user['mc_username'], $user['mc_uuid']);
         if (!$runtime['serverOnline']) {
             return $this->errorResult(503, 'server_offline', 'Server is currently unavailable');
         }
@@ -448,16 +451,16 @@ class SigninGateway extends Model
         ];
     }
 
-    private function fetchRuntimeStatus(string $playerName): array
+    private function fetchRuntimeStatus(string $playerName, string $playerUuid = ''): array
     {
         $statusPayload = $this->fetchWsJson('/api/status', true);
         $healthPayload = $this->fetchWsJson('/health', true);
 
-        $statusNode = $this->unwrapPayload($statusPayload);
-        $healthNode = $this->unwrapPayload($healthPayload);
+        $statusNode = $statusPayload;
+        $healthNode = $healthPayload;
 
         $serverOnline = $this->resolveServerOnline($statusNode);
-        $playerOnline = $this->resolvePlayerOnline($statusNode, $playerName);
+        $playerOnline = $this->resolvePlayerOnline($statusNode, $playerName, $playerUuid);
         $pluginOnline = $this->resolveLiteSignInOnline($statusNode, $healthNode);
 
         return [
@@ -484,21 +487,30 @@ class SigninGateway extends Model
         return $players !== [];
     }
 
-    private function resolvePlayerOnline(array $statusNode, string $playerName): bool
+    private function resolvePlayerOnline(array $statusNode, string $playerName, string $playerUuid = ''): bool
     {
-        $needle = strtolower(trim($playerName));
-        if ($needle === '') {
+        $needleUuid = $this->normalizePlayerUuidFlat($playerUuid);
+        $needleName = strtolower(trim($playerName));
+        if ($needleUuid === '' && $needleName === '') {
             return false;
         }
 
         foreach ($this->extractPlayersList($statusNode) as $row) {
-            $name = '';
-            if (is_string($row)) {
-                $name = trim($row);
-            } elseif (is_array($row)) {
+            if (is_array($row)) {
+                $rowUuid = $this->normalizePlayerUuidFlat((string)($row['uuid'] ?? ($row['id'] ?? '')));
+                if ($needleUuid !== '' && $rowUuid !== '' && $rowUuid === $needleUuid) {
+                    return true;
+                }
+
                 $name = trim((string)($row['name_clean'] ?? ($row['name'] ?? ($row['username'] ?? ''))));
+                if ($needleName !== '' && $name !== '' && strtolower($name) === $needleName) {
+                    return true;
+                }
+
+                continue;
             }
-            if ($name !== '' && strtolower($name) === $needle) {
+
+            if (is_string($row) && $needleName !== '' && strtolower(trim($row)) === $needleName) {
                 return true;
             }
         }
@@ -574,23 +586,46 @@ class SigninGateway extends Model
 
     private function extractPlayersList(array $statusNode): array
     {
-        $playersNode = $statusNode['players'] ?? [];
-        if (!is_array($playersNode)) {
-            return [];
+        $playersNode = $statusNode['players'] ?? null;
+        if (is_array($playersNode)) {
+            if (!$this->isAssocArray($playersNode)) {
+                return $playersNode;
+            }
+            if (isset($playersNode['list']) && is_array($playersNode['list'])) {
+                return $playersNode['list'];
+            }
+            if (isset($playersNode['sample']) && is_array($playersNode['sample'])) {
+                return $playersNode['sample'];
+            }
+            if (isset($playersNode['players']) && is_array($playersNode['players']) && !$this->isAssocArray($playersNode['players'])) {
+                return $playersNode['players'];
+            }
         }
 
-        if (!$this->isAssocArray($playersNode)) {
-            return $playersNode;
+        if (isset($statusNode['playerList']) && is_array($statusNode['playerList']) && !$this->isAssocArray($statusNode['playerList'])) {
+            return $statusNode['playerList'];
+        }
+        if (isset($statusNode['list']) && is_array($statusNode['list']) && !$this->isAssocArray($statusNode['list'])) {
+            return $statusNode['list'];
         }
 
-        if (isset($playersNode['list']) && is_array($playersNode['list'])) {
-            return $playersNode['list'];
-        }
-        if (isset($playersNode['sample']) && is_array($playersNode['sample'])) {
-            return $playersNode['sample'];
-        }
-        if (isset($playersNode['players']) && is_array($playersNode['players']) && !$this->isAssocArray($playersNode['players'])) {
-            return $playersNode['players'];
+        $dataNode = $statusNode['data'] ?? null;
+        if (is_array($dataNode)) {
+            $dataPlayers = $dataNode['players'] ?? null;
+            if (is_array($dataPlayers)) {
+                if (!$this->isAssocArray($dataPlayers)) {
+                    return $dataPlayers;
+                }
+                if (isset($dataPlayers['list']) && is_array($dataPlayers['list'])) {
+                    return $dataPlayers['list'];
+                }
+                if (isset($dataPlayers['sample']) && is_array($dataPlayers['sample'])) {
+                    return $dataPlayers['sample'];
+                }
+            }
+            if (isset($dataNode['playerList']) && is_array($dataNode['playerList']) && !$this->isAssocArray($dataNode['playerList'])) {
+                return $dataNode['playerList'];
+            }
         }
 
         return [];

@@ -119,235 +119,154 @@ class SigninGateway extends Model
 
     public function claimForUser(int $userId, string $ip, string $userAgent): array
     {
-        $user = $this->fetchUserIdentity($userId, true);
-        if ($user === null) {
-            return $this->errorResult(404, 'failed', 'User not found');
-        }
+        $ownsTx = false;
+        $requestId = '';
+        $status = 'failed';
+        $message = 'Sign-in failed, please retry later';
 
-        if ($user['status'] !== 'active') {
-            return $this->errorResult(403, 'failed', 'Account is not active');
-        }
-
-        if (!$this->isBoundIdentity($user['mc_username'], $user['mc_uuid'])) {
-            return $this->errorResult(400, 'failed', 'Please bind your Minecraft account first');
-        }
-
-        $serverId = $this->signinServerId();
-        $today = date('Y-m-d');
-        $todayCache = $this->findDailyCache($userId, $serverId, $today);
-        if ($todayCache !== null && (int)($todayCache['signed_today'] ?? 0) === 1) {
-            return [
-                'ok' => true,
-                'http_status' => 200,
-                'status' => 'already_signed',
-                'message' => 'Already signed in today',
-                'request_id' => trim((string)($todayCache['request_id'] ?? '')),
-                'status_data' => $this->getStatusForUser($userId),
-            ];
-        }
-
-        $lastRequest = $this->findLatestRequestForUser($userId, $serverId);
-        if ($lastRequest !== null) {
-            $lastTs = strtotime((string)($lastRequest['created_at'] ?? ''));
-            if ($lastTs !== false && $lastTs >= (time() - self::REQUEST_COOLDOWN_SECONDS)) {
-                return $this->errorResult(429, 'too_frequent', 'Requests are too frequent, please retry later');
+        try {
+            if (!$this->db->inTransaction()) {
+                $this->db->beginTransaction();
+                $ownsTx = true;
             }
-        }
 
-        $runtime = $this->fetchRuntimeStatus($user['mc_username'], $user['mc_uuid']);
-        if (!$runtime['serverOnline']) {
-            return $this->errorResult(503, 'server_offline', 'Server is currently unavailable');
-        }
-        if (!$runtime['pluginOnline']) {
-            return $this->errorResult(503, 'plugin_missing', 'Sign-in service is unavailable');
-        }
-        if ($this->requirePlayerOnline() && !$runtime['playerOnline']) {
-            return $this->errorResult(409, 'player_offline', 'Please join the server before signing in');
-        }
-
-        $requestId = $this->buildRequestId();
-        $requestPayload = [
-            'type' => 'signin.request',
-            'requestId' => $requestId,
-            'serverId' => $serverId,
-            'payload' => [
-                'websiteUserId' => $userId,
-                'playerUuid' => $user['mc_uuid'],
-                'playerName' => $user['mc_username'],
-                'source' => 'web',
-                'requireOnline' => $this->requirePlayerOnline(),
-            ],
-        ];
-
-        $this->createSigninRequest([
-            'request_id' => $requestId,
-            'website_user_id' => $userId,
-            'player_uuid' => $user['mc_uuid'],
-            'player_name' => $user['mc_username'],
-            'server_id' => $serverId,
-            'source' => 'web',
-            'status' => 'requested',
-            'message' => 'Request queued',
-            'result_payload_json' => json_encode($requestPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'ip' => $this->cutString($ip, 64),
-            'user_agent' => $this->cutString($userAgent, 255),
-        ]);
-
-        $dispatch = $this->dispatchInternalPluginCommand($requestPayload);
-        if (defined('APP_DEBUG') && (bool)constant('APP_DEBUG')) {
-            $debugJson = json_encode($dispatch, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            error_log('[SigninDebug] dispatch=' . (is_string($debugJson) ? $debugJson : '[json_encode_failed]'));
-        }
-        if (!$dispatch['ok']) {
-            $normalizedFailure = $this->normalizeRealtimeResponse([
-                'status' => (string)($dispatch['status'] ?? ''),
-                'message' => (string)($dispatch['message'] ?? ''),
-                'payload' => isset($dispatch['payload']) && is_array($dispatch['payload']) ? $dispatch['payload'] : [],
-                'ok' => false,
-            ]);
-            $status = $normalizedFailure['status'];
-            $message = $normalizedFailure['message'];
-            $this->finalizeRequest($requestId, $status, $message, $dispatch['payload'] ?? null, true);
-            $code = $this->httpStatusForSigninStatus($status);
-            if ($code < 400) {
-                $reportedHttp = (int)($dispatch['http_status'] ?? 0);
-                if ($reportedHttp >= 400 && $reportedHttp <= 599) {
-                    $code = $reportedHttp;
-                } else {
-                    $code = 500;
+            $user = $this->fetchUserIdentity($userId, true);
+            if ($user === null) {
+                if ($ownsTx && $this->db->inTransaction()) {
+                    $this->db->commit();
                 }
+                return $this->errorResult(404, 'failed', 'User not found');
             }
-            return $this->errorResult($code, $status, $message, $requestId);
-        }
 
-        $normalized = $this->normalizeRealtimeResponse($dispatch['payload'] ?? []);
-        $status = $normalized['status'];
-        $message = $normalized['message'];
-        $payload = $normalized['payload'];
-        $terminal = $this->isTerminalSigninStatus($status);
+            if ($user['status'] !== 'active') {
+                if ($ownsTx && $this->db->inTransaction()) {
+                    $this->db->commit();
+                }
+                return $this->errorResult(403, 'failed', 'Account is not active');
+            }
 
-        $this->finalizeRequest($requestId, $status, $message, $dispatch['payload'] ?? null, $terminal);
-        if (in_array($status, ['signed', 'already_signed'], true)) {
+            if (!$this->isBoundIdentity($user['mc_username'], $user['mc_uuid'])) {
+                if ($ownsTx && $this->db->inTransaction()) {
+                    $this->db->commit();
+                }
+                return $this->errorResult(400, 'failed', 'Please bind your Minecraft account first');
+            }
+
+            $serverId = $this->signinServerId();
+            $today = date('Y-m-d');
+            $todayCache = $this->findDailyCache($userId, $serverId, $today);
+            if ($todayCache !== null && (int)($todayCache['signed_today'] ?? 0) === 1) {
+                $requestId = trim((string)($todayCache['request_id'] ?? ''));
+                if ($ownsTx && $this->db->inTransaction()) {
+                    $this->db->commit();
+                }
+
+                return [
+                    'ok' => true,
+                    'http_status' => 200,
+                    'status' => 'already_signed',
+                    'message' => '今日已签到',
+                    'request_id' => $requestId,
+                    'status_data' => $this->getStatusForUser($userId),
+                ];
+            }
+
+            $latestCache = $this->findLatestDailyCache($userId, $serverId);
+            $yesterday = date('Y-m-d', strtotime($today . ' -1 day'));
+            $yesterdayCache = $this->findDailyCache($userId, $serverId, $yesterday);
+
+            $continuous = 1;
+            if ($yesterdayCache !== null && (int)($yesterdayCache['signed_today'] ?? 0) === 1) {
+                $continuous = max(1, (int)($yesterdayCache['continuous'] ?? 0)) + 1;
+            }
+
+            $total = max(0, (int)($latestCache['total'] ?? 0)) + 1;
+            if ($total < 1) {
+                $total = 1;
+            }
+
+            $requestId = $this->buildRequestId();
+            $rewardPayload = $this->buildSigninRewardPayload($today, $continuous, $total);
+            $payloadJson = $this->encodeJson($rewardPayload);
+
+            $this->createSigninRequest([
+                'request_id' => $requestId,
+                'website_user_id' => $userId,
+                'player_uuid' => $user['mc_uuid'],
+                'player_name' => $user['mc_username'],
+                'server_id' => $serverId,
+                'source' => 'web_queue',
+                'status' => 'signed',
+                'message' => 'queued_for_mail_delivery',
+                'result_payload_json' => $payloadJson,
+                'ip' => $this->cutString($ip, 64),
+                'user_agent' => $this->cutString($userAgent, 255),
+            ]);
+            $this->finalizeRequest(
+                $requestId,
+                'signed',
+                'queued_for_mail_delivery',
+                ['reward' => $rewardPayload, 'source' => 'web_queue'],
+                true
+            );
+
             $this->upsertDailyCache([
                 'request_id' => $requestId,
                 'website_user_id' => $userId,
                 'player_uuid' => $user['mc_uuid'],
                 'player_name' => $user['mc_username'],
                 'server_id' => $serverId,
-                'sign_date' => $this->extractSignDate($payload),
+                'sign_date' => $today,
                 'signed_today' => true,
-                'continuous' => (int)($payload['continuous'] ?? ($payload['streak'] ?? 0)),
-                'total' => (int)($payload['total'] ?? 0),
-                'last_signin_at' => $this->normalizeDatetime($payload['lastSignInAt'] ?? ($payload['last_signin_at'] ?? null)),
-                'last_source' => $this->cutString((string)($payload['source'] ?? 'web'), 32),
-                'raw_payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'continuous' => $continuous,
+                'total' => $total,
+                'last_signin_at' => date('Y-m-d H:i:s'),
+                'last_source' => 'web_queue',
+                'raw_payload_json' => $payloadJson,
             ]);
-        }
 
-        $httpStatus = $this->httpStatusForSigninStatus($status);
-        $ok = in_array($status, ['signed', 'already_signed'], true);
-        if ($status === 'accepted' || $status === 'requested' || $status === 'unknown') {
-            $ok = true;
-        }
+            $this->createRewardOutbox([
+                'request_id' => $requestId,
+                'website_user_id' => $userId,
+                'player_uuid' => $user['mc_uuid'],
+                'player_name' => $user['mc_username'],
+                'server_id' => $serverId,
+                'source' => 'signin',
+                'reward_type' => 'sweetmail',
+                'reward_payload_json' => $payloadJson,
+                'status' => 'pending',
+                'attempts' => 0,
+                'last_error' => null,
+            ]);
 
-        return [
-            'ok' => $ok,
-            'http_status' => $httpStatus,
-            'status' => $status,
-            'message' => $message,
-            'request_id' => $requestId,
-            'status_data' => $this->getStatusForUser($userId),
-        ];
+            if ($ownsTx && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
+
+            return [
+                'ok' => true,
+                'http_status' => 200,
+                'status' => 'signed',
+                'message' => '签到成功，奖励已加入游戏邮箱队列',
+                'request_id' => $requestId,
+                'status_data' => $this->getStatusForUser($userId),
+            ];
+        } catch (\Throwable $e) {
+            if ($ownsTx && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
+            return $this->errorResult(500, $status, $message, $requestId);
+        }
     }
 
     public function handleRealtimeCallback(array $body, string $requestIp = ''): array
     {
-        $type = strtolower(trim((string)($body['type'] ?? '')));
-        if (!in_array($type, ['signin.result', 'signin.updated'], true)) {
-            return ['ok' => false, 'http_status' => 400, 'message' => 'Unsupported event type'];
-        }
-
-        if ($type === 'signin.updated') {
-            $payload = isset($body['payload']) && is_array($body['payload']) ? $body['payload'] : [];
-            $userId = (int)($payload['websiteUserId'] ?? $payload['website_user_id'] ?? 0);
-            $playerUuid = $this->normalizePlayerUuid((string)($payload['playerUuid'] ?? $payload['player_uuid'] ?? ''));
-            $playerName = trim((string)($payload['playerName'] ?? $payload['player_name'] ?? ''));
-            $serverId = $this->cutString((string)($payload['serverId'] ?? $this->signinServerId()), 64) ?: $this->signinServerId();
-
-            if ($userId <= 0 && $playerUuid !== '') {
-                $linked = $this->findUserIdByPlayerUuid($playerUuid);
-                $userId = $linked > 0 ? $linked : 0;
-            }
-            if ($playerUuid === '' || $playerName === '') {
-                return ['ok' => false, 'http_status' => 400, 'message' => 'Invalid signin.updated payload'];
-            }
-            if ($userId <= 0) {
-                return ['ok' => false, 'http_status' => 404, 'message' => 'Website user not found for signin.updated payload'];
-            }
-
-            $this->upsertDailyCache([
-                'request_id' => $this->cutString((string)($body['requestId'] ?? ''), 80),
-                'website_user_id' => $userId,
-                'player_uuid' => $playerUuid,
-                'player_name' => $playerName,
-                'server_id' => $serverId,
-                'sign_date' => $this->extractSignDate($payload),
-                'signed_today' => $this->parseBool($payload['signedToday'] ?? true),
-                'continuous' => (int)($payload['continuous'] ?? ($payload['streak'] ?? 0)),
-                'total' => (int)($payload['total'] ?? 0),
-                'last_signin_at' => $this->normalizeDatetime($payload['lastSignInAt'] ?? ($payload['last_signin_at'] ?? null)),
-                'last_source' => $this->cutString((string)($payload['source'] ?? 'game'), 32),
-                'raw_payload_json' => json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            ]);
-
-            return ['ok' => true, 'http_status' => 200, 'message' => 'accepted'];
-        }
-
-        $requestId = $this->cutString((string)($body['requestId'] ?? $body['request_id'] ?? ''), 80);
-        if ($requestId === '') {
-            return ['ok' => false, 'http_status' => 400, 'message' => 'Missing requestId'];
-        }
-
-        $result = $this->normalizeRealtimeResponse($body);
-        $status = $result['status'];
-        $message = $result['message'];
-        $payload = $result['payload'];
-
-        $requestRow = $this->findRequestByRequestId($requestId);
-        $userId = (int)($payload['websiteUserId'] ?? ($requestRow['website_user_id'] ?? 0));
-        $playerUuid = $this->normalizePlayerUuid((string)($payload['playerUuid'] ?? ($requestRow['player_uuid'] ?? '')));
-        $playerName = trim((string)($payload['playerName'] ?? ($requestRow['player_name'] ?? '')));
-        $serverId = $this->cutString((string)($payload['serverId'] ?? ($requestRow['server_id'] ?? $this->signinServerId())), 64);
-        if ($serverId === '') {
-            $serverId = $this->signinServerId();
-        }
-
-        $terminal = $this->isTerminalSigninStatus($status);
-        $this->finalizeRequest($requestId, $status, $message, $body, $terminal);
-
-        if ($userId > 0 && $playerUuid !== '' && $playerName !== '') {
-            $signedToday = in_array($status, ['signed', 'already_signed'], true);
-            if (array_key_exists('signedToday', $payload)) {
-                $signedToday = $this->parseBool($payload['signedToday']) ?? $signedToday;
-            }
-
-            $this->upsertDailyCache([
-                'request_id' => $requestId,
-                'website_user_id' => $userId,
-                'player_uuid' => $playerUuid,
-                'player_name' => $playerName,
-                'server_id' => $serverId,
-                'sign_date' => $this->extractSignDate($payload),
-                'signed_today' => $signedToday,
-                'continuous' => (int)($payload['continuous'] ?? ($payload['streak'] ?? 0)),
-                'total' => (int)($payload['total'] ?? 0),
-                'last_signin_at' => $this->normalizeDatetime($payload['lastSignInAt'] ?? ($payload['last_signin_at'] ?? null)),
-                'last_source' => $this->cutString((string)($payload['source'] ?? 'web'), 32),
-                'raw_payload_json' => json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            ]);
-        }
-
-        return ['ok' => true, 'http_status' => 200, 'message' => 'accepted'];
+        return [
+            'ok' => false,
+            'http_status' => 410,
+            'message' => 'Realtime signin callback is deprecated',
+        ];
     }
 
     private function ensureSchema(): void
@@ -403,7 +322,116 @@ class SigninGateway extends Model
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
 
+        $this->db->exec("
+            CREATE TABLE IF NOT EXISTS stellar_reward_outbox (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                request_id VARCHAR(80) NOT NULL,
+                website_user_id INT UNSIGNED NOT NULL,
+                player_uuid VARCHAR(64) NOT NULL,
+                player_name VARCHAR(64) NOT NULL,
+                server_id VARCHAR(64) NOT NULL DEFAULT 'stellar-main',
+                source VARCHAR(32) NOT NULL DEFAULT 'signin',
+                reward_type VARCHAR(32) NOT NULL DEFAULT 'sweetmail',
+                reward_payload_json LONGTEXT NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                attempts INT UNSIGNED NOT NULL DEFAULT 0,
+                last_error VARCHAR(500) NULL DEFAULT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                processing_at DATETIME NULL DEFAULT NULL,
+                delivered_at DATETIME NULL DEFAULT NULL,
+                UNIQUE KEY uq_stellar_reward_outbox_request (request_id),
+                KEY idx_stellar_reward_outbox_status_created (status, created_at),
+                KEY idx_stellar_reward_outbox_player_status (player_uuid, status),
+                KEY idx_stellar_reward_outbox_user_created (website_user_id, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
         self::$schemaReady = true;
+    }
+
+    private function buildSigninRewardPayload(string $signDate, int $continuous, int $total): array
+    {
+        return [
+            'mail' => [
+                'title' => '每日签到奖励',
+                'icon' => 'BOOK',
+                'content' => [
+                    '你完成了今日签到。',
+                    '奖励已通过系统邮件投递，请上线后在邮箱中领取。',
+                ],
+            ],
+            'items' => [
+                [
+                    'type' => 'minecraft:diamond',
+                    'amount' => 1,
+                ],
+            ],
+            'commands' => [
+                'eco give {player} 100',
+                'ia give {player} namespace:item_id 1',
+            ],
+            'meta' => [
+                'signDate' => $signDate,
+                'continuous' => max(1, $continuous),
+                'total' => max(1, $total),
+                'source' => 'web',
+            ],
+        ];
+    }
+
+    private function createRewardOutbox(array $row): void
+    {
+        $stmt = $this->db->prepare('
+            INSERT INTO stellar_reward_outbox (
+                request_id,
+                website_user_id,
+                player_uuid,
+                player_name,
+                server_id,
+                source,
+                reward_type,
+                reward_payload_json,
+                status,
+                attempts,
+                last_error,
+                created_at,
+                updated_at
+            ) VALUES (
+                :request_id,
+                :website_user_id,
+                :player_uuid,
+                :player_name,
+                :server_id,
+                :source,
+                :reward_type,
+                :reward_payload_json,
+                :status,
+                :attempts,
+                :last_error,
+                NOW(),
+                NOW()
+            )
+        ');
+        $stmt->execute([
+            ':request_id' => (string)($row['request_id'] ?? ''),
+            ':website_user_id' => (int)($row['website_user_id'] ?? 0),
+            ':player_uuid' => (string)($row['player_uuid'] ?? ''),
+            ':player_name' => (string)($row['player_name'] ?? ''),
+            ':server_id' => (string)($row['server_id'] ?? 'stellar-main'),
+            ':source' => (string)($row['source'] ?? 'signin'),
+            ':reward_type' => (string)($row['reward_type'] ?? 'sweetmail'),
+            ':reward_payload_json' => (string)($row['reward_payload_json'] ?? '{}'),
+            ':status' => (string)($row['status'] ?? 'pending'),
+            ':attempts' => max(0, (int)($row['attempts'] ?? 0)),
+            ':last_error' => $this->nullableString($row['last_error'] ?? null),
+        ]);
+    }
+
+    private function encodeJson($payload): string
+    {
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return is_string($json) ? $json : '{}';
     }
 
     private function fetchUserIdentity(int $userId, bool $forUpdate = false): ?array
@@ -939,8 +967,8 @@ class SigninGateway extends Model
     private function defaultMessageForStatus(string $status): string
     {
         return match ($status) {
-            'signed' => 'Signed in successfully',
-            'already_signed' => 'Already signed in today',
+            'signed' => '签到成功，奖励已加入游戏邮箱队列',
+            'already_signed' => '今日已签到',
             'player_offline' => 'Please join the server before signing in',
             'server_offline' => 'Server is currently unavailable',
             'plugin_missing' => 'Sign-in service is unavailable',

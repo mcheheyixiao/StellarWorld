@@ -539,7 +539,7 @@ class ApiController extends Controller
             'server_offline', 'bridge_disabled' => '服务器暂不可用',
             'timeout' => '签到请求超时，请稍后重试',
             'already_signed' => '今日已签到',
-            'signed' => '签到成功',
+            'signed' => '签到成功，奖励已加入游戏邮箱队列',
             'too_frequent', 'pending_limit_reached' => '请求过于频繁，请稍后再试',
             default => '',
         };
@@ -582,37 +582,11 @@ class ApiController extends Controller
 
     public function realtimeSigninResult(): void
     {
-        $secret = defined('REALTIME_INTERNAL_SECRET') ? trim((string)REALTIME_INTERNAL_SECRET) : '';
-        if ($secret === '') {
-            $this->json([
-                'success' => false,
-                'ok' => false,
-                'message' => 'Realtime secret is not configured',
-            ], 503);
-            return;
-        }
-
-        $provided = trim((string)($_SERVER['HTTP_X_STELLAR_REALTIME_SECRET'] ?? ''));
-        if ($provided === '' || !hash_equals($secret, $provided)) {
-            $this->json([
-                'success' => false,
-                'ok' => false,
-                'code' => ApiCode::AUTH_INVALID,
-                'message' => 'Unauthorized',
-            ], 401);
-            return;
-        }
-
-        $body = $this->readJsonRequestBody();
-        $result = $this->signinGateway->handleRealtimeCallback($body, $this->getClientIp());
-        $ok = (bool)($result['ok'] ?? false);
-        $status = (int)($result['http_status'] ?? ($ok ? 200 : 400));
-
         $this->json([
-            'success' => $ok,
-            'ok' => $ok,
-            'message' => (string)($result['message'] ?? ($ok ? 'accepted' : 'failed')),
-        ], $status);
+            'success' => false,
+            'ok' => false,
+            'message' => 'Realtime signin callback is deprecated',
+        ], 410);
     }
 
     public function checkinRewards(): void

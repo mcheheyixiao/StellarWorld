@@ -1933,6 +1933,16 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        if (signedToday) {
+            bindHint.textContent = '今日已签到';
+            setButtonState('done', '今日已签到', true);
+            return;
+        }
+
+        bindHint.textContent = '晨星已点亮，点击按钮领取今日签到。';
+        setButtonState('idle', '立即签到', false);
+        return;
+
         if (!serverOnline) {
             bindHint.textContent = '服务器暂不可用';
             setButtonState('idle', '服务器暂不可用', true);
@@ -1964,6 +1974,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const applyClaimStatusHint = (statusCode) => {
         const status = String(statusCode || '').toLowerCase();
         if (status === '') {
+            return;
+        }
+        if (status === 'already_signed') {
+            bindHint.textContent = '今日已签到';
+            setButtonState('done', '今日已签到', true);
+            return;
+        }
+        if (status === 'signed') {
+            bindHint.textContent = '签到成功，奖励已加入游戏邮箱队列';
+            setButtonState('done', '签到成功，奖励已加入游戏邮箱队列', true);
             return;
         }
 
@@ -2036,16 +2056,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         setButtonState('idle', '请求处理中...', true);
         try {
-            const formData = new FormData();
-            formData.append('csrf_token', csrfToken);
+            const body = new URLSearchParams();
+            body.set('csrf_token', csrfToken);
 
             const res = await fetch('/api/checkin/claim', {
                 method: 'POST',
-                body: formData,
                 headers: {
                     'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                },
+                credentials: 'same-origin',
+                body
             });
             const payload = await parseJson(res);
             if (!payload.success) {
@@ -2057,6 +2079,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             await loadCheckinData();
+            payload.message = payload.message || '签到成功，奖励已加入游戏邮箱队列';
             alert(payload.message || '签到成功，愿繁星庇佑你的旅途');
         } catch (error) {
             alert(error instanceof Error ? error.message : '签到失败');

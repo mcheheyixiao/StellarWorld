@@ -1256,3 +1256,27 @@ CREATE TABLE IF NOT EXISTS `stellar_signin_daily_cache` (
   KEY `idx_stellar_signin_daily_cache_request_id` (`request_id`),
   KEY `idx_stellar_signin_daily_cache_updated_at` (`updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `stellar_reward_outbox` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `request_id` VARCHAR(80) NOT NULL,
+  `website_user_id` INT UNSIGNED NOT NULL,
+  `player_uuid` VARCHAR(64) NOT NULL,
+  `player_name` VARCHAR(64) NOT NULL,
+  `server_id` VARCHAR(64) NOT NULL DEFAULT 'stellar-main',
+  `source` VARCHAR(32) NOT NULL DEFAULT 'signin',
+  `reward_type` VARCHAR(32) NOT NULL DEFAULT 'sweetmail',
+  `reward_payload_json` LONGTEXT NOT NULL,
+  `status` VARCHAR(32) NOT NULL DEFAULT 'pending',
+  `attempts` INT UNSIGNED NOT NULL DEFAULT 0,
+  `last_error` VARCHAR(500) NULL DEFAULT NULL,
+  `created_at` DATETIME NOT NULL,
+  `updated_at` DATETIME NOT NULL,
+  `processing_at` DATETIME NULL DEFAULT NULL,
+  `delivered_at` DATETIME NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_stellar_reward_outbox_request` (`request_id`),
+  KEY `idx_stellar_reward_outbox_status_created` (`status`, `created_at`),
+  KEY `idx_stellar_reward_outbox_player_status` (`player_uuid`, `status`),
+  KEY `idx_stellar_reward_outbox_user_created` (`website_user_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

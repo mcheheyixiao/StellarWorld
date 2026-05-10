@@ -1264,6 +1264,7 @@ CREATE TABLE IF NOT EXISTS `stellar_reward_outbox` (
   `player_uuid` VARCHAR(64) NOT NULL,
   `player_name` VARCHAR(64) NOT NULL,
   `server_id` VARCHAR(64) NOT NULL DEFAULT 'stellar-main',
+  `sign_date` DATE NULL DEFAULT NULL,
   `source` VARCHAR(32) NOT NULL DEFAULT 'signin',
   `reward_type` VARCHAR(32) NOT NULL DEFAULT 'sweetmail',
   `reward_payload_json` LONGTEXT NOT NULL,
@@ -1276,6 +1277,7 @@ CREATE TABLE IF NOT EXISTS `stellar_reward_outbox` (
   `delivered_at` DATETIME NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_stellar_reward_outbox_request` (`request_id`),
+  UNIQUE KEY `uq_stellar_reward_outbox_daily` (`player_uuid`, `server_id`, `source`, `sign_date`),
   KEY `idx_stellar_reward_outbox_status_created` (`status`, `created_at`),
   KEY `idx_stellar_reward_outbox_player_status` (`player_uuid`, `status`),
   KEY `idx_stellar_reward_outbox_user_created` (`website_user_id`, `created_at`)

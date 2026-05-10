@@ -105,6 +105,58 @@ unset($_realtimeInternalUrl);
 define('SIGNIN_SERVER_ID', getenv('SIGNIN_SERVER_ID') !== false ? trim((string)getenv('SIGNIN_SERVER_ID')) : 'survival-1');
 define('SIGNIN_REQUIRE_PLAYER_ONLINE', filter_var((string)(getenv('SIGNIN_REQUIRE_PLAYER_ONLINE') ?: '1'), FILTER_VALIDATE_BOOLEAN));
 define('SIGNIN_REQUEST_TIMEOUT_MS', max(500, (int)(getenv('SIGNIN_REQUEST_TIMEOUT_MS') ?: 5000)));
+define('SIGNIN_REWARD_MAIL_TITLE', getenv('SIGNIN_REWARD_MAIL_TITLE') !== false ? trim((string)getenv('SIGNIN_REWARD_MAIL_TITLE')) : '每日签到奖励');
+define('SIGNIN_REWARD_MAIL_ICON', getenv('SIGNIN_REWARD_MAIL_ICON') !== false ? trim((string)getenv('SIGNIN_REWARD_MAIL_ICON')) : 'BOOK');
+
+$_signinRewardMailContentDefault = [
+    '你完成了 {date} 的每日签到。',
+    '连续签到：{continuous} 天',
+    '累计签到：{total} 次',
+    '奖励已通过系统邮件投递，请上线后在邮箱中领取。',
+];
+$_signinRewardMailContentRaw = getenv('SIGNIN_REWARD_MAIL_CONTENT_JSON');
+$_signinRewardMailContent = $_signinRewardMailContentDefault;
+if ($_signinRewardMailContentRaw !== false && trim((string)$_signinRewardMailContentRaw) !== '') {
+    $decoded = json_decode((string)$_signinRewardMailContentRaw, true);
+    if (is_array($decoded)) {
+        $_signinRewardMailContent = $decoded;
+    }
+}
+define('SIGNIN_REWARD_MAIL_CONTENT', $_signinRewardMailContent);
+
+$_signinRewardItemsDefault = [
+    ['type' => 'minecraft:diamond', 'amount' => 1],
+];
+$_signinRewardItemsRaw = getenv('SIGNIN_REWARD_ITEMS_JSON');
+$_signinRewardItems = $_signinRewardItemsDefault;
+if ($_signinRewardItemsRaw !== false && trim((string)$_signinRewardItemsRaw) !== '') {
+    $decoded = json_decode((string)$_signinRewardItemsRaw, true);
+    if (is_array($decoded)) {
+        $_signinRewardItems = $decoded;
+    }
+}
+define('SIGNIN_REWARD_ITEMS', $_signinRewardItems);
+
+$_signinRewardCommandsRaw = getenv('SIGNIN_REWARD_COMMANDS_JSON');
+$_signinRewardCommands = [];
+if ($_signinRewardCommandsRaw !== false && trim((string)$_signinRewardCommandsRaw) !== '') {
+    $decoded = json_decode((string)$_signinRewardCommandsRaw, true);
+    if (is_array($decoded)) {
+        $_signinRewardCommands = $decoded;
+    }
+}
+define('SIGNIN_REWARD_COMMANDS', $_signinRewardCommands);
+unset(
+    $_signinRewardMailContentDefault,
+    $_signinRewardMailContentRaw,
+    $_signinRewardMailContent,
+    $_signinRewardItemsDefault,
+    $_signinRewardItemsRaw,
+    $_signinRewardItems,
+    $_signinRewardCommandsRaw,
+    $_signinRewardCommands,
+    $decoded
+);
 
 $_skinProxyAllowedHostsRaw = trim((string)(getenv('SKIN_PROXY_ALLOWED_HOSTS') ?: 'textures.minecraft.net,sessionserver.mojang.com'));
 $_skinProxyAllowedHosts = [];

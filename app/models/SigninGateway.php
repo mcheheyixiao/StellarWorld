@@ -189,6 +189,84 @@ class SigninGateway extends Model
             $rewardPayload = $this->buildSigninRewardPayload($today, $continuous, $total);
             $payloadJson = $this->encodeJson($rewardPayload);
 
+            $outboxWrite = $this->createRewardOutbox([
+                'request_id' => $requestId,
+                'website_user_id' => $userId,
+                'player_uuid' => $user['mc_uuid'],
+                'player_name' => $user['mc_username'],
+                'server_id' => $serverId,
+                'sign_date' => $today,
+                'source' => 'signin',
+                'reward_type' => 'sweetmail',
+                'reward_payload_json' => $payloadJson,
+                'status' => 'pending',
+                'attempts' => 0,
+                'last_error' => null,
+            ]);
+            if (($outboxWrite['created'] ?? false) !== true) {
+                $outboxRow = (array)($outboxWrite['row'] ?? []);
+                $requestId = trim((string)($outboxRow['request_id'] ?? ''));
+                if ($requestId === '') {
+                    $requestId = $this->buildRequestId();
+                }
+                $payloadJson = trim((string)($outboxRow['reward_payload_json'] ?? '')) ?: $payloadJson;
+                $decodedPayload = json_decode($payloadJson, true);
+                if (!is_array($decodedPayload)) {
+                    $decodedPayload = $rewardPayload;
+                }
+
+                $requestRow = $this->findRequestByRequestId($requestId);
+                if ($requestRow === null) {
+                    $this->createSigninRequest([
+                        'request_id' => $requestId,
+                        'website_user_id' => $userId,
+                        'player_uuid' => $user['mc_uuid'],
+                        'player_name' => $user['mc_username'],
+                        'server_id' => $serverId,
+                        'source' => 'web_queue',
+                        'status' => 'signed',
+                        'message' => 'queued_for_mail_delivery',
+                        'result_payload_json' => $payloadJson,
+                        'ip' => $this->cutString($ip, 64),
+                        'user_agent' => $this->cutString($userAgent, 255),
+                    ]);
+                }
+                $this->finalizeRequest(
+                    $requestId,
+                    'signed',
+                    'queued_for_mail_delivery',
+                    ['reward' => $decodedPayload, 'source' => 'web_queue'],
+                    true
+                );
+                $this->upsertDailyCache([
+                    'request_id' => $requestId,
+                    'website_user_id' => $userId,
+                    'player_uuid' => $user['mc_uuid'],
+                    'player_name' => $user['mc_username'],
+                    'server_id' => $serverId,
+                    'sign_date' => $today,
+                    'signed_today' => true,
+                    'continuous' => $continuous,
+                    'total' => $total,
+                    'last_signin_at' => date('Y-m-d H:i:s'),
+                    'last_source' => 'web_queue',
+                    'raw_payload_json' => $payloadJson,
+                ]);
+
+                if ($ownsTx && $this->db->inTransaction()) {
+                    $this->db->commit();
+                }
+
+                return [
+                    'ok' => true,
+                    'http_status' => 200,
+                    'status' => 'already_signed',
+                    'message' => $this->defaultMessageForStatus('already_signed'),
+                    'request_id' => $requestId,
+                    'status_data' => $this->getStatusForUser($userId),
+                ];
+            }
+
             $this->createSigninRequest([
                 'request_id' => $requestId,
                 'website_user_id' => $userId,
@@ -223,20 +301,6 @@ class SigninGateway extends Model
                 'last_signin_at' => date('Y-m-d H:i:s'),
                 'last_source' => 'web_queue',
                 'raw_payload_json' => $payloadJson,
-            ]);
-
-            $this->createRewardOutbox([
-                'request_id' => $requestId,
-                'website_user_id' => $userId,
-                'player_uuid' => $user['mc_uuid'],
-                'player_name' => $user['mc_username'],
-                'server_id' => $serverId,
-                'source' => 'signin',
-                'reward_type' => 'sweetmail',
-                'reward_payload_json' => $payloadJson,
-                'status' => 'pending',
-                'attempts' => 0,
-                'last_error' => null,
             ]);
 
             if ($ownsTx && $this->db->inTransaction()) {
@@ -330,6 +394,7 @@ class SigninGateway extends Model
                 player_uuid VARCHAR(64) NOT NULL,
                 player_name VARCHAR(64) NOT NULL,
                 server_id VARCHAR(64) NOT NULL DEFAULT 'stellar-main',
+                sign_date DATE NULL DEFAULT NULL,
                 source VARCHAR(32) NOT NULL DEFAULT 'signin',
                 reward_type VARCHAR(32) NOT NULL DEFAULT 'sweetmail',
                 reward_payload_json LONGTEXT NOT NULL,
@@ -341,47 +406,217 @@ class SigninGateway extends Model
                 processing_at DATETIME NULL DEFAULT NULL,
                 delivered_at DATETIME NULL DEFAULT NULL,
                 UNIQUE KEY uq_stellar_reward_outbox_request (request_id),
+                UNIQUE KEY uq_stellar_reward_outbox_daily (player_uuid, server_id, source, sign_date),
                 KEY idx_stellar_reward_outbox_status_created (status, created_at),
                 KEY idx_stellar_reward_outbox_player_status (player_uuid, status),
                 KEY idx_stellar_reward_outbox_user_created (website_user_id, created_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
 
+        $this->ensureRewardOutboxMigration();
+
         self::$schemaReady = true;
+    }
+
+    private function ensureRewardOutboxMigration(): void
+    {
+        if (!$this->tableHasColumn('stellar_reward_outbox', 'sign_date')) {
+            $this->db->exec('
+                ALTER TABLE stellar_reward_outbox
+                ADD COLUMN sign_date DATE NULL DEFAULT NULL AFTER server_id
+            ');
+        }
+
+        $hasDailyIndex = $this->tableHasIndex('stellar_reward_outbox', 'uq_stellar_reward_outbox_daily');
+        if ($hasDailyIndex) {
+            // After unique key exists, backfill only rows that do not conflict with existing daily identities.
+            $this->db->exec('
+                UPDATE stellar_reward_outbox outbox
+                LEFT JOIN stellar_reward_outbox conflict
+                    ON conflict.player_uuid = outbox.player_uuid
+                   AND conflict.server_id = outbox.server_id
+                   AND conflict.source = outbox.source
+                   AND conflict.sign_date = DATE(outbox.created_at)
+                   AND conflict.id <> outbox.id
+                SET outbox.sign_date = DATE(outbox.created_at)
+                WHERE outbox.sign_date IS NULL
+                  AND conflict.id IS NULL
+            ');
+            return;
+        }
+
+        $this->db->exec('
+            UPDATE stellar_reward_outbox
+            SET sign_date = DATE(created_at)
+            WHERE sign_date IS NULL
+        ');
+
+        if (!$hasDailyIndex) {
+            // Keep legacy duplicates as historical rows by nulling duplicate sign_date values.
+            $this->db->exec('
+                UPDATE stellar_reward_outbox outbox
+                INNER JOIN (
+                    SELECT player_uuid, server_id, source, sign_date, MIN(id) AS keep_id
+                    FROM stellar_reward_outbox
+                    WHERE sign_date IS NOT NULL
+                    GROUP BY player_uuid, server_id, source, sign_date
+                    HAVING COUNT(*) > 1
+                ) dup
+                    ON outbox.player_uuid = dup.player_uuid
+                   AND outbox.server_id = dup.server_id
+                   AND outbox.source = dup.source
+                   AND outbox.sign_date = dup.sign_date
+                SET outbox.sign_date = NULL,
+                    outbox.updated_at = NOW()
+                WHERE outbox.id <> dup.keep_id
+            ');
+
+            try {
+                $this->db->exec('
+                    ALTER TABLE stellar_reward_outbox
+                    ADD UNIQUE KEY uq_stellar_reward_outbox_daily (player_uuid, server_id, source, sign_date)
+                ');
+            } catch (\Throwable $e) {
+                throw new \RuntimeException(
+                    'Failed to add uq_stellar_reward_outbox_daily; please resolve duplicate outbox rows first.',
+                    0,
+                    $e
+                );
+            }
+        }
+    }
+
+    private function tableHasColumn(string $tableName, string $columnName): bool
+    {
+        $stmt = $this->db->prepare('
+            SELECT 1
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+              AND COLUMN_NAME = :column_name
+            LIMIT 1
+        ');
+        $stmt->execute([
+            ':table_name' => $tableName,
+            ':column_name' => $columnName,
+        ]);
+
+        return $stmt->fetchColumn() !== false;
+    }
+
+    private function tableHasIndex(string $tableName, string $indexName): bool
+    {
+        $stmt = $this->db->prepare('
+            SELECT 1
+            FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+              AND INDEX_NAME = :index_name
+            LIMIT 1
+        ');
+        $stmt->execute([
+            ':table_name' => $tableName,
+            ':index_name' => $indexName,
+        ]);
+
+        return $stmt->fetchColumn() !== false;
     }
 
     private function buildSigninRewardPayload(string $signDate, int $continuous, int $total): array
     {
+        $mailTitle = defined('SIGNIN_REWARD_MAIL_TITLE')
+            ? trim((string)SIGNIN_REWARD_MAIL_TITLE)
+            : '每日签到奖励';
+        if ($mailTitle === '') {
+            $mailTitle = '每日签到奖励';
+        }
+
+        $mailIcon = defined('SIGNIN_REWARD_MAIL_ICON')
+            ? trim((string)SIGNIN_REWARD_MAIL_ICON)
+            : 'BOOK';
+        if ($mailIcon === '') {
+            $mailIcon = 'BOOK';
+        }
+
+        $mailContent = defined('SIGNIN_REWARD_MAIL_CONTENT') && is_array(SIGNIN_REWARD_MAIL_CONTENT)
+            ? SIGNIN_REWARD_MAIL_CONTENT
+            : [
+                '你完成了 {date} 的每日签到。',
+                '连续签到：{continuous} 天',
+                '累计签到：{total} 次',
+                '奖励已通过系统邮件投递，请上线后在邮箱中领取。',
+            ];
+        $safeMailContent = [];
+        foreach ($mailContent as $line) {
+            if (!is_scalar($line)) {
+                continue;
+            }
+            $text = trim((string)$line);
+            if ($text !== '') {
+                $safeMailContent[] = $text;
+            }
+        }
+        if ($safeMailContent === []) {
+            $safeMailContent = ['你完成了 {date} 的每日签到。'];
+        }
+
+        $configuredItems = defined('SIGNIN_REWARD_ITEMS') && is_array(SIGNIN_REWARD_ITEMS)
+            ? SIGNIN_REWARD_ITEMS
+            : [];
+        $items = [];
+        foreach ($configuredItems as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $type = trim((string)($row['type'] ?? ''));
+            if ($type === '') {
+                continue;
+            }
+            $items[] = [
+                'type' => $type,
+                'amount' => max(1, (int)($row['amount'] ?? 1)),
+            ];
+        }
+
+        $configuredCommands = defined('SIGNIN_REWARD_COMMANDS') && is_array(SIGNIN_REWARD_COMMANDS)
+            ? SIGNIN_REWARD_COMMANDS
+            : [];
+        $commands = [];
+        foreach ($configuredCommands as $command) {
+            if (!is_scalar($command)) {
+                continue;
+            }
+            $text = trim((string)$command);
+            if ($text !== '') {
+                $commands[] = $text;
+            }
+        }
+
         return [
             'mail' => [
-                'title' => '每日签到奖励',
-                'icon' => 'BOOK',
-                'content' => [
-                    '你完成了今日签到。',
-                    '奖励已通过系统邮件投递，请上线后在邮箱中领取。',
-                ],
+                'title' => $mailTitle,
+                'icon' => $mailIcon,
+                'content' => $safeMailContent,
             ],
-            'items' => [
-                [
-                    'type' => 'minecraft:diamond',
-                    'amount' => 1,
-                ],
-            ],
-            'commands' => [
-                'eco give {player} 100',
-                'ia give {player} namespace:item_id 1',
-            ],
+            'items' => $items,
+            'commands' => array_values(array_unique($commands)),
             'meta' => [
                 'signDate' => $signDate,
                 'continuous' => max(1, $continuous),
                 'total' => max(1, $total),
-                'source' => 'web',
+                'source' => 'web_queue',
             ],
         ];
     }
 
-    private function createRewardOutbox(array $row): void
+    private function createRewardOutbox(array $row): array
     {
+        $requestId = trim((string)($row['request_id'] ?? ''));
+        $playerUuid = $this->normalizePlayerUuid((string)($row['player_uuid'] ?? ''));
+        $serverId = $this->cutString((string)($row['server_id'] ?? 'stellar-main'), 64);
+        $source = $this->cutString((string)($row['source'] ?? 'signin'), 32);
+        $signDate = $this->extractSignDate($row);
+
         $stmt = $this->db->prepare('
             INSERT INTO stellar_reward_outbox (
                 request_id,
@@ -389,6 +624,7 @@ class SigninGateway extends Model
                 player_uuid,
                 player_name,
                 server_id,
+                sign_date,
                 source,
                 reward_type,
                 reward_payload_json,
@@ -403,6 +639,7 @@ class SigninGateway extends Model
                 :player_uuid,
                 :player_name,
                 :server_id,
+                :sign_date,
                 :source,
                 :reward_type,
                 :reward_payload_json,
@@ -412,20 +649,82 @@ class SigninGateway extends Model
                 NOW(),
                 NOW()
             )
+            ON DUPLICATE KEY UPDATE
+                id = LAST_INSERT_ID(id),
+                request_id = request_id,
+                updated_at = updated_at
         ');
         $stmt->execute([
-            ':request_id' => (string)($row['request_id'] ?? ''),
+            ':request_id' => $requestId,
             ':website_user_id' => (int)($row['website_user_id'] ?? 0),
-            ':player_uuid' => (string)($row['player_uuid'] ?? ''),
+            ':player_uuid' => $playerUuid,
             ':player_name' => (string)($row['player_name'] ?? ''),
-            ':server_id' => (string)($row['server_id'] ?? 'stellar-main'),
-            ':source' => (string)($row['source'] ?? 'signin'),
+            ':server_id' => $serverId,
+            ':sign_date' => $signDate,
+            ':source' => $source,
             ':reward_type' => (string)($row['reward_type'] ?? 'sweetmail'),
             ':reward_payload_json' => (string)($row['reward_payload_json'] ?? '{}'),
             ':status' => (string)($row['status'] ?? 'pending'),
             ':attempts' => max(0, (int)($row['attempts'] ?? 0)),
             ':last_error' => $this->nullableString($row['last_error'] ?? null),
         ]);
+
+        $outboxId = (int)$this->db->lastInsertId();
+        $outboxRow = $outboxId > 0 ? $this->findRewardOutboxById($outboxId) : null;
+        if ($outboxRow === null) {
+            $outboxRow = $this->findRewardOutboxByDailyIdentity($playerUuid, $serverId, $source, $signDate);
+        }
+        if ($outboxRow === null) {
+            throw new \RuntimeException('Failed to resolve reward outbox row after write');
+        }
+
+        return [
+            'created' => trim((string)($outboxRow['request_id'] ?? '')) === $requestId,
+            'row' => $outboxRow,
+        ];
+    }
+
+    private function findRewardOutboxById(int $id): ?array
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        $stmt = $this->db->prepare('
+            SELECT *
+            FROM stellar_reward_outbox
+            WHERE id = :id
+            LIMIT 1
+        ');
+        $stmt->execute([':id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    private function findRewardOutboxByDailyIdentity(
+        string $playerUuid,
+        string $serverId,
+        string $source,
+        string $signDate
+    ): ?array {
+        $stmt = $this->db->prepare('
+            SELECT *
+            FROM stellar_reward_outbox
+            WHERE player_uuid = :player_uuid
+              AND server_id = :server_id
+              AND source = :source
+              AND sign_date = :sign_date
+            ORDER BY id DESC
+            LIMIT 1
+        ');
+        $stmt->execute([
+            ':player_uuid' => $playerUuid,
+            ':server_id' => $serverId,
+            ':source' => $source,
+            ':sign_date' => $signDate,
+        ]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
     }
 
     private function encodeJson($payload): string
@@ -693,29 +992,6 @@ class SigninGateway extends Model
         return $this->unwrapPayload($result);
     }
 
-    private function dispatchInternalPluginCommand(array $payload): array
-    {
-        $baseUrl = defined('REALTIME_INTERNAL_URL') ? trim((string)REALTIME_INTERNAL_URL) : '';
-        if ($baseUrl === '') {
-            return ['ok' => false, 'status' => 'failed', 'message' => 'REALTIME_INTERNAL_URL is not configured'];
-        }
-
-        $secret = defined('REALTIME_INTERNAL_SECRET') ? trim((string)REALTIME_INTERNAL_SECRET) : '';
-        if ($secret === '') {
-            return ['ok' => false, 'status' => 'failed', 'message' => 'REALTIME internal secret is not configured'];
-        }
-
-        $timeoutMs = defined('SIGNIN_REQUEST_TIMEOUT_MS') ? (int)SIGNIN_REQUEST_TIMEOUT_MS : 5000;
-        $timeoutMs = max(500, $timeoutMs);
-        $url = rtrim($baseUrl, '/') . '/internal/plugin-command';
-        $headers = [
-            'Content-Type: application/json',
-            'X-Stellar-Realtime-Secret: ' . str_replace(["\r", "\n"], '', $secret),
-        ];
-
-        return $this->httpPostJson($url, $payload, $headers, $timeoutMs);
-    }
-
     private function httpGetJson(string $url, array $headers, int $timeoutMs): array
     {
         if (function_exists('curl_init')) {
@@ -762,124 +1038,6 @@ class SigninGateway extends Model
         return is_array($decoded) ? $decoded : [];
     }
 
-    private function httpPostJson(string $url, array $payload, array $headers, int $timeoutMs): array
-    {
-        $body = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if (!is_string($body)) {
-            return ['ok' => false, 'status' => 'failed', 'message' => 'JSON encode failed', 'http_status' => 500];
-        }
-
-        if (function_exists('curl_init')) {
-            $ch = curl_init($url);
-            if ($ch !== false) {
-                curl_setopt_array($ch, [
-                    CURLOPT_POST => true,
-                    CURLOPT_POSTFIELDS => $body,
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_FOLLOWLOCATION => false,
-                    CURLOPT_CONNECTTIMEOUT_MS => $timeoutMs,
-                    CURLOPT_TIMEOUT_MS => $timeoutMs,
-                    CURLOPT_SSL_VERIFYPEER => false,
-                    CURLOPT_SSL_VERIFYHOST => 0,
-                    CURLOPT_HTTPHEADER => $headers,
-                ]);
-                $response = curl_exec($ch);
-                $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                $errorNo = (int)curl_errno($ch);
-                curl_close($ch);
-
-                $decoded = is_string($response) ? json_decode($response, true) : [];
-                $decodedArr = is_array($decoded) ? $decoded : [];
-
-                if ($response === false) {
-                    return [
-                        'ok' => false,
-                        'status' => $errorNo === 28 ? 'timeout' : 'failed',
-                        'message' => $errorNo === 28 ? 'Sign-in request timed out' : 'Internal request failed',
-                        'payload' => $decodedArr,
-                        'http_status' => $errorNo === 28 ? 504 : ($httpCode > 0 ? $httpCode : 500),
-                    ];
-                }
-
-                if ($errorNo !== 0) {
-                    return [
-                        'ok' => false,
-                        'status' => $errorNo === 28 ? 'timeout' : 'failed',
-                        'message' => $errorNo === 28 ? 'Sign-in request timed out' : 'Internal request failed',
-                        'payload' => $decodedArr,
-                        'http_status' => $errorNo === 28 ? 504 : ($httpCode > 0 ? $httpCode : 500),
-                    ];
-                }
-                return $this->buildHttpPostJsonResult($decodedArr, $httpCode > 0 ? $httpCode : 200);
-            }
-        }
-
-        $context = stream_context_create([
-            'http' => [
-                'method' => 'POST',
-                'header' => implode("\r\n", $headers) . "\r\n",
-                'content' => $body,
-                'timeout' => max(0.5, $timeoutMs / 1000),
-                'ignore_errors' => true,
-            ],
-        ]);
-        $response = @file_get_contents($url, false, $context);
-        $responseHeaders = isset($http_response_header) && is_array($http_response_header) ? $http_response_header : [];
-        $httpCode = $this->extractHttpResponseCodeFromHeaders($responseHeaders);
-        if (!is_string($response)) {
-            return [
-                'ok' => false,
-                'status' => $httpCode === 504 ? 'timeout' : 'failed',
-                'message' => $httpCode === 504 ? 'Sign-in request timed out' : 'Internal request failed',
-                'http_status' => $httpCode > 0 ? $httpCode : 500,
-            ];
-        }
-
-        $decoded = json_decode($response, true);
-        $decodedArr = is_array($decoded) ? $decoded : [];
-        return $this->buildHttpPostJsonResult($decodedArr, $httpCode > 0 ? $httpCode : 200);
-    }
-
-    private function buildHttpPostJsonResult(array $decodedArr, int $httpCode): array
-    {
-        $httpStatus = $httpCode > 0 ? $httpCode : 200;
-        $isHttp2xx = $httpStatus >= 200 && $httpStatus < 300;
-        $rootOk = (($decodedArr['ok'] ?? null) === true) || (($decodedArr['success'] ?? null) === true);
-        $normalized = $this->normalizeRealtimeResponse($decodedArr);
-        $status = trim((string)($decodedArr['status'] ?? ($decodedArr['data']['status'] ?? '')));
-        if ($status === '') {
-            $status = $normalized['status'];
-        }
-        $status = strtolower($status);
-        $message = trim((string)($decodedArr['message'] ?? ($decodedArr['data']['message'] ?? '')));
-        if ($message === '') {
-            $message = $rootOk ? 'ok' : $normalized['message'];
-        }
-        if ($message === '') {
-            $message = $this->defaultMessageForStatus($status);
-        }
-
-        return [
-            'ok' => $isHttp2xx && $rootOk,
-            'http_status' => $httpStatus,
-            'status' => $status,
-            'message' => $message,
-            'payload' => $decodedArr,
-        ];
-    }
-
-    private function extractHttpResponseCodeFromHeaders(array $headers): int
-    {
-        foreach ($headers as $headerLine) {
-            $line = trim((string)$headerLine);
-            if (preg_match('#^HTTP/\d+(?:\.\d+)?\s+(\d{3})#i', $line, $matches) === 1) {
-                return (int)$matches[1];
-            }
-        }
-
-        return 0;
-    }
-
     private function unwrapPayload(array $payload): array
     {
         $candidate = $payload;
@@ -914,56 +1072,6 @@ class SigninGateway extends Model
         return $this->unwrapPayload($result);
     }
 
-    private function normalizeRealtimeResponse(array $raw): array
-    {
-        $candidate = isset($raw['data']) && is_array($raw['data']) ? $raw['data'] : $raw;
-        $status = strtolower(trim((string)($raw['status'] ?? ($candidate['status'] ?? ''))));
-        if ($status === '') {
-            $status = strtolower(trim((string)($raw['result'] ?? ($candidate['result'] ?? ''))));
-        }
-        if ($status === '') {
-            $ok = $this->parseBool(
-                $raw['ok'] ?? ($raw['success'] ?? ($candidate['ok'] ?? ($candidate['success'] ?? null)))
-            );
-            if ($ok === true) {
-                $status = 'accepted';
-            } elseif ($ok === false) {
-                $status = 'failed';
-            }
-        }
-
-        if (!in_array($status, self::KNOWN_STATUSES, true)) {
-            $status = 'unknown';
-        }
-
-        $payload = [];
-        if (isset($raw['payload']) && is_array($raw['payload'])) {
-            $payload = $raw['payload'];
-        } elseif (isset($candidate['payload']) && is_array($candidate['payload'])) {
-            $payload = $candidate['payload'];
-        } else {
-            $payload = $candidate;
-        }
-
-        $message = trim((string)($raw['message'] ?? ($candidate['message'] ?? '')));
-        if ($message === '') {
-            $ok = $this->parseBool(
-                $raw['ok'] ?? ($raw['success'] ?? ($candidate['ok'] ?? ($candidate['success'] ?? null)))
-            );
-            if ($ok === true) {
-                $message = 'ok';
-            } else {
-                $message = $this->defaultMessageForStatus($status);
-            }
-        }
-
-        return [
-            'status' => $status,
-            'message' => $message,
-            'payload' => is_array($payload) ? $payload : [],
-        ];
-    }
-
     private function defaultMessageForStatus(string $status): string
     {
         return match ($status) {
@@ -990,26 +1098,6 @@ class SigninGateway extends Model
     private function defaultSource(): string
     {
         return 'litesignin_cache';
-    }
-
-    private function httpStatusForSigninStatus(string $status): int
-    {
-        return match ($status) {
-            'signed', 'already_signed', 'accepted', 'requested', 'unknown' => 200,
-            'player_offline' => 409,
-            'server_offline', 'plugin_missing', 'plugin_missing_litesignin', 'bridge_disabled' => 503,
-            'litesignin_api_failed' => 502,
-            'invalid_request', 'invalid_payload', 'invalid_player_uuid' => 400,
-            'duplicate_request_id' => 409,
-            'timeout' => 504,
-            'too_frequent', 'pending_limit_reached' => 429,
-            default => 500,
-        };
-    }
-
-    private function isTerminalSigninStatus(string $status): bool
-    {
-        return !in_array($status, ['requested', 'accepted', 'unknown'], true);
     }
 
     private function createSigninRequest(array $row): void

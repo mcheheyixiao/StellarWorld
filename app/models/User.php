@@ -107,18 +107,55 @@ class User extends Model
 
     public function create(array $data): int
     {
+        $username = trim((string)($data['username'] ?? ''));
+        $mcUsername = trim((string)($data['mc_username'] ?? ''));
+        if ($mcUsername === '') {
+            $mcUsername = $username;
+        }
+
+        $ip = trim((string)($data['ip'] ?? ''));
+        $ip = $ip !== '' ? $ip : null;
+
+        $regIp = trim((string)($data['regip'] ?? ''));
+        if ($regIp === '') {
+            $regIp = $ip;
+        }
+        $regIp = $regIp !== '' ? $regIp : null;
+
+        $regDate = isset($data['regdate']) ? (int)$data['regdate'] : (int)floor(microtime(true) * 1000);
+        $world = trim((string)($data['world'] ?? 'world'));
+        if ($world === '') {
+            $world = 'world';
+        }
+
         $stmt = $this->db->prepare('
-            INSERT INTO users (username, email, password_hash, role, status, email_verified, mua_sub, created_at, updated_at)
-            VALUES (:username, :email, :password_hash, :role, :status, :email_verified, :mua_sub, NOW(), NOW())
+            INSERT INTO users (
+                username, mc_username, email, password_hash, role, status, email_verified, mua_sub,
+                ip, regip, regdate, isLogged, hasSession, x, y, z, world, created_at, updated_at
+            )
+            VALUES (
+                :username, :mc_username, :email, :password_hash, :role, :status, :email_verified, :mua_sub,
+                :ip, :regip, :regdate, :isLogged, :hasSession, :x, :y, :z, :world, NOW(), NOW()
+            )
         ');
         $stmt->execute([
-            ':username' => $data['username'],
+            ':username' => $username,
+            ':mc_username' => $mcUsername,
             ':email' => $data['email'],
             ':password_hash' => $data['password_hash'],
             ':role' => $data['role'] ?? 'player',
             ':status' => $data['status'] ?? 'active',
             ':email_verified' => isset($data['email_verified']) ? (int)$data['email_verified'] : 0,
             ':mua_sub' => $data['mua_sub'] ?? null,
+            ':ip' => $ip,
+            ':regip' => $regIp,
+            ':regdate' => $regDate,
+            ':isLogged' => isset($data['isLogged']) ? (int)$data['isLogged'] : 0,
+            ':hasSession' => isset($data['hasSession']) ? (int)$data['hasSession'] : 0,
+            ':x' => isset($data['x']) ? (float)$data['x'] : 0.0,
+            ':y' => isset($data['y']) ? (float)$data['y'] : 0.0,
+            ':z' => isset($data['z']) ? (float)$data['z'] : 0.0,
+            ':world' => $world,
         ]);
         return (int) $this->db->lastInsertId();
     }
@@ -229,6 +266,28 @@ class User extends Model
         ');
         $stmt->execute([
             ':password_hash' => $newHash,
+            ':id' => $userId,
+        ]);
+    }
+
+    public function updateLoginMetadata(int $userId, string $ip): void
+    {
+        $lastLogin = (int)floor(microtime(true) * 1000);
+        $safeIp = trim($ip);
+        $safeIp = $safeIp !== '' ? $safeIp : null;
+
+        $stmt = $this->db->prepare('
+            UPDATE users
+            SET ip = :ip,
+                lastlogin = :lastlogin,
+                isLogged = 1,
+                hasSession = 1,
+                updated_at = NOW()
+            WHERE id = :id
+        ');
+        $stmt->execute([
+            ':ip' => $safeIp,
+            ':lastlogin' => $lastLogin,
             ':id' => $userId,
         ]);
     }

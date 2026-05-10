@@ -321,13 +321,12 @@ class ProfileController extends Controller
         $stmt->execute([':id' => $userId]);
         $row = $stmt->fetch(\PDO::FETCH_ASSOC);
         $storedHash = is_array($row) ? (string)($row['password_hash'] ?? '') : '';
-        $isModernHash = PasswordHasher::isModernHash($storedHash);
         $oldPasswordValid = false;
         if (is_array($row)) {
-            if ($isModernHash) {
-                $oldPasswordValid = PasswordHasher::verify($oldPassword, $storedHash);
-            } else {
-                $oldPasswordValid = AuthMePassword::verify($oldPassword, $storedHash);
+            if (AuthMePassword::verify($oldPassword, $storedHash)) {
+                $oldPasswordValid = true;
+            } elseif (PasswordHasher::isModernHash($storedHash) && PasswordHasher::verify($oldPassword, $storedHash)) {
+                $oldPasswordValid = true;
             }
         }
 
@@ -336,7 +335,7 @@ class ProfileController extends Controller
             return;
         }
 
-        $newHash = PasswordHasher::hash($newPassword);
+        $newHash = AuthMePassword::hash($newPassword);
         $this->users->updatePassword($userId, $newHash);
 
         try {

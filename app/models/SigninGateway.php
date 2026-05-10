@@ -649,6 +649,15 @@ class SigninGateway extends Model
         $timeoutMs = defined('WS_STATUS_API_TIMEOUT_MS') ? (int)WS_STATUS_API_TIMEOUT_MS : 2500;
         $timeoutMs = max(500, $timeoutMs);
         $result = $this->httpGetJson($url, $headers, $timeoutMs);
+        $normalizedPath = '/' . ltrim($path, '/');
+        $queryPos = strpos($normalizedPath, '?');
+        if ($queryPos !== false) {
+            $normalizedPath = substr($normalizedPath, 0, $queryPos);
+        }
+        if ($normalizedPath === '/api/status') {
+            return $this->unwrapRealtimeStatusPayload($result);
+        }
+
         return $this->unwrapPayload($result);
     }
 
@@ -903,6 +912,24 @@ class SigninGateway extends Model
         }
 
         return is_array($candidate) ? $candidate : [];
+    }
+
+    private function unwrapRealtimeStatusPayload(array $result): array
+    {
+        if (isset($result['data']) && is_array($result['data'])) {
+            $data = $result['data'];
+            if (
+                array_key_exists('server', $data)
+                || array_key_exists('players', $data)
+                || array_key_exists('playerList', $data)
+                || array_key_exists('plugins', $data)
+                || array_key_exists('metrics', $data)
+            ) {
+                return $data;
+            }
+        }
+
+        return $this->unwrapPayload($result);
     }
 
     private function normalizeRealtimeResponse(array $raw): array

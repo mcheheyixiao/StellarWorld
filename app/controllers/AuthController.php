@@ -668,8 +668,8 @@ class AuthController extends Controller
         }
 
         $email = (string)$row['email'];
-        // Website account password must use modern password_hash() output.
-        $hash = PasswordHasher::hash($passwordRaw);
+        // Reset password must be written in AuthMe-compatible SHA format.
+        $hash = AuthMePassword::hash($passwordRaw);
 
         $upd = $db->prepare('UPDATE users SET password_hash = :hash WHERE email = :email LIMIT 1');
         $upd->execute([
@@ -769,13 +769,14 @@ class AuthController extends Controller
 
         $user = $this->users->findByUsername($username);
         $storedHash = is_array($user) ? (string)($user['password_hash'] ?? '') : '';
-        $isModernHash = PasswordHasher::isModernHash($storedHash);
         $passwordValid = false;
+        $migrateFromLegacyModernHash = false;
         if (is_array($user)) {
-            if ($isModernHash) {
-                $passwordValid = PasswordHasher::verify($passwordRaw, $storedHash);
-            } else {
-                $passwordValid = AuthMePassword::verify($passwordRaw, $storedHash);
+            if (AuthMePassword::verify($passwordRaw, $storedHash)) {
+                $passwordValid = true;
+            } elseif (PasswordHasher::isModernHash($storedHash) && PasswordHasher::verify($passwordRaw, $storedHash)) {
+                $passwordValid = true;
+                $migrateFromLegacyModernHash = true;
             }
         }
         if (!$user || !$passwordValid) {
@@ -786,21 +787,13 @@ class AuthController extends Controller
                 ]);
             } catch (\Throwable $e) {
             }
-            $this->json(['success' => false, 'message' => '用户名或密码错误'], 401);
+            $this->json(['success' => false, 'message' => '密码错误'], 401);
             return;
         }
 
-        if ($isModernHash) {
-            if (PasswordHasher::needsRehash($storedHash)) {
-                try {
-                    $this->users->updatePassword((int)$user['id'], PasswordHasher::hash($passwordRaw));
-                } catch (\Throwable $e) {
-                    // Keep login successful even if transparent rehash fails.
-                }
-            }
-        } else {
+        if ($migrateFromLegacyModernHash) {
             try {
-                $this->users->updatePassword((int)$user['id'], PasswordHasher::hash($passwordRaw));
+                $this->users->updatePassword((int)$user['id'], AuthMePassword::hash($passwordRaw));
             } catch (\Throwable $e) {
                 // Keep login successful even if transparent migration fails.
             }
@@ -817,6 +810,11 @@ class AuthController extends Controller
         $_SESSION['user_id'] = (int)$user['id'];
         $_SESSION['username'] = $user['username'];
         $_SESSION['role'] = $user['role'];
+        try {
+            $this->users->updateLoginMetadata((int)$user['id'], $ip);
+        } catch (\Throwable $e) {
+            // Keep login successful even if metadata update fails.
+        }
 
         if (!empty($_POST['remember'])) {
             $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
@@ -957,6 +955,7 @@ class AuthController extends Controller
         }
 
         $username = trim((string)($_POST['username'] ?? ''));
+        $mcUsername = trim((string)($_POST['mc_username'] ?? ''));
         $email = trim((string)($_POST['email'] ?? ''));
         $passwordRaw = (string)($_POST['password'] ?? '');
         $captchaAnswer = trim((string)($_POST['captcha_answer'] ?? ''));
@@ -993,6 +992,10 @@ class AuthController extends Controller
                 $this->json(['success' => false, 'message' => '请求过于频繁，请稍后再试'], 429);
                 return;
             }
+        }
+
+        if ($mcUsername === '') {
+            $mcUsername = $username;
         }
 
         if ($captchaAnswer === '' || !$this->captchaService->verify($captchaAnswer, 'register')) {
@@ -1075,13 +1078,18 @@ class AuthController extends Controller
             }
         }
 
-        // Website account password must use modern password_hash() output.
-        $hash = PasswordHasher::hash($passwordRaw);
+        $hash = AuthMePassword::hash($passwordRaw);
+        $regDate = (int)floor(microtime(true) * 1000);
 
         $userId = $this->users->create([
             'username' => $username,
+            'mc_username' => $mcUsername,
             'email' => $email,
             'password_hash' => $hash,
+            'ip' => $ip,
+            'regip' => $ip,
+            'regdate' => $regDate,
+            'world' => 'world',
             'role' => 'player',
             'status' => 'active',
             'email_verified' => 1,

@@ -21,16 +21,12 @@
             </div>
 
             <div class="auth-field">
-                <label class="auth-label" for="mc_username">绑定游戏名（可选）</label>
-                <input id="mc_username" name="mc_username" type="text" class="auth-input"
+                <label class="auth-label" for="mc_username">游戏名</label>
+                <input id="mc_username" name="mc_username" type="text" required class="auth-input"
                        value="<?= htmlspecialchars($isMicrosoftMinecraftPending ? $oauthPendingMcUsername : '', ENT_QUOTES, 'UTF-8') ?>"
                        <?= $isMicrosoftMinecraftPending ? 'readonly' : '' ?>
                        placeholder="仅填写游戏名，网站将自动生成 UUID" autocomplete="off">
-                <?php if ($isMicrosoftMinecraftPending): ?>
-                    <p class="auth-help-text">已通过 Microsoft 正版账号验证</p>
-                <?php else: ?>
-                    <p class="auth-help-text">填写昵称不会直接绑定 mc_uuid，请在注册后通过可信流程完成绑定。</p>
-                <?php endif; ?>
+                <p class="auth-help-text">该名称将作为 Minecraft/服务器登录名，请填写与你进服一致的游戏名。</p>
             </div>
 
             <div class="auth-field">

@@ -194,6 +194,10 @@ class SigninGateway extends Model
         ]);
 
         $dispatch = $this->dispatchInternalPluginCommand($requestPayload);
+        if (defined('APP_DEBUG') && (bool)constant('APP_DEBUG')) {
+            $debugJson = json_encode($dispatch, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            error_log('[SigninDebug] dispatch=' . (is_string($debugJson) ? $debugJson : '[json_encode_failed]'));
+        }
         if (!$dispatch['ok']) {
             $normalizedFailure = $this->normalizeRealtimeResponse([
                 'status' => (string)($dispatch['status'] ?? ''),
@@ -756,9 +760,8 @@ class SigninGateway extends Model
                 $errorNo = (int)curl_errno($ch);
                 curl_close($ch);
 
-                $decoded = json_decode((string)$response, true);
+                $decoded = is_string($response) ? json_decode($response, true) : [];
                 $decodedArr = is_array($decoded) ? $decoded : [];
-                $normalized = $this->normalizeRealtimeResponse($decodedArr);
 
                 if ($response === false) {
                     return [
@@ -771,56 +774,15 @@ class SigninGateway extends Model
                 }
 
                 if ($errorNo !== 0) {
-                    $status = $errorNo === 28 ? 'timeout' : $normalized['status'];
-                    if ($status === 'unknown') {
-                        $status = $errorNo === 28 ? 'timeout' : 'failed';
-                    }
-                    $message = trim($normalized['message']);
-                    if ($message === '') {
-                        $message = $errorNo === 28 ? 'Sign-in request timed out' : 'Internal request failed';
-                    }
                     return [
                         'ok' => false,
-                        'status' => $status,
-                        'message' => $message,
+                        'status' => $errorNo === 28 ? 'timeout' : 'failed',
+                        'message' => $errorNo === 28 ? 'Sign-in request timed out' : 'Internal request failed',
                         'payload' => $decodedArr,
                         'http_status' => $errorNo === 28 ? 504 : ($httpCode > 0 ? $httpCode : 500),
                     ];
                 }
-                if ($httpCode < 200 || $httpCode >= 300) {
-                    $status = $normalized['status'];
-                    if ($status === 'unknown') {
-                        $status = $httpCode === 504 ? 'timeout' : 'failed';
-                    }
-                    $message = trim($normalized['message']);
-                    if ($message === '') {
-                        $message = $httpCode === 504 ? 'Sign-in request timed out' : 'Internal request rejected';
-                    }
-                    return [
-                        'ok' => false,
-                        'status' => $status,
-                        'message' => $message,
-                        'payload' => $decodedArr,
-                        'http_status' => $httpCode,
-                    ];
-                }
-
-                $status = $normalized['status'];
-                if ($status === 'unknown' && $decodedArr === []) {
-                    $status = 'accepted';
-                }
-                $message = trim($normalized['message']);
-                if ($message === '') {
-                    $message = $status === 'accepted' ? 'Accepted' : $this->defaultMessageForStatus($status);
-                }
-
-                return [
-                    'ok' => true,
-                    'status' => $status,
-                    'message' => $message,
-                    'payload' => $decodedArr,
-                    'http_status' => $httpCode > 0 ? $httpCode : 200,
-                ];
+                return $this->buildHttpPostJsonResult($decodedArr, $httpCode > 0 ? $httpCode : 200);
             }
         }
 
@@ -847,42 +809,34 @@ class SigninGateway extends Model
 
         $decoded = json_decode($response, true);
         $decodedArr = is_array($decoded) ? $decoded : [];
+        return $this->buildHttpPostJsonResult($decodedArr, $httpCode > 0 ? $httpCode : 200);
+    }
+
+    private function buildHttpPostJsonResult(array $decodedArr, int $httpCode): array
+    {
+        $httpStatus = $httpCode > 0 ? $httpCode : 200;
+        $isHttp2xx = $httpStatus >= 200 && $httpStatus < 300;
+        $rootOk = (($decodedArr['ok'] ?? null) === true) || (($decodedArr['success'] ?? null) === true);
         $normalized = $this->normalizeRealtimeResponse($decodedArr);
-
-        if ($httpCode > 0 && ($httpCode < 200 || $httpCode >= 300)) {
+        $status = trim((string)($decodedArr['status'] ?? ($decodedArr['data']['status'] ?? '')));
+        if ($status === '') {
             $status = $normalized['status'];
-            if ($status === 'unknown') {
-                $status = $httpCode === 504 ? 'timeout' : 'failed';
-            }
-            $message = trim($normalized['message']);
-            if ($message === '') {
-                $message = $httpCode === 504 ? 'Sign-in request timed out' : 'Internal request rejected';
-            }
-
-            return [
-                'ok' => false,
-                'status' => $status,
-                'message' => $message,
-                'payload' => $decodedArr,
-                'http_status' => $httpCode,
-            ];
         }
-
-        $status = $normalized['status'];
-        if ($status === 'unknown' && $decodedArr === []) {
-            $status = 'accepted';
-        }
-        $message = trim($normalized['message']);
+        $status = strtolower($status);
+        $message = trim((string)($decodedArr['message'] ?? ($decodedArr['data']['message'] ?? '')));
         if ($message === '') {
-            $message = $status === 'accepted' ? 'Accepted' : $this->defaultMessageForStatus($status);
+            $message = $rootOk ? 'ok' : $normalized['message'];
+        }
+        if ($message === '') {
+            $message = $this->defaultMessageForStatus($status);
         }
 
         return [
-            'ok' => true,
+            'ok' => $isHttp2xx && $rootOk,
+            'http_status' => $httpStatus,
             'status' => $status,
             'message' => $message,
             'payload' => $decodedArr,
-            'http_status' => $httpCode > 0 ? $httpCode : 200,
         ];
     }
 
@@ -934,13 +888,15 @@ class SigninGateway extends Model
 
     private function normalizeRealtimeResponse(array $raw): array
     {
-        $candidate = $this->unwrapPayload($raw);
-        $status = strtolower(trim((string)($candidate['status'] ?? ($raw['status'] ?? ''))));
+        $candidate = isset($raw['data']) && is_array($raw['data']) ? $raw['data'] : $raw;
+        $status = strtolower(trim((string)($raw['status'] ?? ($candidate['status'] ?? ''))));
         if ($status === '') {
-            $status = strtolower(trim((string)($candidate['result'] ?? ($raw['result'] ?? ''))));
+            $status = strtolower(trim((string)($raw['result'] ?? ($candidate['result'] ?? ''))));
         }
         if ($status === '') {
-            $ok = $this->parseBool($candidate['ok'] ?? ($raw['ok'] ?? null));
+            $ok = $this->parseBool(
+                $raw['ok'] ?? ($raw['success'] ?? ($candidate['ok'] ?? ($candidate['success'] ?? null)))
+            );
             if ($ok === true) {
                 $status = 'accepted';
             } elseif ($ok === false) {
@@ -953,17 +909,24 @@ class SigninGateway extends Model
         }
 
         $payload = [];
-        if (isset($candidate['payload']) && is_array($candidate['payload'])) {
-            $payload = $candidate['payload'];
-        } elseif (isset($raw['payload']) && is_array($raw['payload'])) {
+        if (isset($raw['payload']) && is_array($raw['payload'])) {
             $payload = $raw['payload'];
+        } elseif (isset($candidate['payload']) && is_array($candidate['payload'])) {
+            $payload = $candidate['payload'];
         } else {
             $payload = $candidate;
         }
 
-        $message = trim((string)($candidate['message'] ?? ($raw['message'] ?? '')));
+        $message = trim((string)($raw['message'] ?? ($candidate['message'] ?? '')));
         if ($message === '') {
-            $message = $this->defaultMessageForStatus($status);
+            $ok = $this->parseBool(
+                $raw['ok'] ?? ($raw['success'] ?? ($candidate['ok'] ?? ($candidate['success'] ?? null)))
+            );
+            if ($ok === true) {
+                $message = 'ok';
+            } else {
+                $message = $this->defaultMessageForStatus($status);
+            }
         }
 
         return [

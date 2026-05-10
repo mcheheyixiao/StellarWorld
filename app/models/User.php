@@ -112,6 +112,11 @@ class User extends Model
         if ($mcUsername === '') {
             $mcUsername = $username;
         }
+        $mcUuid = trim((string)($data['mc_uuid'] ?? ''));
+        $mcUuid = $mcUuid !== '' ? $this->normalizeMinecraftUuid($mcUuid) : '';
+        if ($mcUuid === '') {
+            $mcUuid = null;
+        }
 
         $ip = trim((string)($data['ip'] ?? ''));
         $ip = $ip !== '' ? $ip : null;
@@ -130,17 +135,18 @@ class User extends Model
 
         $stmt = $this->db->prepare('
             INSERT INTO users (
-                username, mc_username, email, password_hash, role, status, email_verified, mua_sub,
+                username, mc_username, mc_uuid, email, password_hash, role, status, email_verified, mua_sub,
                 ip, regip, regdate, isLogged, hasSession, x, y, z, world, created_at, updated_at
             )
             VALUES (
-                :username, :mc_username, :email, :password_hash, :role, :status, :email_verified, :mua_sub,
+                :username, :mc_username, :mc_uuid, :email, :password_hash, :role, :status, :email_verified, :mua_sub,
                 :ip, :regip, :regdate, :isLogged, :hasSession, :x, :y, :z, :world, NOW(), NOW()
             )
         ');
         $stmt->execute([
             ':username' => $username,
             ':mc_username' => $mcUsername,
+            ':mc_uuid' => $mcUuid,
             ':email' => $data['email'],
             ':password_hash' => $data['password_hash'],
             ':role' => $data['role'] ?? 'player',

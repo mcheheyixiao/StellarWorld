@@ -8,6 +8,7 @@ use Core\CaptchaService;
 use Core\Controller;
 use Core\EmailCodeService;
 use Core\EmailDomainWhitelist;
+use Core\MinecraftUuid;
 use Core\MUAFetcher;
 use Core\PasswordHasher;
 use Core\PasswordResetService;
@@ -997,6 +998,7 @@ class AuthController extends Controller
         if ($mcUsername === '') {
             $mcUsername = $username;
         }
+        $offlineMcUuid = MinecraftUuid::getOfflineUuid($mcUsername);
 
         if ($captchaAnswer === '' || !$this->captchaService->verify($captchaAnswer, 'register')) {
             try {
@@ -1084,6 +1086,7 @@ class AuthController extends Controller
         $userId = $this->users->create([
             'username' => $username,
             'mc_username' => $mcUsername,
+            'mc_uuid' => $offlineMcUuid,
             'email' => $email,
             'password_hash' => $hash,
             'ip' => $ip,

@@ -1065,7 +1065,11 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 }
 </style>
 
-<div class="profile-page-root max-w-7xl mx-auto p-4 md:p-6">
+<div
+    class="profile-page-root max-w-7xl mx-auto p-4 md:p-6"
+    data-profile-mc-uuid="<?= htmlspecialchars((string)($profile['mc_uuid'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+    data-profile-mc-name="<?= htmlspecialchars((string)($profile['mc_username'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+>
     <div class="profile-page-shell overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/85 shadow-2xl backdrop-blur">
         <div class="profile-shell">
             <aside class="profile-sidebar p-4 md:p-5 flex flex-col gap-4">
@@ -1137,8 +1141,8 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                             <span class="profile-kpi-icon" aria-hidden="true">🟢</span>
                             <p class="profile-kpi-title">在线状态</p>
                         </div>
-                        <p class="profile-kpi-value"><?= htmlspecialchars($onlineDisplay, ENT_QUOTES, 'UTF-8') ?></p>
-                        <p class="profile-kpi-note">等待服务器同步</p>
+                        <p class="profile-kpi-value" data-profile-online-status-value><?= htmlspecialchars($onlineDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                        <p class="profile-kpi-note" data-profile-online-status-note>等待实时玩家列表检测</p>
                     </div>
                     <div class="profile-kpi-card">
                         <div class="profile-kpi-header">
@@ -1146,7 +1150,6 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                             <p class="profile-kpi-title">累计时长</p>
                         </div>
                         <p class="profile-kpi-value"><?= htmlspecialchars($durationDisplay, ENT_QUOTES, 'UTF-8') ?></p>
-                        <p class="profile-kpi-note">插件数据同步后显示</p>
                     </div>
                 </section>
 
@@ -1165,7 +1168,8 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                 <div class="profile-player-stat-grid">
                                     <div class="profile-player-stat">
                                         <p class="text-xs text-slate-400">在线状态</p>
-                                        <p class="mt-1 text-lg font-semibold text-slate-100"><?= htmlspecialchars($onlineDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                                        <p class="mt-1 text-lg font-semibold text-slate-100" data-profile-online-status-value><?= htmlspecialchars($onlineDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                                        <p class="mt-1 text-xs text-slate-400" data-profile-online-status-note>等待实时玩家列表检测</p>
                                     </div>
                                     <div class="profile-player-stat">
                                         <p class="text-xs text-slate-400">累计时长</p>
@@ -1277,6 +1281,223 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                         </div>
                     </section>
 
+<script>
+(() => {
+    const rootSelector = '[data-profile-mc-uuid][data-profile-mc-name]';
+    const valueSelector = '[data-profile-online-status-value]';
+    const noteSelector = '[data-profile-online-status-note]';
+    let refreshTimer = null;
+    let refreshing = false;
+
+    const normalizeUuid = (value) => String(value || '').trim().toLowerCase().replace(/-/g, '');
+    const normalizeName = (value) => String(value || '').trim().toLowerCase();
+
+    const updateOnlineStatus = (value, note) => {
+        document.querySelectorAll(valueSelector).forEach((node) => {
+            node.textContent = value;
+            node.dataset.profileOnlineStatus = value;
+        });
+        document.querySelectorAll(noteSelector).forEach((node) => {
+            node.textContent = note;
+        });
+    };
+
+    const unwrapPayload = (payload) => {
+        if (!payload || typeof payload !== 'object') {
+            return payload;
+        }
+        if (payload.data && typeof payload.data === 'object') {
+            return payload.data;
+        }
+        if (payload.payload && typeof payload.payload === 'object') {
+            return payload.payload;
+        }
+        return payload;
+    };
+
+    const normalizePlayersPayload = (rawPayload) => {
+        const original = rawPayload && typeof rawPayload === 'object' ? rawPayload : null;
+        const payload = unwrapPayload(rawPayload);
+        const players = [];
+        const pushArray = (value) => {
+            if (Array.isArray(value)) {
+                players.push(...value);
+            }
+        };
+
+        pushArray(payload);
+        if (payload && typeof payload === 'object') {
+            pushArray(payload.players);
+            pushArray(payload.list);
+            pushArray(payload.sample);
+            if (payload.players && typeof payload.players === 'object') {
+                pushArray(payload.players.list);
+                pushArray(payload.players.players);
+                pushArray(payload.players.sample);
+            }
+            if (payload.data && typeof payload.data === 'object') {
+                pushArray(payload.data.players);
+                pushArray(payload.data.list);
+                if (payload.data.players && typeof payload.data.players === 'object') {
+                    pushArray(payload.data.players.list);
+                    pushArray(payload.data.players.players);
+                    pushArray(payload.data.players.sample);
+                }
+            }
+        }
+
+        const hasUnavailableFlag = (node) => (
+            !!node
+            && typeof node === 'object'
+            && (node.list_available === false || node.exposed === false)
+        );
+
+        const available = !(
+            hasUnavailableFlag(original)
+            || hasUnavailableFlag(original && typeof original === 'object' ? original.players : null)
+            || hasUnavailableFlag(original && typeof original === 'object' ? original.data : null)
+            || hasUnavailableFlag(
+                original && typeof original === 'object' && original.data && typeof original.data === 'object'
+                    ? original.data.players
+                    : null
+            )
+            || hasUnavailableFlag(payload)
+            || hasUnavailableFlag(payload && typeof payload === 'object' ? payload.players : null)
+            || hasUnavailableFlag(payload && typeof payload === 'object' ? payload.data : null)
+            || hasUnavailableFlag(
+                payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object'
+                    ? payload.data.players
+                    : null
+            )
+        );
+
+        return {
+            available,
+            players: players.filter(Boolean),
+        };
+    };
+
+    const isPlayerOnline = (players, targetUuid, targetName) => {
+        return players.some((player) => {
+            if (typeof player === 'string') {
+                return targetName && normalizeName(player) === targetName;
+            }
+
+            if (!player || typeof player !== 'object') {
+                return false;
+            }
+
+            const playerUuid = normalizeUuid(
+                player.uuid
+                || player.playerUuid
+                || player.player_uuid
+                || player.mc_uuid
+                || player.id
+                || ''
+            );
+            const playerName = normalizeName(
+                player.name
+                || player.name_clean
+                || player.playerName
+                || player.player_name
+                || player.username
+                || player.player
+                || ''
+            );
+
+            if (targetUuid && playerUuid) {
+                return targetUuid === playerUuid;
+            }
+
+            if (targetName && (!targetUuid || !playerUuid)) {
+                return targetName === playerName;
+            }
+
+            return false;
+        });
+    };
+
+    const refreshProfileOnlineStatus = async () => {
+        const root = document.querySelector(rootSelector);
+        if (!root || refreshing) {
+            return;
+        }
+
+        const targetUuid = normalizeUuid(root.dataset.profileMcUuid || '');
+        const targetName = normalizeName(root.dataset.profileMcName || '');
+
+        if (!targetUuid && !targetName) {
+            updateOnlineStatus('未绑定', '请先绑定 Minecraft 账号');
+            return;
+        }
+
+        refreshing = true;
+        try {
+            const response = await fetch('/api/players', {
+                headers: { 'Accept': 'application/json' },
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+
+            if (!response.ok) {
+                updateOnlineStatus('实时不可用', '实时玩家列表暂不可用');
+                return;
+            }
+
+            const payload = await response.json();
+            const normalized = normalizePlayersPayload(payload);
+            if (!normalized.available) {
+                updateOnlineStatus('名单未公开', '服务器未公开在线玩家名单');
+                return;
+            }
+
+            const online = isPlayerOnline(normalized.players, targetUuid, targetName);
+            updateOnlineStatus(
+                online ? '在线' : '离线',
+                online ? ' ' : ' '
+            );
+        } catch (error) {
+            updateOnlineStatus('实时不可用', '实时玩家列表暂不可用');
+        } finally {
+            refreshing = false;
+        }
+    };
+
+    const start = () => {
+        const root = document.querySelector(rootSelector);
+        if (!root) {
+            return;
+        }
+
+        refreshProfileOnlineStatus();
+
+        refreshTimer = window.setInterval(() => {
+            if (!document.hidden) {
+                refreshProfileOnlineStatus();
+            }
+        }, 15000);
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                refreshProfileOnlineStatus();
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (refreshTimer !== null) {
+                clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+        });
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start, { once: true });
+    } else {
+        start();
+    }
+})();
+</script>
                     <?php if (false): ?>
                     <section id="panel-player" data-profile-panel class="profile-panel-card rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
                         <h3 class="text-lg font-semibold text-slate-100">玩家签到系统</h3>

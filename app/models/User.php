@@ -292,9 +292,9 @@ class User extends Model
 
         $row['game_accounts_count'] = (!empty($row['mc_uuid']) || !empty($row['mc_username'])) ? 1 : 0;
 
-        $row['is_online'] = 0;
-        $row['online_count'] = '待同步';
-        $row['current_online'] = '待同步';
+        $row['is_online'] = null;
+        $row['online_count'] = '待检测';
+        $row['current_online'] = '待检测';
 
         $playTimeTicks = (int)($row['play_time_ticks'] ?? 0);
         $playTimeHours = $playTimeTicks > 0 ? round($playTimeTicks / 72000, 2) : 0;

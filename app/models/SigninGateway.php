@@ -207,13 +207,38 @@ class SigninGateway extends Model
                 $outboxRow = (array)($outboxWrite['row'] ?? []);
                 $requestId = trim((string)($outboxRow['request_id'] ?? ''));
                 if ($requestId === '') {
-                    $requestId = $this->buildRequestId();
+                    throw new \RuntimeException('Outbox row missing request_id for existing daily identity');
                 }
                 $payloadJson = trim((string)($outboxRow['reward_payload_json'] ?? '')) ?: $payloadJson;
                 $decodedPayload = json_decode($payloadJson, true);
                 if (!is_array($decodedPayload)) {
                     $decodedPayload = $rewardPayload;
                 }
+
+                $todayCache = $this->findDailyCache($userId, $serverId, $today);
+                if ($todayCache !== null && (int)($todayCache['signed_today'] ?? 0) === 1) {
+                    $cacheRequestId = trim((string)($todayCache['request_id'] ?? ''));
+                    if ($cacheRequestId !== '') {
+                        $requestId = $cacheRequestId;
+                    }
+
+                    if ($ownsTx && $this->db->inTransaction()) {
+                        $this->db->commit();
+                    }
+
+                    return [
+                        'ok' => true,
+                        'http_status' => 200,
+                        'status' => 'already_signed',
+                        'message' => $this->defaultMessageForStatus('already_signed'),
+                        'request_id' => $requestId,
+                        'status_data' => $this->getStatusForUser($userId),
+                    ];
+                }
+
+                $meta = isset($decodedPayload['meta']) && is_array($decodedPayload['meta']) ? $decodedPayload['meta'] : [];
+                $cacheContinuous = max(1, (int)($meta['continuous'] ?? $continuous));
+                $cacheTotal = max($cacheContinuous, (int)($meta['total'] ?? $total));
 
                 $requestRow = $this->findRequestByRequestId($requestId);
                 if ($requestRow === null) {
@@ -246,8 +271,8 @@ class SigninGateway extends Model
                     'server_id' => $serverId,
                     'sign_date' => $today,
                     'signed_today' => true,
-                    'continuous' => $continuous,
-                    'total' => $total,
+                    'continuous' => $cacheContinuous,
+                    'total' => $cacheTotal,
                     'last_signin_at' => date('Y-m-d H:i:s'),
                     'last_source' => 'web_queue',
                     'raw_payload_json' => $payloadJson,
@@ -429,16 +454,28 @@ class SigninGateway extends Model
 
         $hasDailyIndex = $this->tableHasIndex('stellar_reward_outbox', 'uq_stellar_reward_outbox_daily');
         if ($hasDailyIndex) {
-            // After unique key exists, backfill only rows that do not conflict with existing daily identities.
+            // Keep legacy rows with NULL sign_date untouched; only backfill one safe row per derived daily identity.
             $this->db->exec('
                 UPDATE stellar_reward_outbox outbox
+                INNER JOIN (
+                    SELECT MIN(id) AS keep_id,
+                           player_uuid,
+                           server_id,
+                           source,
+                           DATE(created_at) AS derived_sign_date
+                    FROM stellar_reward_outbox
+                    WHERE sign_date IS NULL
+                    GROUP BY player_uuid, server_id, source, DATE(created_at)
+                ) pending
+                    ON pending.keep_id = outbox.id
                 LEFT JOIN stellar_reward_outbox conflict
-                    ON conflict.player_uuid = outbox.player_uuid
-                   AND conflict.server_id = outbox.server_id
-                   AND conflict.source = outbox.source
-                   AND conflict.sign_date = DATE(outbox.created_at)
+                    ON conflict.player_uuid = pending.player_uuid
+                   AND conflict.server_id = pending.server_id
+                   AND conflict.source = pending.source
+                   AND conflict.sign_date = pending.derived_sign_date
                    AND conflict.id <> outbox.id
-                SET outbox.sign_date = DATE(outbox.created_at)
+                SET outbox.sign_date = pending.derived_sign_date,
+                    outbox.updated_at = NOW()
                 WHERE outbox.sign_date IS NULL
                   AND conflict.id IS NULL
             ');
@@ -679,7 +716,7 @@ class SigninGateway extends Model
         }
 
         return [
-            'created' => trim((string)($outboxRow['request_id'] ?? '')) === $requestId,
+            'created' => $stmt->rowCount() === 1 && trim((string)($outboxRow['request_id'] ?? '')) === $requestId,
             'row' => $outboxRow,
         ];
     }

@@ -127,9 +127,19 @@ define('SIGNIN_REWARD_MAIL_CONTENT', $_signinRewardMailContent);
 $_signinRewardItemsDefault = [
     ['type' => 'minecraft:diamond', 'amount' => 1],
 ];
-$_signinRewardItemsRaw = getenv('SIGNIN_REWARD_ITEMS_JSON');
+$_signinRewardItemsDefaultJson = '[{"type":"minecraft:diamond","amount":1}]';
+define(
+    'SIGNIN_REWARD_ITEMS_JSON',
+    getenv('SIGNIN_REWARD_ITEMS_JSON') !== false
+        ? trim((string)getenv('SIGNIN_REWARD_ITEMS_JSON'))
+        : $_signinRewardItemsDefaultJson
+);
+$_signinRewardItemsRaw = trim((string)SIGNIN_REWARD_ITEMS_JSON);
+if ($_signinRewardItemsRaw === '') {
+    $_signinRewardItemsRaw = $_signinRewardItemsDefaultJson;
+}
 $_signinRewardItems = $_signinRewardItemsDefault;
-if ($_signinRewardItemsRaw !== false && trim((string)$_signinRewardItemsRaw) !== '') {
+if ($_signinRewardItemsRaw !== '') {
     $decoded = json_decode((string)$_signinRewardItemsRaw, true);
     if (is_array($decoded)) {
         $_signinRewardItems = $decoded;
@@ -137,9 +147,19 @@ if ($_signinRewardItemsRaw !== false && trim((string)$_signinRewardItemsRaw) !==
 }
 define('SIGNIN_REWARD_ITEMS', $_signinRewardItems);
 
-$_signinRewardCommandsRaw = getenv('SIGNIN_REWARD_COMMANDS_JSON');
+$_signinRewardCommandsDefaultJson = '[]';
+define(
+    'SIGNIN_REWARD_COMMANDS_JSON',
+    getenv('SIGNIN_REWARD_COMMANDS_JSON') !== false
+        ? trim((string)getenv('SIGNIN_REWARD_COMMANDS_JSON'))
+        : $_signinRewardCommandsDefaultJson
+);
+$_signinRewardCommandsRaw = trim((string)SIGNIN_REWARD_COMMANDS_JSON);
+if ($_signinRewardCommandsRaw === '') {
+    $_signinRewardCommandsRaw = $_signinRewardCommandsDefaultJson;
+}
 $_signinRewardCommands = [];
-if ($_signinRewardCommandsRaw !== false && trim((string)$_signinRewardCommandsRaw) !== '') {
+if ($_signinRewardCommandsRaw !== '') {
     $decoded = json_decode((string)$_signinRewardCommandsRaw, true);
     if (is_array($decoded)) {
         $_signinRewardCommands = $decoded;
@@ -151,8 +171,10 @@ unset(
     $_signinRewardMailContentRaw,
     $_signinRewardMailContent,
     $_signinRewardItemsDefault,
+    $_signinRewardItemsDefaultJson,
     $_signinRewardItemsRaw,
     $_signinRewardItems,
+    $_signinRewardCommandsDefaultJson,
     $_signinRewardCommandsRaw,
     $_signinRewardCommands,
     $decoded

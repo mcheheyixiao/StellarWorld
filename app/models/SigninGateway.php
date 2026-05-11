@@ -14,6 +14,7 @@ class SigninGateway extends Model
     private const KNOWN_STATUSES = [
         'signed',
         'already_signed',
+        'reward_config_empty',
         'player_offline',
         'server_offline',
         'plugin_missing',
@@ -187,6 +188,12 @@ class SigninGateway extends Model
 
             $requestId = $this->buildRequestId();
             $rewardPayload = $this->buildSigninRewardPayload($today, $continuous, $total);
+            if ($this->isSigninRewardPayloadEmpty($rewardPayload)) {
+                if ($ownsTx && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+                return $this->errorResult(500, 'reward_config_empty', '签到奖励未配置，请联系管理员', $requestId);
+            }
             $payloadJson = $this->encodeJson($rewardPayload);
 
             $outboxWrite = $this->createRewardOutbox([
@@ -214,6 +221,14 @@ class SigninGateway extends Model
                 if (!is_array($decodedPayload)) {
                     $decodedPayload = $rewardPayload;
                 }
+                $decodedPayload = $this->normalizeSigninRewardPayload($decodedPayload);
+                if ($this->isSigninRewardPayloadEmpty($decodedPayload)) {
+                    if ($ownsTx && $this->db->inTransaction()) {
+                        $this->db->rollBack();
+                    }
+                    return $this->errorResult(500, 'reward_config_empty', '签到奖励未配置，请联系管理员', $requestId);
+                }
+                $payloadJson = $this->encodeJson($decodedPayload);
 
                 $todayCache = $this->findDailyCache($userId, $serverId, $today);
                 if ($todayCache !== null && (int)($todayCache['signed_today'] ?? 0) === 1) {
@@ -561,28 +576,111 @@ class SigninGateway extends Model
 
     private function buildSigninRewardPayload(string $signDate, int $continuous, int $total): array
     {
-        $mailTitle = defined('SIGNIN_REWARD_MAIL_TITLE')
-            ? trim((string)SIGNIN_REWARD_MAIL_TITLE)
-            : '每日签到奖励';
-        if ($mailTitle === '') {
-            $mailTitle = '每日签到奖励';
+        $payload = [
+            'mail' => [
+                'title' => '每日签到奖励',
+                'icon' => 'BOOK',
+                'content' => [
+                    '你完成了 {date} 的每日签到。',
+                    '连续签到：{continuous} 天',
+                    '累计签到：{total} 次',
+                    '奖励已通过系统邮件投递，请上线后在邮箱中领取。',
+                ],
+            ],
+            'items' => [
+                [
+                    'type' => 'minecraft:diamond',
+                    'amount' => 1,
+                ],
+            ],
+            'commands' => [],
+            'meta' => [
+                'signDate' => $signDate,
+                'continuous' => max(1, $continuous),
+                'total' => max(1, $total),
+                'source' => 'web_queue',
+            ],
+        ];
+
+        if (defined('SIGNIN_REWARD_MAIL_TITLE')) {
+            $mailTitle = trim((string)SIGNIN_REWARD_MAIL_TITLE);
+            if ($mailTitle !== '') {
+                $payload['mail']['title'] = $mailTitle;
+            }
+        }
+        if (defined('SIGNIN_REWARD_MAIL_ICON')) {
+            $mailIcon = trim((string)SIGNIN_REWARD_MAIL_ICON);
+            if ($mailIcon !== '') {
+                $payload['mail']['icon'] = $mailIcon;
+            }
+        }
+        if (defined('SIGNIN_REWARD_MAIL_CONTENT') && is_array(SIGNIN_REWARD_MAIL_CONTENT)) {
+            $payload['mail']['content'] = SIGNIN_REWARD_MAIL_CONTENT;
         }
 
-        $mailIcon = defined('SIGNIN_REWARD_MAIL_ICON')
-            ? trim((string)SIGNIN_REWARD_MAIL_ICON)
-            : 'BOOK';
-        if ($mailIcon === '') {
-            $mailIcon = 'BOOK';
+        $payload['items'] = $this->readSigninRewardListConfig(
+            'SIGNIN_REWARD_ITEMS_JSON',
+            'SIGNIN_REWARD_ITEMS',
+            $payload['items']
+        );
+        $payload['commands'] = $this->readSigninRewardListConfig(
+            'SIGNIN_REWARD_COMMANDS_JSON',
+            'SIGNIN_REWARD_COMMANDS',
+            []
+        );
+
+        return $this->normalizeSigninRewardPayload($payload);
+    }
+
+    private function readSigninRewardListConfig(string $jsonConstant, string $arrayConstant, array $default): array
+    {
+        if (defined($jsonConstant)) {
+            $raw = trim((string)constant($jsonConstant));
+            if ($raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    return $decoded;
+                }
+                return $default;
+            }
         }
 
-        $mailContent = defined('SIGNIN_REWARD_MAIL_CONTENT') && is_array(SIGNIN_REWARD_MAIL_CONTENT)
-            ? SIGNIN_REWARD_MAIL_CONTENT
-            : [
+        if (defined($arrayConstant)) {
+            $configured = constant($arrayConstant);
+            if (is_array($configured)) {
+                return $configured;
+            }
+        }
+
+        return $default;
+    }
+
+    private function normalizeSigninRewardPayload(array $payload): array
+    {
+        $mailDefaults = [
+            'title' => '每日签到奖励',
+            'icon' => 'BOOK',
+            'content' => [
                 '你完成了 {date} 的每日签到。',
                 '连续签到：{continuous} 天',
                 '累计签到：{total} 次',
                 '奖励已通过系统邮件投递，请上线后在邮箱中领取。',
-            ];
+            ],
+        ];
+
+        $mailNode = isset($payload['mail']) && is_array($payload['mail']) ? $payload['mail'] : [];
+        $mailTitle = trim((string)($mailNode['title'] ?? $mailDefaults['title']));
+        if ($mailTitle === '') {
+            $mailTitle = $mailDefaults['title'];
+        }
+        $mailIcon = trim((string)($mailNode['icon'] ?? $mailDefaults['icon']));
+        if ($mailIcon === '') {
+            $mailIcon = $mailDefaults['icon'];
+        }
+
+        $mailContent = isset($mailNode['content']) && is_array($mailNode['content'])
+            ? $mailNode['content']
+            : $mailDefaults['content'];
         $safeMailContent = [];
         foreach ($mailContent as $line) {
             if (!is_scalar($line)) {
@@ -594,14 +692,12 @@ class SigninGateway extends Model
             }
         }
         if ($safeMailContent === []) {
-            $safeMailContent = ['你完成了 {date} 的每日签到。'];
+            $safeMailContent = $mailDefaults['content'];
         }
 
-        $configuredItems = defined('SIGNIN_REWARD_ITEMS') && is_array(SIGNIN_REWARD_ITEMS)
-            ? SIGNIN_REWARD_ITEMS
-            : [];
+        $itemsNode = isset($payload['items']) && is_array($payload['items']) ? $payload['items'] : [];
         $items = [];
-        foreach ($configuredItems as $row) {
+        foreach ($itemsNode as $row) {
             if (!is_array($row)) {
                 continue;
             }
@@ -615,11 +711,9 @@ class SigninGateway extends Model
             ];
         }
 
-        $configuredCommands = defined('SIGNIN_REWARD_COMMANDS') && is_array(SIGNIN_REWARD_COMMANDS)
-            ? SIGNIN_REWARD_COMMANDS
-            : [];
+        $commandsNode = isset($payload['commands']) && is_array($payload['commands']) ? $payload['commands'] : [];
         $commands = [];
-        foreach ($configuredCommands as $command) {
+        foreach ($commandsNode as $command) {
             if (!is_scalar($command)) {
                 continue;
             }
@@ -627,6 +721,29 @@ class SigninGateway extends Model
             if ($text !== '') {
                 $commands[] = $text;
             }
+        }
+        $commands = array_values(array_unique($commands));
+
+        $metaNode = isset($payload['meta']) && is_array($payload['meta']) ? $payload['meta'] : [];
+        $signDate = trim((string)($metaNode['signDate'] ?? ''));
+        if ($signDate === '') {
+            $signDate = date('Y-m-d');
+        }
+        $continuous = max(1, (int)($metaNode['continuous'] ?? 1));
+        $total = max(1, (int)($metaNode['total'] ?? 1));
+        $source = trim((string)($metaNode['source'] ?? 'web_queue'));
+        if ($source === '') {
+            $source = 'web_queue';
+        }
+
+        $meta = [
+            'signDate' => $signDate,
+            'continuous' => $continuous,
+            'total' => $total,
+            'source' => $source,
+        ];
+        if ($items === [] && $commands === []) {
+            $meta['rewardEmpty'] = true;
         }
 
         return [
@@ -636,14 +753,20 @@ class SigninGateway extends Model
                 'content' => $safeMailContent,
             ],
             'items' => $items,
-            'commands' => array_values(array_unique($commands)),
-            'meta' => [
-                'signDate' => $signDate,
-                'continuous' => max(1, $continuous),
-                'total' => max(1, $total),
-                'source' => 'web_queue',
-            ],
+            'commands' => $commands,
+            'meta' => $meta,
         ];
+    }
+
+    private function isSigninRewardPayloadEmpty(array $payload): bool
+    {
+        if (($payload['meta']['rewardEmpty'] ?? false) === true) {
+            return true;
+        }
+
+        $items = isset($payload['items']) && is_array($payload['items']) ? $payload['items'] : [];
+        $commands = isset($payload['commands']) && is_array($payload['commands']) ? $payload['commands'] : [];
+        return $items === [] && $commands === [];
     }
 
     private function createRewardOutbox(array $row): array
@@ -1114,6 +1237,7 @@ class SigninGateway extends Model
         return match ($status) {
             'signed' => '签到成功，奖励已加入游戏邮箱队列',
             'already_signed' => '今日已签到',
+            'reward_config_empty' => '签到奖励未配置，请联系管理员',
             'player_offline' => 'Please join the server before signing in',
             'server_offline' => 'Server is currently unavailable',
             'plugin_missing' => 'Sign-in service is unavailable',

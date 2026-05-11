@@ -253,14 +253,71 @@ class User extends Model
     public function getProfile(int $userId): ?array
     {
         $stmt = $this->db->prepare('
-            SELECT id, username, email, role, status, mc_username, mc_uuid, mua_sub, last_mc_bind_at, created_at
-            FROM users
-            WHERE id = :id
+            SELECT
+                u.id,
+                u.username,
+                u.email,
+                u.role,
+                u.status,
+                u.mc_username,
+                u.mc_uuid,
+                u.mua_sub,
+                u.last_mc_bind_at,
+                u.created_at,
+                u.isLogged,
+                u.hasSession,
+                CASE
+                    WHEN u.mc_uuid IS NOT NULL AND u.mc_uuid <> \'\' THEN 1
+                    ELSE 0
+                END AS game_accounts_count,
+                ps.play_time_ticks,
+                ps.fly_distance_cm,
+                ps.deaths,
+                ps.fish_caught,
+                ps.player_kills,
+                ps.blocks_mined,
+                ps.blocks_placed,
+                ps.last_updated
+            FROM users u
+            LEFT JOIN player_stats ps
+                ON REPLACE(LOWER(ps.mc_uuid), \'-\', \'\') = REPLACE(LOWER(u.mc_uuid), \'-\', \'\')
+            WHERE u.id = :id
             LIMIT 1
         ');
         $stmt->execute([':id' => $userId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
+        if (!$row) {
+            return null;
+        }
+
+        $row['game_accounts_count'] = (!empty($row['mc_uuid']) || !empty($row['mc_username'])) ? 1 : 0;
+
+        $row['is_online'] = 0;
+        $row['online_count'] = '待同步';
+        $row['current_online'] = '待同步';
+
+        $playTimeTicks = (int)($row['play_time_ticks'] ?? 0);
+        $playTimeHours = $playTimeTicks > 0 ? round($playTimeTicks / 72000, 2) : 0;
+        if ($playTimeHours > 0) {
+            $playTimeDisplay = (string)$playTimeHours . ' h';
+            $row['total_play_time'] = $playTimeDisplay;
+            $row['play_time'] = $playTimeDisplay;
+            $row['total_duration'] = $playTimeDisplay;
+        } else {
+            $row['total_play_time'] = '--';
+            $row['play_time'] = '--';
+            $row['total_duration'] = '--';
+        }
+
+        $deaths = isset($row['deaths']) ? (int)$row['deaths'] : 0;
+        $row['death_count'] = (string)$deaths;
+        $row['deaths'] = (string)$deaths;
+        $row['player_kills'] = (string)((int)($row['player_kills'] ?? 0));
+        $row['blocks_mined'] = (string)((int)($row['blocks_mined'] ?? 0));
+        $row['blocks_placed'] = (string)((int)($row['blocks_placed'] ?? 0));
+        $row['fish_caught'] = (string)((int)($row['fish_caught'] ?? 0));
+
+        return $row;
     }
 
     public function updatePassword(int $userId, string $newHash): void

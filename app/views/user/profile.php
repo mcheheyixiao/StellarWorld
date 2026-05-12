@@ -130,6 +130,10 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
     position: relative;
     color: var(--text-primary);
     isolation: isolate;
+    min-height: calc(100vh - 64px);
+    width: 100%;
+    margin: 0 auto;
+    padding: 1rem;
 }
 .profile-page-root::before {
     content: "";
@@ -147,8 +151,13 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 .profile-shell {
     display: grid;
     grid-template-columns: 1fr;
+    gap: 1rem;
+    align-items: flex-start;
     position: relative;
     z-index: 1;
+    width: 100%;
+    max-width: 1480px;
+    margin: 0 auto;
     --profile-glass-bg: color-mix(in srgb, var(--card-bg) 86%, transparent);
     --profile-panel-bg: color-mix(in srgb, var(--card-bg) 94%, transparent);
     --profile-soft-bg: color-mix(in srgb, var(--card-bg-muted) 82%, transparent);
@@ -167,8 +176,14 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
     --profile-blue-border: rgba(59, 130, 246, 0.4);
 }
 .profile-sidebar {
-    border-bottom: 1px solid var(--profile-border);
-    background: var(--profile-soft-bg);
+    border: 1px solid var(--profile-border);
+    border-radius: 2rem;
+    background: var(--profile-glass-bg);
+    box-shadow: var(--profile-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    backdrop-filter: blur(18px);
+}
+[data-theme="dark"] .profile-sidebar {
+    box-shadow: 0 20px 48px rgba(2, 6, 23, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 .duration-200 {
     transition-duration: 200ms;
@@ -207,26 +222,60 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 }
 @media (min-width: 1024px) {
     .profile-shell {
-        grid-template-columns: 280px minmax(0, 1fr);
-        min-height: calc(100vh - 9rem);
+        grid-template-columns: minmax(16.5rem, 18rem) minmax(0, 1fr);
     }
     .profile-sidebar {
-        border-bottom: 0;
         border-right: 1px solid var(--profile-border);
+    }
+}
+@media (min-width: 1280px) {
+    .profile-page-root {
+        width: min(calc(100vw - 1.5rem), 1480px);
+        margin-left: 50%;
+        margin-right: 0;
+        transform: translateX(-50%);
+        padding-left: 1.25rem;
+        padding-right: 1.25rem;
+    }
+    .profile-shell {
+        gap: 1.25rem;
+        grid-template-columns: minmax(17rem, 18.25rem) minmax(0, 1fr);
+    }
+}
+@media (min-width: 1536px) {
+    .profile-shell {
+        gap: 1.5rem;
+        grid-template-columns: minmax(17.5rem, 18.5rem) minmax(0, 1fr);
+    }
+    .profile-sidebar {
+        position: sticky;
+        top: 5.25rem;
+        max-height: calc(100vh - 6rem);
+        overflow: auto;
+    }
+}
+@media (min-width: 640px) {
+    .profile-page-root {
+        padding: 1.25rem 1.5rem;
+    }
+}
+@media (min-width: 1024px) {
+    .profile-page-root {
+        padding: 1.5rem 2rem;
     }
 }
 
 .profile-page-shell {
     position: relative;
-    overflow: hidden;
-    border-radius: 28px;
-    background: var(--profile-glass-bg) !important;
-    border: 1px solid var(--profile-border) !important;
-    box-shadow: var(--profile-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.42);
-    backdrop-filter: blur(12px);
+    overflow: visible;
+    border-radius: 0;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none;
+    backdrop-filter: none;
 }
 [data-theme="dark"] .profile-page-shell {
-    box-shadow: 0 24px 70px -42px rgba(2, 6, 23, 0.78), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    box-shadow: none;
 }
 .profile-page-root .profile-sidebar {
     color: var(--profile-text);
@@ -332,6 +381,11 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
     border: 1px solid var(--profile-border);
     background: var(--profile-soft-bg);
 }
+.profile-sidebar-hint {
+    border-radius: 1rem;
+    border: 1px dashed var(--profile-border);
+    background: color-mix(in srgb, var(--profile-soft-bg) 92%, transparent);
+}
 .profile-sidebar-status-label {
     font-size: 0.73rem;
     letter-spacing: 0.04em;
@@ -416,6 +470,9 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 .profile-status-strip-meta {
     font-size: 0.78rem;
     color: var(--profile-muted);
+}
+.profile-main {
+    min-width: 0;
 }
 .profile-kpi-grid {
     display: grid;
@@ -504,6 +561,25 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
     opacity: 0.46;
     pointer-events: none;
 }
+.profile-quick-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+}
+.profile-quick-link {
+    border-radius: 0.85rem;
+    border: 1px solid var(--profile-border);
+    background: color-mix(in srgb, var(--card-bg-muted) 86%, transparent);
+    color: var(--profile-text);
+    text-align: left;
+    padding: 0.72rem 0.82rem;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.profile-quick-link:hover {
+    transform: translateY(-1px);
+    border-color: var(--profile-blue-border);
+    box-shadow: 0 14px 24px -20px rgba(15, 23, 42, 0.38);
+}
 .profile-page-root [data-profile-panel] input:not([type="file"]),
 .profile-page-root [data-profile-panel] select,
 .profile-page-root [data-profile-panel] textarea {
@@ -537,6 +613,9 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
     .profile-kpi-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+    .profile-quick-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .profile-player-stat-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
@@ -547,6 +626,11 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
     }
     .profile-player-archive {
         grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    }
+}
+@media (min-width: 1536px) {
+    .profile-kpi-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 }
 @media (max-width: 1023px) {
@@ -1066,11 +1150,11 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
 </style>
 
 <div
-    class="profile-page-root max-w-7xl mx-auto p-4 md:p-6"
+    class="profile-page-root"
     data-profile-mc-uuid="<?= htmlspecialchars((string)($profile['mc_uuid'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
     data-profile-mc-name="<?= htmlspecialchars((string)($profile['mc_username'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
 >
-    <div class="profile-page-shell overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/85 shadow-2xl backdrop-blur">
+    <div class="profile-page-shell">
         <div class="profile-shell">
             <aside class="profile-sidebar p-4 md:p-5 flex flex-col gap-4">
                 <div class="profile-identity-card p-6 text-center text-white">
@@ -1106,9 +1190,13 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                     <p class="profile-sidebar-status-label mt-3">服务器身份</p>
                     <p class="profile-sidebar-status-value"><?= htmlspecialchars($roleLabel, ENT_QUOTES, 'UTF-8') ?> · <?= $hasMcName ? '已绑定 Minecraft' : '未绑定 Minecraft' ?></p>
                 </div>
+                <div class="profile-sidebar-hint p-3 text-xs">
+                    <p class="profile-sidebar-status-label">最新动态</p>
+                    <p class="profile-sidebar-status-value">活动奖励、公告更新与反馈消息会在对应模块实时同步。</p>
+                </div>
             </aside>
 
-            <main class="flex min-w-0 flex-col gap-4 p-4 md:p-6">
+            <main class="profile-main flex min-w-0 flex-col gap-5">
                 <div class="profile-hero-card">
                     <div>
                         <p class="profile-hero-eyebrow">Stellar Player Hub</p>
@@ -1151,9 +1239,16 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                         </div>
                         <p class="profile-kpi-value"><?= htmlspecialchars($durationDisplay, ENT_QUOTES, 'UTF-8') ?></p>
                     </div>
+                    <div class="profile-kpi-card">
+                        <div class="profile-kpi-header">
+                            <span class="profile-kpi-icon" aria-hidden="true">☠</span>
+                            <p class="profile-kpi-title">死亡次数</p>
+                        </div>
+                        <p class="profile-kpi-value"><?= htmlspecialchars($deathDisplay, ENT_QUOTES, 'UTF-8') ?></p>
+                    </div>
                 </section>
 
-                <div class="min-h-0 flex-1">
+                <div class="min-h-0 flex-1 space-y-5">
                     <section id="panel-game" data-profile-panel class="profile-panel-card rounded-xl border border-slate-700/80 bg-slate-800/60 p-6">
                         <h3 class="text-lg font-semibold text-slate-100">玩家档案</h3>
                         <p class="mt-1 text-sm text-slate-400">游戏账号信息、在线状态、累计时长与死亡次数。</p>
@@ -1189,6 +1284,15 @@ if (isset($profile['death_count']) && $profile['death_count'] !== '') {
                                 <p class="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Skin Preview</p>
                                 <canvas id="skin_container_3d" class="w-full max-w-xs mx-auto"></canvas>
                                 <img id="skin_container_2d" src="<?= htmlspecialchars($minotarBodyUrl, ENT_QUOTES, 'UTF-8') ?>" alt="玩家角色" class="w-full max-w-xs mx-auto" width="220" height="293" loading="eager" decoding="async">
+                            </div>
+                        </div>
+                        <div class="profile-player-card mt-5">
+                            <p class="text-sm text-slate-400">快捷入口</p>
+                            <div class="profile-quick-grid mt-3">
+                                <button type="button" class="profile-quick-link text-sm" data-profile-status-target="panel-bind">账号绑定</button>
+                                <button type="button" class="profile-quick-link text-sm" data-profile-status-target="panel-security">安全中心</button>
+                                <button type="button" class="profile-quick-link text-sm" data-profile-status-target="panel-player">玩家功能</button>
+                                <button type="button" class="profile-quick-link text-sm" data-profile-status-target="panel-feedback">举报反馈</button>
                             </div>
                         </div>
                     </section>

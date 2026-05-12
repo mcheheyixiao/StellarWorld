@@ -11,9 +11,8 @@ class NavigationManager {
 
     init() {
         if (!this.navbar) return;
-        window.addEventListener('scroll', () => this.handleScroll());
+        this.showNavbar();
         this.initMobileMenu();
-        this.checkScrollPosition();
     }
 
     handleScroll() {
@@ -26,13 +25,7 @@ class NavigationManager {
     }
 
     checkScrollPosition() {
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        if (scrollTop > this.lastScrollTop && scrollTop > this.hideThreshold) {
-            this.hideNavbar();
-        } else if (scrollTop < this.lastScrollTop && scrollTop < this.showThreshold) {
-            this.showNavbar();
-        }
-        this.lastScrollTop = scrollTop;
+        this.showNavbar();
     }
 
     hideNavbar() {

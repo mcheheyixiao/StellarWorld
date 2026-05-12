@@ -225,10 +225,10 @@ foreach ($backgroundImages as $rel) {
         }
         .main-content {
             min-height: calc(100vh - 120px);
-            padding: 7rem 0 2.5rem;
+            padding: 5.25rem 0 2.5rem;
         }
         .main-content--home {
-            padding-top: 5.5rem;
+            padding-top: 5rem;
         }
         .main-content--admin {
             min-height: 100vh;
@@ -240,11 +240,10 @@ foreach ($backgroundImages as $rel) {
 
         @media (max-width: 767.98px) {
             .main-content--home {
-                padding-top: 5.75rem;
+                padding-top: 5.25rem;
             }
         }
 
-        #navbar > div,
         footer,
         .mc-glass-card {
             background: var(--mc-surface-soft) !important;
@@ -253,14 +252,12 @@ foreach ($backgroundImages as $rel) {
             backdrop-filter: blur(24px);
         }
 
-        html.dark #navbar > div,
         html.dark footer,
         html.dark .mc-glass-card {
             box-shadow: 0 24px 56px -30px rgba(0, 0, 0, 0.85) !important;
         }
 
         @media (max-width: 768px) {
-            #navbar > div,
             footer,
             .mc-glass-card,
             .music-panel,
@@ -271,7 +268,6 @@ foreach ($backgroundImages as $rel) {
                 box-shadow: 0 12px 28px -20px rgba(15, 23, 42, 0.28) !important;
             }
 
-            html.dark #navbar > div,
             html.dark footer,
             html.dark .mc-glass-card,
             html.dark .music-panel,
@@ -282,7 +278,6 @@ foreach ($backgroundImages as $rel) {
         }
 
         @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-            #navbar > div,
             footer,
             .mc-glass-card,
             .music-panel,
@@ -294,7 +289,6 @@ foreach ($backgroundImages as $rel) {
                 box-shadow: 0 12px 28px -20px rgba(15, 23, 42, 0.24) !important;
             }
 
-            html.dark #navbar > div,
             html.dark footer,
             html.dark .mc-glass-card,
             html.dark .music-panel,

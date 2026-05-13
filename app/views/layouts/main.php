@@ -100,6 +100,7 @@ foreach ($backgroundImages as $rel) {
             --mc-accent: var(--primary);
             --mc-accent-strong: var(--primary-strong);
             --mc-glow: var(--primary-glow);
+            --mc-navbar-height: 4rem;
         }
 
         html.dark,
@@ -228,7 +229,7 @@ foreach ($backgroundImages as $rel) {
             padding: 5.25rem 0 2.5rem;
         }
         .main-content--home {
-            padding-top: 5rem;
+            padding-top: var(--mc-navbar-height);
         }
         .main-content--admin {
             min-height: 100vh;
@@ -240,7 +241,7 @@ foreach ($backgroundImages as $rel) {
 
         @media (max-width: 767.98px) {
             .main-content--home {
-                padding-top: 5.25rem;
+                padding-top: var(--mc-navbar-height);
             }
         }
 

@@ -1014,10 +1014,20 @@ class AdminController extends Controller
 
         $result = $this->signinRewards->publishDraft($effectiveDate, $adminUserId);
         if (($result['ok'] ?? false) !== true) {
+            $errorCode = trim((string)($result['code'] ?? 'publish'));
+            if ($errorCode === '') {
+                $errorCode = 'publish';
+            }
+            $errorMessage = (string)($result['message'] ?? '发布失败');
+            $redirect = '/admin?tab=signin-rewards&err=' . rawurlencode($errorCode);
+            if ($errorMessage !== '') {
+                $redirect .= '&err_msg=' . rawurlencode($errorMessage);
+            }
+
             $this->redirectOrJson(
-                '/admin?tab=signin-rewards&err=publish',
-                ['success' => false, 'ok' => false, 'message' => (string)($result['message'] ?? '发布失败')],
-                (string)($result['message'] ?? '发布失败'),
+                $redirect,
+                ['success' => false, 'ok' => false, 'message' => $errorMessage, 'code' => $errorCode],
+                $errorMessage,
                 (int)($result['status'] ?? 500)
             );
             return;

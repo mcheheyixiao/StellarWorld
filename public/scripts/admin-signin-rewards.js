@@ -16,7 +16,9 @@
     var previewItems = document.getElementById('signin-preview-items');
     var previewCommands = document.getElementById('signin-preview-commands');
     var previewPayload = document.getElementById('signin-preview-payload');
-    var addButtons = root.querySelectorAll('[data-add-rule]');
+    var tabButtons = root.querySelectorAll('[data-rule-tab]');
+    var addCurrentTabButton = document.getElementById('signin-add-current-tab');
+    var legacyAddButtons = root.querySelectorAll('[data-add-rule]');
 
     if (!cardsRoot || !saveForm || !payloadInput) {
         return;
@@ -102,6 +104,7 @@
         } else if (ruleType === 'monthly') {
             trigger = 7;
         }
+
         return normalizeRule({
             id: 0,
             rule_type: ruleType,
@@ -134,21 +137,21 @@
 
     function createItemRow(item) {
         var wrapper = document.createElement('div');
-        wrapper.className = 'grid grid-cols-1 gap-2 md:grid-cols-5';
+        wrapper.className = 'signin-rw-inline-grid items';
         wrapper.innerHTML = [
-            '<input type="text" class="md:col-span-3" data-item-type placeholder="minecraft:diamond" value="', escapeHtml(item.type || ''), '">',
-            '<input type="number" class="md:col-span-1" data-item-amount min="1" value="', String(Math.max(1, toInt(item.amount, 1))), '">',
-            '<button type="button" class="ta-btn ta-btn-secondary md:col-span-1" data-item-remove>删除</button>'
+            '<input type="text" data-item-type placeholder="minecraft:diamond" value="', escapeHtml(item.type || ''), '">',
+            '<input type="number" data-item-amount min="1" value="', String(Math.max(1, toInt(item.amount, 1))), '">',
+            '<button type="button" class="ta-btn ta-btn-secondary" data-item-remove>删除</button>'
         ].join('');
         return wrapper;
     }
 
     function createCommandRow(command) {
         var wrapper = document.createElement('div');
-        wrapper.className = 'grid grid-cols-1 gap-2 md:grid-cols-5';
+        wrapper.className = 'signin-rw-inline-grid commands';
         wrapper.innerHTML = [
-            '<input type="text" class="md:col-span-4" data-command-text placeholder="give {player} minecraft:diamond 1" value="', escapeHtml(command || ''), '">',
-            '<button type="button" class="ta-btn ta-btn-secondary md:col-span-1" data-command-remove>删除</button>'
+            '<input type="text" data-command-text placeholder="give {player} minecraft:diamond 1" value="', escapeHtml(command || ''), '">',
+            '<button type="button" class="ta-btn ta-btn-secondary" data-command-remove>删除</button>'
         ].join('');
         return wrapper;
     }
@@ -158,6 +161,7 @@
         if (!csrfInput || !csrfInput.value) {
             return;
         }
+
         var form = document.createElement('form');
         form.method = 'post';
         form.action = '/admin/signin-rewards/delete-rule';
@@ -179,90 +183,46 @@
         form.submit();
     }
 
-    function renderCards() {
-        cardsRoot.innerHTML = '';
+    var activeRuleTab = normalizeRuleType(bootstrap.defaultRuleTab || 'daily');
+    if (!rules.some(function (rule) { return normalizeRuleType(rule.rule_type) === activeRuleTab; })) {
+        activeRuleTab = normalizeRuleType((rules[0] || {}).rule_type || 'daily');
+    }
+
+    function syncSortOrders() {
         rules.forEach(function (rule, index) {
-            var card = document.createElement('section');
-            card.className = 'rounded-xl border border-slate-300/20 p-4';
-            card.setAttribute('data-rule-index', String(index));
+            rule.sort_order = index;
+        });
+    }
 
-            var header = document.createElement('div');
-            header.className = 'flex flex-wrap items-center justify-between gap-2';
-            header.innerHTML = [
-                '<div>',
-                '<p class="text-sm ta-help-text">', typeLabel(rule.rule_type), '奖励规则</p>',
-                '<p class="font-medium">触发天数：', String(rule.trigger_day), '</p>',
-                '</div>',
-                '<div class="flex flex-wrap gap-2">',
-                '<label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" data-field="enabled" ', rule.enabled ? 'checked' : '', '> 启用</label>',
-                '<button type="button" class="ta-btn ta-btn-secondary" data-action="copy">复制</button>',
-                '<button type="button" class="ta-btn ta-btn-secondary" data-action="delete">删除</button>',
-                '</div>'
-            ].join('');
-            card.appendChild(header);
+    function setActiveRuleTab(type, shouldRender) {
+        var normalized = normalizeRuleType(type);
+        activeRuleTab = normalized;
 
-            var body = document.createElement('div');
-            body.className = 'mt-3 grid grid-cols-1 gap-3 md:grid-cols-2';
-            body.innerHTML = [
-                '<label class="block"><span class="text-sm">规则类型</span>',
-                '<select data-field="rule_type">',
-                '<option value="daily"', rule.rule_type === 'daily' ? ' selected' : '', '>daily（每日）</option>',
-                '<option value="streak"', rule.rule_type === 'streak' ? ' selected' : '', '>streak（连续）</option>',
-                '<option value="total"', rule.rule_type === 'total' ? ' selected' : '', '>total（累计）</option>',
-                '<option value="monthly"', rule.rule_type === 'monthly' ? ' selected' : '', '>monthly（本月）</option>',
-                '</select></label>',
-                '<label class="block"><span class="text-sm">触发天数</span>',
-                '<input type="number" min="1" data-field="trigger_day" value="', String(rule.trigger_day), '"', rule.rule_type === 'daily' ? ' readonly' : '', '>',
-                '</label>',
-                '<label class="block md:col-span-2"><span class="text-sm">邮件标题</span>',
-                '<input type="text" data-field="mail_title" value="', escapeHtml(rule.mail_title || ''), '"></label>',
-                '<label class="block md:col-span-2"><span class="text-sm">邮件图标</span>',
-                '<input type="text" data-field="mail_icon" value="', escapeHtml(rule.mail_icon || 'BOOK'), '"></label>',
-                '<label class="block md:col-span-2"><span class="text-sm">邮件正文（每行一条）</span>',
-                '<textarea rows="4" data-field="mail_content">', escapeHtml((rule.mail_content || []).join('\n')), '</textarea></label>'
-            ].join('');
-            card.appendChild(body);
-
-            var itemsBox = document.createElement('div');
-            itemsBox.className = 'mt-3 space-y-2';
-            itemsBox.innerHTML = '<div class="flex items-center justify-between"><p class="text-sm font-medium">物品列表</p><button type="button" class="ta-btn ta-btn-secondary" data-action="add-item">添加物品</button></div>';
-            var itemsList = document.createElement('div');
-            itemsList.setAttribute('data-items-list', '1');
-            itemsList.className = 'space-y-2';
-            (rule.items || []).forEach(function (item) {
-                itemsList.appendChild(createItemRow(item));
-            });
-            if (itemsList.children.length === 0) {
-                itemsList.appendChild(createItemRow({ type: '', amount: 1 }));
-            }
-            itemsBox.appendChild(itemsList);
-            card.appendChild(itemsBox);
-
-            var commandsBox = document.createElement('div');
-            commandsBox.className = 'mt-3 space-y-2';
-            commandsBox.innerHTML = '<div class="flex items-center justify-between"><p class="text-sm font-medium">命令列表</p><button type="button" class="ta-btn ta-btn-secondary" data-action="add-command">添加命令</button></div>';
-            var commandsList = document.createElement('div');
-            commandsList.setAttribute('data-commands-list', '1');
-            commandsList.className = 'space-y-2';
-            (rule.commands || []).forEach(function (command) {
-                commandsList.appendChild(createCommandRow(command));
-            });
-            if (commandsList.children.length === 0) {
-                commandsList.appendChild(createCommandRow(''));
-            }
-            commandsBox.appendChild(commandsList);
-            card.appendChild(commandsBox);
-
-            cardsRoot.appendChild(card);
+        tabButtons.forEach(function (button) {
+            var isActive = normalizeRuleType(button.getAttribute('data-rule-tab') || '') === normalized;
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-selected', isActive ? 'true' : 'false');
         });
 
-        refreshPreview();
+        if (shouldRender !== false) {
+            renderCards();
+        }
+    }
+
+    function getVisibleRuleIndexes() {
+        var indexes = [];
+        rules.forEach(function (rule, index) {
+            if (normalizeRuleType(rule.rule_type) === activeRuleTab) {
+                indexes.push(index);
+            }
+        });
+        return indexes;
     }
 
     function readItems(listNode) {
         var rows = [];
         listNode.querySelectorAll('[data-item-type]').forEach(function (inputNode) {
-            var row = inputNode.closest('div');
+            var row = inputNode.closest('.signin-rw-inline-grid');
             var typeNode = row ? row.querySelector('[data-item-type]') : null;
             var amountNode = row ? row.querySelector('[data-item-amount]') : null;
             var type = typeNode ? String(typeNode.value || '').trim() : '';
@@ -285,53 +245,185 @@
         return rows;
     }
 
-    function syncRulesFromDom() {
-        var nextRules = [];
-        cardsRoot.querySelectorAll('[data-rule-index]').forEach(function (card, index) {
-            var source = rules[index] || {};
-            var ruleTypeNode = card.querySelector('[data-field="rule_type"]');
-            var triggerNode = card.querySelector('[data-field="trigger_day"]');
-            var titleNode = card.querySelector('[data-field="mail_title"]');
-            var iconNode = card.querySelector('[data-field="mail_icon"]');
-            var contentNode = card.querySelector('[data-field="mail_content"]');
-            var enabledNode = card.querySelector('[data-field="enabled"]');
-            var itemsList = card.querySelector('[data-items-list]');
-            var commandsList = card.querySelector('[data-commands-list]');
+    function syncRuleFromCard(card) {
+        var ruleIndex = toInt(card.getAttribute('data-rule-index'), -1);
+        if (ruleIndex < 0 || ruleIndex >= rules.length) {
+            return;
+        }
 
-            var ruleType = normalizeRuleType(ruleTypeNode ? ruleTypeNode.value : source.rule_type);
-            var triggerDay = Math.max(1, toInt(triggerNode ? triggerNode.value : source.trigger_day, 1));
-            if (ruleType === 'daily') {
-                triggerDay = 1;
-                if (triggerNode) {
-                    triggerNode.value = '1';
-                    triggerNode.setAttribute('readonly', 'readonly');
-                }
-            } else if (triggerNode) {
-                triggerNode.removeAttribute('readonly');
+        var source = rules[ruleIndex] || {};
+        var ruleTypeNode = card.querySelector('[data-field="rule_type"]');
+        var triggerNode = card.querySelector('[data-field="trigger_day"]');
+        var ruleNameNode = card.querySelector('[data-field="rule_name"]');
+        var titleNode = card.querySelector('[data-field="mail_title"]');
+        var iconNode = card.querySelector('[data-field="mail_icon"]');
+        var contentNode = card.querySelector('[data-field="mail_content"]');
+        var enabledNode = card.querySelector('[data-field="enabled"]');
+        var itemsList = card.querySelector('[data-items-list]');
+        var commandsList = card.querySelector('[data-commands-list]');
+
+        var ruleType = normalizeRuleType(ruleTypeNode ? ruleTypeNode.value : source.rule_type);
+        var triggerDay = Math.max(1, toInt(triggerNode ? triggerNode.value : source.trigger_day, 1));
+        if (ruleType === 'daily') {
+            triggerDay = 1;
+            if (triggerNode) {
+                triggerNode.value = '1';
+                triggerNode.setAttribute('readonly', 'readonly');
             }
+        } else if (triggerNode) {
+            triggerNode.removeAttribute('readonly');
+        }
 
-            var mailLines = [];
-            String(contentNode ? contentNode.value : '').split(/\r\n|\r|\n/).forEach(function (line) {
-                var text = String(line || '').trim();
-                if (text !== '') {
-                    mailLines.push(text);
-                }
-            });
+        var ruleName = String(ruleNameNode ? ruleNameNode.value : '').trim();
+        var mailTitle = String(titleNode ? titleNode.value : '').trim();
+        if (mailTitle === '' && ruleName !== '') {
+            mailTitle = ruleName;
+        }
+        if (ruleName === '' && mailTitle !== '') {
+            ruleName = mailTitle;
+        }
+        if (ruleNameNode) {
+            ruleNameNode.value = ruleName;
+        }
+        if (titleNode) {
+            titleNode.value = mailTitle;
+        }
 
-            nextRules.push({
-                id: toInt(source.id, 0),
-                rule_type: ruleType,
-                trigger_day: triggerDay,
-                mail_title: String(titleNode ? titleNode.value : '').trim(),
-                mail_icon: String(iconNode ? iconNode.value : '').trim() || 'BOOK',
-                mail_content: mailLines,
-                items: itemsList ? readItems(itemsList) : [],
-                commands: commandsList ? readCommands(commandsList) : [],
-                enabled: !!(enabledNode && enabledNode.checked),
-                sort_order: index
-            });
+        var mailLines = [];
+        String(contentNode ? contentNode.value : '').split(/\r\n|\r|\n/).forEach(function (line) {
+            var text = String(line || '').trim();
+            if (text !== '') {
+                mailLines.push(text);
+            }
         });
-        rules = nextRules;
+
+        rules[ruleIndex] = normalizeRule({
+            id: toInt(source.id, 0),
+            rule_type: ruleType,
+            trigger_day: triggerDay,
+            mail_title: mailTitle,
+            mail_icon: String(iconNode ? iconNode.value : '').trim() || 'BOOK',
+            mail_content: mailLines,
+            items: itemsList ? readItems(itemsList) : [],
+            commands: commandsList ? readCommands(commandsList) : [],
+            enabled: !!(enabledNode && enabledNode.checked),
+            sort_order: ruleIndex
+        }, ruleIndex);
+    }
+
+    function syncVisibleRulesFromDom() {
+        cardsRoot.querySelectorAll('[data-rule-index]').forEach(function (card) {
+            syncRuleFromCard(card);
+        });
+        syncSortOrders();
+    }
+
+    function renderCards() {
+        cardsRoot.innerHTML = '';
+        var visibleIndexes = getVisibleRuleIndexes();
+
+        if (visibleIndexes.length === 0) {
+            var empty = document.createElement('div');
+            empty.className = 'signin-rw-empty';
+            empty.innerHTML = '当前分类还没有规则。<br><button type="button" class="ta-btn ta-btn-secondary mt-3" data-action="add-visible">新增一条规则</button>';
+            cardsRoot.appendChild(empty);
+            refreshPreview();
+            return;
+        }
+
+        visibleIndexes.forEach(function (ruleIndex) {
+            var rule = rules[ruleIndex];
+
+            var card = document.createElement('section');
+            card.className = 'signin-rw-card';
+            card.setAttribute('data-rule-index', String(ruleIndex));
+
+            var header = document.createElement('div');
+            header.className = 'signin-rw-card-head';
+            header.innerHTML = [
+                '<div>',
+                '<p class="text-xs ta-help-text">', typeLabel(rule.rule_type), ' 规则</p>',
+                '<p class="text-sm font-semibold">触发天数：', String(rule.trigger_day), '</p>',
+                '</div>',
+                '<div class="flex flex-wrap items-center gap-2">',
+                '<label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" data-field="enabled" ', rule.enabled ? 'checked' : '', '> 启用</label>',
+                '<button type="button" class="ta-btn ta-btn-secondary" data-action="copy">复制</button>',
+                '<button type="button" class="ta-btn ta-btn-secondary" data-action="delete">删除</button>',
+                '</div>'
+            ].join('');
+            card.appendChild(header);
+
+            var baseBlock = document.createElement('div');
+            baseBlock.className = 'signin-rw-card-block';
+            baseBlock.innerHTML = [
+                '<p class="signin-rw-block-title">基础信息</p>',
+                '<div class="grid grid-cols-1 gap-3 md:grid-cols-2">',
+                '<label class="block md:col-span-2"><span class="text-sm">规则名称</span><input type="text" data-field="rule_name" placeholder="用于管理端标识" value="', escapeHtml(rule.mail_title || ''), '"></label>',
+                '<label class="block"><span class="text-sm">触发天数</span><input type="number" min="1" data-field="trigger_day" value="', String(rule.trigger_day), '"', rule.rule_type === 'daily' ? ' readonly' : '', '></label>',
+                '<label class="block"><span class="text-sm">触发方式</span>',
+                '<select data-field="rule_type">',
+                '<option value="daily"', rule.rule_type === 'daily' ? ' selected' : '', '>daily（每日）</option>',
+                '<option value="streak"', rule.rule_type === 'streak' ? ' selected' : '', '>streak（连续）</option>',
+                '<option value="total"', rule.rule_type === 'total' ? ' selected' : '', '>total（累计）</option>',
+                '<option value="monthly"', rule.rule_type === 'monthly' ? ' selected' : '', '>monthly（本月）</option>',
+                '</select></label>',
+                '</div>'
+            ].join('');
+            card.appendChild(baseBlock);
+
+            var mailBlock = document.createElement('div');
+            mailBlock.className = 'signin-rw-card-block';
+            mailBlock.innerHTML = [
+                '<p class="signin-rw-block-title">邮件设置</p>',
+                '<div class="grid grid-cols-1 gap-3 md:grid-cols-2">',
+                '<label class="block"><span class="text-sm">邮件标题</span><input type="text" data-field="mail_title" value="', escapeHtml(rule.mail_title || ''), '"></label>',
+                '<label class="block"><span class="text-sm">邮件图标</span><input type="text" data-field="mail_icon" value="', escapeHtml(rule.mail_icon || 'BOOK'), '"></label>',
+                '<label class="block md:col-span-2"><span class="text-sm">邮件正文（每行一条）</span><textarea rows="4" data-field="mail_content">', escapeHtml((rule.mail_content || []).join('\n')), '</textarea></label>',
+                '</div>'
+            ].join('');
+            card.appendChild(mailBlock);
+
+            var itemsBlock = document.createElement('div');
+            itemsBlock.className = 'signin-rw-card-block';
+            itemsBlock.innerHTML = '<div class="flex items-center justify-between gap-2"><p class="signin-rw-block-title mb-0">物品奖励</p><button type="button" class="ta-btn ta-btn-secondary" data-action="add-item">添加物品</button></div>';
+            var itemsList = document.createElement('div');
+            itemsList.setAttribute('data-items-list', '1');
+            itemsList.className = 'mt-2 space-y-2';
+            (rule.items || []).forEach(function (item) {
+                itemsList.appendChild(createItemRow(item));
+            });
+            if (itemsList.children.length === 0) {
+                itemsList.appendChild(createItemRow({ type: '', amount: 1 }));
+            }
+            itemsBlock.appendChild(itemsList);
+            card.appendChild(itemsBlock);
+
+            var commandsBlock = document.createElement('div');
+            commandsBlock.className = 'signin-rw-card-block';
+            var commandsOpen = (rule.commands || []).some(function (command) {
+                return String(command || '').trim() !== '';
+            });
+            commandsBlock.innerHTML = [
+                '<details class="signin-rw-advanced"', commandsOpen ? ' open' : '', '>',
+                '<summary>高级命令（可选）</summary>',
+                '<p class="signin-rw-hint">高级命令为可选项。如果物品已配置在物品奖励中，不要再写 give 命令，避免重复发放。</p>',
+                '<div class="mt-2 flex items-center justify-between gap-2"><span class="text-sm">命令列表</span><button type="button" class="ta-btn ta-btn-secondary" data-action="add-command">添加命令</button></div>',
+                '<div class="mt-2 space-y-2" data-commands-list="1"></div>',
+                '</details>'
+            ].join('');
+            var commandsList = commandsBlock.querySelector('[data-commands-list]');
+            (rule.commands || []).forEach(function (command) {
+                commandsList.appendChild(createCommandRow(command));
+            });
+            if (commandsList.children.length === 0) {
+                commandsList.appendChild(createCommandRow(''));
+            }
+            card.appendChild(commandsBlock);
+
+            cardsRoot.appendChild(card);
+        });
+
+        refreshPreview();
     }
 
     function resolveScenario() {
@@ -422,7 +514,7 @@
     }
 
     function buildPreviewPayload() {
-        syncRulesFromDom();
+        syncVisibleRulesFromDom();
         var scenario = resolveScenario();
         var matched = [];
 
@@ -511,32 +603,79 @@
         }
     }
 
-    cardsRoot.addEventListener('input', function () {
+    cardsRoot.addEventListener('input', function (event) {
+        var target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+
+        var field = target.getAttribute('data-field');
+        if (field === 'rule_name' || field === 'mail_title') {
+            var card = target.closest('[data-rule-index]');
+            if (card) {
+                var ruleNameNode = card.querySelector('[data-field="rule_name"]');
+                var titleNode = card.querySelector('[data-field="mail_title"]');
+                if (ruleNameNode && titleNode) {
+                    if (field === 'rule_name') {
+                        titleNode.value = ruleNameNode.value;
+                    } else {
+                        ruleNameNode.value = titleNode.value;
+                    }
+                }
+            }
+        }
+
         refreshPreview();
     });
 
-    cardsRoot.addEventListener('change', function () {
+    cardsRoot.addEventListener('change', function (event) {
+        var target = event.target;
+        if (!(target instanceof HTMLElement)) {
+            refreshPreview();
+            return;
+        }
+
+        if (target.matches('[data-field="rule_type"]')) {
+            var card = target.closest('[data-rule-index]');
+            if (card) {
+                syncRuleFromCard(card);
+                var idx = toInt(card.getAttribute('data-rule-index'), -1);
+                if (idx >= 0 && idx < rules.length) {
+                    setActiveRuleTab(rules[idx].rule_type, true);
+                    return;
+                }
+            }
+        }
+
         refreshPreview();
     });
 
     cardsRoot.addEventListener('click', function (event) {
         var target = event.target;
         if (!(target instanceof HTMLElement)) return;
+
+        if (target.matches('[data-action="add-visible"]')) {
+            rules.push(defaultRuleForType(activeRuleTab));
+            syncSortOrders();
+            renderCards();
+            return;
+        }
+
         var card = target.closest('[data-rule-index]');
         if (!card) return;
-        var index = toInt(card.getAttribute('data-rule-index'), -1);
-        if (index < 0 || index >= rules.length) return;
+
+        var ruleIndex = toInt(card.getAttribute('data-rule-index'), -1);
+        if (ruleIndex < 0 || ruleIndex >= rules.length) return;
 
         if (target.matches('[data-item-remove]')) {
-            var itemRow = target.closest('.grid');
+            var itemRow = target.closest('.signin-rw-inline-grid');
             if (itemRow) {
                 itemRow.remove();
                 refreshPreview();
             }
             return;
         }
+
         if (target.matches('[data-command-remove]')) {
-            var commandRow = target.closest('.grid');
+            var commandRow = target.closest('.signin-rw-inline-grid');
             if (commandRow) {
                 commandRow.remove();
                 refreshPreview();
@@ -555,46 +694,76 @@
             }
             return;
         }
+
         if (action === 'add-command') {
             var commandsList = card.querySelector('[data-commands-list]');
             if (commandsList) {
                 commandsList.appendChild(createCommandRow(''));
+                var details = card.querySelector('.signin-rw-advanced');
+                if (details) {
+                    details.setAttribute('open', 'open');
+                }
                 refreshPreview();
             }
             return;
         }
+
         if (action === 'copy') {
-            syncRulesFromDom();
-            var clone = JSON.parse(JSON.stringify(rules[index]));
+            syncVisibleRulesFromDom();
+            var clone = JSON.parse(JSON.stringify(rules[ruleIndex]));
             clone.id = 0;
             clone.sort_order = rules.length;
-            rules.splice(index + 1, 0, clone);
-            renderCards();
+            rules.splice(ruleIndex + 1, 0, normalizeRule(clone, ruleIndex + 1));
+            syncSortOrders();
+            setActiveRuleTab(clone.rule_type, true);
             return;
         }
+
         if (action === 'delete') {
-            syncRulesFromDom();
-            var rule = rules[index];
+            syncVisibleRulesFromDom();
+            var rule = rules[ruleIndex];
             if (toInt(rule.id, 0) > 0) {
                 if (window.confirm('确定要从数据库草稿中删除这条已存在规则吗？')) {
                     submitDeleteRule(toInt(rule.id, 0));
                 }
                 return;
             }
-            rules.splice(index, 1);
+
+            rules.splice(ruleIndex, 1);
             if (rules.length === 0) {
                 rules.push(defaultRuleForType('daily'));
+            }
+            syncSortOrders();
+            if (!rules.some(function (item) { return normalizeRuleType(item.rule_type) === activeRuleTab; })) {
+                activeRuleTab = normalizeRuleType((rules[0] || {}).rule_type || 'daily');
             }
             renderCards();
         }
     });
 
-    addButtons.forEach(function (button) {
+    tabButtons.forEach(function (button) {
         button.addEventListener('click', function () {
-            syncRulesFromDom();
+            syncVisibleRulesFromDom();
+            setActiveRuleTab(button.getAttribute('data-rule-tab') || 'daily', true);
+        });
+    });
+
+    if (addCurrentTabButton) {
+        addCurrentTabButton.addEventListener('click', function () {
+            syncVisibleRulesFromDom();
+            rules.push(defaultRuleForType(activeRuleTab));
+            syncSortOrders();
+            renderCards();
+        });
+    }
+
+    legacyAddButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+            syncVisibleRulesFromDom();
             var type = normalizeRuleType(button.getAttribute('data-add-rule') || 'daily');
             rules.push(defaultRuleForType(type));
-            renderCards();
+            syncSortOrders();
+            setActiveRuleTab(type, true);
         });
     });
 
@@ -608,7 +777,7 @@
     }
 
     saveForm.addEventListener('submit', function () {
-        syncRulesFromDom();
+        syncVisibleRulesFromDom();
         var draftNameNode = document.getElementById('signin-draft-name');
         payloadInput.value = JSON.stringify({
             name: draftNameNode ? String(draftNameNode.value || '').trim() : '',
@@ -617,5 +786,7 @@
         });
     });
 
+    syncSortOrders();
+    setActiveRuleTab(activeRuleTab, false);
     renderCards();
 })();

@@ -164,6 +164,15 @@ class SigninRewardConfig extends Model
         if ($targetDate === null) {
             $targetDate = date('Y-m-d', strtotime('+1 day'));
         }
+        $minDate = date('Y-m-d', strtotime('+1 day'));
+        if (strcmp($targetDate, $minDate) < 0) {
+            return [
+                'ok' => false,
+                'status' => 422,
+                'code' => 'publish_date_too_early',
+                'message' => '正式配置最早只能从明天 00:00 生效；当天验证请使用测试发送。',
+            ];
+        }
 
         $draftRules = $this->fetchRulesForConfig((int)$draft['id']);
         if ($draftRules === []) {

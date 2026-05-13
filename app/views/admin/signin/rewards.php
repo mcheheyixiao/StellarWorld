@@ -119,6 +119,13 @@ $bootstrap = [
 #signin-rewards-page .signin-rw-status-body {
     min-width: 0;
 }
+#signin-rewards-page .signin-rw-status-card.interactive {
+    transition: border-color .2s ease, box-shadow .2s ease;
+}
+#signin-rewards-page .signin-rw-status-card.interactive:hover {
+    border-color: rgba(59, 130, 246, 0.5);
+    box-shadow: 0 12px 24px -18px rgba(59, 130, 246, 0.75);
+}
 #signin-rewards-page .signin-rw-status-title {
     display: flex;
     align-items: center;
@@ -161,6 +168,24 @@ $bootstrap = [
     line-height: 1.35;
     color: var(--ta-text-muted);
     word-break: break-word;
+}
+#signin-rewards-page .signin-rw-status-action {
+    margin-top: 0.35rem;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-size: 0.74rem;
+    color: #60a5fa;
+    cursor: pointer;
+}
+#signin-rewards-page .signin-rw-status-action:hover {
+    color: #93c5fd;
+}
+#signin-rewards-page .signin-rw-status-help {
+    margin-top: 0.3rem;
+    font-size: 0.74rem;
+    line-height: 1.35;
+    color: var(--ta-text-muted);
 }
 #signin-rewards-page .signin-rw-info-bar {
     border-radius: 0.82rem;
@@ -336,6 +361,8 @@ $bootstrap = [
                         <span class="signin-rw-badge <?= $activeConfig !== null ? 'ok' : 'off' ?>"><?= $activeConfig !== null ? '生效中' : '未设置' ?></span>
                     </div>
                     <p class="signin-rw-status-note"><?= $activeLabel ?></p>
+                    <button type="button" class="signin-rw-status-action" data-toggle-status-help="signin-status-help-active">查看说明</button>
+                    <p id="signin-status-help-active" class="signin-rw-status-help hidden">普通玩家今天签到实际使用的配置。若无数据库生效配置，则回退 SIGNIN_REWARD_* 常量。</p>
                 </div>
             </article>
 
@@ -349,10 +376,12 @@ $bootstrap = [
                         <span class="signin-rw-badge <?= $scheduledConfig !== null ? 'pending' : 'off' ?>"><?= $scheduledConfig !== null ? '已排期' : '待发布' ?></span>
                     </div>
                     <p class="signin-rw-status-note"><?= $scheduledLabel ?></p>
+                    <button type="button" class="signin-rw-status-action" data-toggle-status-help="signin-status-help-scheduled">查看说明</button>
+                    <p id="signin-status-help-scheduled" class="signin-rw-status-help hidden">这里展示已发布并等待生效的配置。到达生效日期后，会自动切换为当前生效配置。</p>
                 </div>
             </article>
 
-            <article class="signin-rw-status-card">
+            <article class="signin-rw-status-card interactive" data-scroll-target="signin-rewards-save-form">
                 <span class="signin-rw-status-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4"><path d="M12 4v16m8-8H4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 </span>
@@ -362,19 +391,23 @@ $bootstrap = [
                         <span class="signin-rw-badge warn">可编辑</span>
                     </div>
                     <p class="signin-rw-status-note"><?= $draftLabel ?></p>
+                    <p class="signin-rw-status-help">保存草稿不会影响玩家签到，需要发布后才会排期生效。</p>
+                    <button type="button" class="signin-rw-status-action" data-scroll-target="signin-rewards-save-form">滚动到规则编辑器</button>
                 </div>
             </article>
 
-            <article class="signin-rw-status-card">
+            <article class="signin-rw-status-card interactive" data-scroll-target="signin-rewards-test-form">
                 <span class="signin-rw-status-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4"><path d="M12 4a2 2 0 0 1 2 2v1.3a6 6 0 0 1 2.7 2.7H18a2 2 0 1 1 0 4h-1.3a6 6 0 0 1-2.7 2.7V18a2 2 0 1 1-4 0v-1.3a6 6 0 0 1-2.7-2.7H6a2 2 0 1 1 0-4h1.3A6 6 0 0 1 10 7.3V6a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.5"/></svg>
                 </span>
                 <div class="signin-rw-status-body">
                     <div class="signin-rw-status-title">
                         <span>测试模式</span>
-                        <span class="signin-rw-badge <?= $testSendEnabled ? 'ok' : 'off' ?>"><?= $testSendEnabled ? '已开启' : '已关闭' ?></span>
+                        <span id="signin-status-test-send-badge" class="signin-rw-badge <?= $testSendEnabled ? 'ok' : 'off' ?>"><?= $testSendEnabled ? '已开启' : '已关闭' ?></span>
                     </div>
-                    <p class="signin-rw-status-note">重复测试签到：<?= $repeatTestEnabled ? '已允许' : '默认关闭' ?></p>
+                    <p class="signin-rw-status-note">测试发送用于验证奖励，不影响正式签到统计。</p>
+                    <p class="signin-rw-status-help">重复正式签到测试：<span id="signin-status-repeat-test-state"><?= $repeatTestEnabled ? '已开启' : '默认关闭' ?></span></p>
+                    <button type="button" class="signin-rw-status-action" data-scroll-target="signin-rewards-test-form">滚动到测试发送卡片</button>
                 </div>
             </article>
         </div>
@@ -385,15 +418,16 @@ $bootstrap = [
     </section>
 
     <?php if ($isSaved): ?>
-        <div class="ta-card border-emerald-300/35 bg-emerald-500/10 text-emerald-100">草稿已保存。</div>
+        <div class="ta-card border-emerald-300/35 bg-emerald-500/10 text-emerald-100">草稿已保存，但不会影响普通玩家签到。请点击“发布到生效日期”后，配置才会在指定日期生效。</div>
     <?php endif; ?>
     <?php if ($isPublished): ?>
+        <?php $publishedDate = $effectiveDateFlash !== '' ? $effectiveDateFlash : $tomorrow; ?>
         <div class="ta-card border-emerald-300/35 bg-emerald-500/10 text-emerald-100">
-            草稿已发布<?= $effectiveDateFlash !== '' ? '，生效日期：' . htmlspecialchars($effectiveDateFlash, ENT_QUOTES, 'UTF-8') : '' ?>。
+            配置已发布并排期，将于 <?= htmlspecialchars($publishedDate, ENT_QUOTES, 'UTF-8') ?> 00:00 后成为当前生效配置。
         </div>
     <?php endif; ?>
     <?php if ($isTestSent): ?>
-        <div class="ta-card border-emerald-300/35 bg-emerald-500/10 text-emerald-100">测试奖励已写入 `stellar_reward_outbox` 队列。</div>
+        <div class="ta-card border-emerald-300/35 bg-emerald-500/10 text-emerald-100">测试奖励已入队，source=signin_test，不会影响正式签到统计。</div>
     <?php endif; ?>
     <?php if ($isDeleted): ?>
         <div class="ta-card border-emerald-300/35 bg-emerald-500/10 text-emerald-100">规则已从草稿中删除。</div>
@@ -415,11 +449,6 @@ $bootstrap = [
                     </label>
                     <button type="submit" class="ta-btn ta-btn-primary">保存草稿</button>
                 </div>
-
-                <label class="inline-flex items-center gap-2 text-sm">
-                    <input type="checkbox" name="admin_repeat_test_enabled" value="1" <?= $repeatTestEnabled ? 'checked' : '' ?>>
-                    <span>允许管理员重复领取正式签到（全局，默认关闭）</span>
-                </label>
 
                 <div class="signin-rw-tabbar">
                     <div id="signin-rule-tabs" class="signin-rw-tabs" role="tablist" aria-label="规则分类">
@@ -472,9 +501,21 @@ $bootstrap = [
                     <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
                     <h2 class="text-base font-semibold mt-0">测试发送</h2>
                     <p class="ta-help-text">
-                        开关状态：<?= $testSendEnabled ? '已开启' : '已关闭' ?>。
-                        测试发送写入 `source=signin_test`，不会修改正式签到统计。
+                        测试发送写入 `source=signin_test`，不会影响正式签到统计。
                     </p>
+                    <div id="signin-test-mode-settings" class="signin-rw-card-block space-y-2">
+                        <p class="signin-rw-block-title mb-0">测试模式开关</p>
+                        <label class="inline-flex items-center gap-2 text-sm">
+                            <input type="checkbox" name="signin_reward_test_send_enabled" value="1" <?= $testSendEnabled ? 'checked' : '' ?>>
+                            <span>启用测试发送（控制是否允许写入 source=signin_test）</span>
+                        </label>
+                        <p class="signin-rw-hint">默认开启。关闭后测试发送会被后端拒绝，不会写入测试奖励。</p>
+                        <label class="inline-flex items-center gap-2 text-sm">
+                            <input type="checkbox" name="admin_repeat_test_enabled" value="1" <?= $repeatTestEnabled ? 'checked' : '' ?>>
+                            <span>重复正式签到测试（预留/高风险，默认关闭）</span>
+                        </label>
+                        <p class="signin-rw-hint">该开关与“测试发送开关”不同，请勿混用。</p>
+                    </div>
                     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                         <label class="block md:col-span-2">
                             <span class="text-sm">玩家名</span>

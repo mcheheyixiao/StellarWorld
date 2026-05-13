@@ -90,6 +90,10 @@ class SigninRewardConfig extends Model
         }
         $name = $this->cutString($name, 120);
 
+        $testSendEnabled = $this->normalizeBoolInt(
+            $payload['test_send_enabled'] ?? ($payload['signin_reward_test_send_enabled'] ?? null),
+            null
+        );
         $repeatTestEnabled = $this->normalizeBoolInt($payload['admin_repeat_test_enabled'] ?? null, null);
 
         $ownsTx = false;
@@ -115,6 +119,10 @@ class SigninRewardConfig extends Model
 
             foreach ($normalizedRules as $rule) {
                 $this->insertRule((int)$draft['id'], $rule);
+            }
+
+            if ($testSendEnabled !== null) {
+                $this->upsertSiteSetting(self::TEST_SEND_SETTING_KEY, (string)$testSendEnabled);
             }
 
             if ($repeatTestEnabled !== null) {

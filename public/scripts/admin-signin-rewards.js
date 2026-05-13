@@ -16,9 +16,7 @@
     var previewItems = document.getElementById('signin-preview-items');
     var previewCommands = document.getElementById('signin-preview-commands');
     var previewPayload = document.getElementById('signin-preview-payload');
-    var tabButtons = root.querySelectorAll('[data-rule-tab]');
-    var addCurrentTabButton = document.getElementById('signin-add-current-tab');
-    var legacyAddButtons = root.querySelectorAll('[data-add-rule]');
+    var settingsRoot = document.getElementById('signin-test-mode-settings');
 
     if (!cardsRoot || !saveForm || !payloadInput) {
         return;
@@ -119,10 +117,10 @@
     }
 
     function typeLabel(type) {
-        if (type === 'daily') return '每日';
-        if (type === 'streak') return '连续';
-        if (type === 'total') return '累计';
-        if (type === 'monthly') return '本月';
+        if (type === 'daily') return '每日基础';
+        if (type === 'streak') return '连续签到';
+        if (type === 'total') return '累计签到';
+        if (type === 'monthly') return '本月签到';
         return '规则';
     }
 
@@ -150,7 +148,7 @@
         var wrapper = document.createElement('div');
         wrapper.className = 'signin-rw-inline-grid commands';
         wrapper.innerHTML = [
-            '<input type="text" data-command-text placeholder="give {player} minecraft:diamond 1" value="', escapeHtml(command || ''), '">',
+            '<input type="text" data-command-text placeholder="可选，例如 eco give {player} 100" value="', escapeHtml(command || ''), '">',
             '<button type="button" class="ta-btn ta-btn-secondary" data-command-remove>删除</button>'
         ].join('');
         return wrapper;
@@ -198,7 +196,7 @@
         var normalized = normalizeRuleType(type);
         activeRuleTab = normalized;
 
-        tabButtons.forEach(function (button) {
+        root.querySelectorAll('[data-rule-tab]').forEach(function (button) {
             var isActive = normalizeRuleType(button.getAttribute('data-rule-tab') || '') === normalized;
             button.classList.toggle('active', isActive);
             button.setAttribute('aria-selected', isActive ? 'true' : 'false');
@@ -252,7 +250,6 @@
         }
 
         var source = rules[ruleIndex] || {};
-        var ruleTypeNode = card.querySelector('[data-field="rule_type"]');
         var triggerNode = card.querySelector('[data-field="trigger_day"]');
         var ruleNameNode = card.querySelector('[data-field="rule_name"]');
         var titleNode = card.querySelector('[data-field="mail_title"]');
@@ -262,7 +259,7 @@
         var itemsList = card.querySelector('[data-items-list]');
         var commandsList = card.querySelector('[data-commands-list]');
 
-        var ruleType = normalizeRuleType(ruleTypeNode ? ruleTypeNode.value : source.rule_type);
+        var ruleType = normalizeRuleType(source.rule_type);
         var triggerDay = Math.max(1, toInt(triggerNode ? triggerNode.value : source.trigger_day, 1));
         if (ruleType === 'daily') {
             triggerDay = 1;
@@ -325,7 +322,7 @@
         if (visibleIndexes.length === 0) {
             var empty = document.createElement('div');
             empty.className = 'signin-rw-empty';
-            empty.innerHTML = '当前分类还没有规则。<br><button type="button" class="ta-btn ta-btn-secondary mt-3" data-action="add-visible">新增一条规则</button>';
+            empty.innerHTML = '当前分类（' + escapeHtml(typeLabel(activeRuleTab)) + '）还没有规则。<br><button type="button" class="ta-btn ta-btn-secondary mt-3" data-action="add-visible">新增当前分类规则</button>';
             cardsRoot.appendChild(empty);
             refreshPreview();
             return;
@@ -360,13 +357,7 @@
                 '<div class="grid grid-cols-1 gap-3 md:grid-cols-2">',
                 '<label class="block md:col-span-2"><span class="text-sm">规则名称</span><input type="text" data-field="rule_name" placeholder="用于管理端标识" value="', escapeHtml(rule.mail_title || ''), '"></label>',
                 '<label class="block"><span class="text-sm">触发天数</span><input type="number" min="1" data-field="trigger_day" value="', String(rule.trigger_day), '"', rule.rule_type === 'daily' ? ' readonly' : '', '></label>',
-                '<label class="block"><span class="text-sm">触发方式</span>',
-                '<select data-field="rule_type">',
-                '<option value="daily"', rule.rule_type === 'daily' ? ' selected' : '', '>daily（每日）</option>',
-                '<option value="streak"', rule.rule_type === 'streak' ? ' selected' : '', '>streak（连续）</option>',
-                '<option value="total"', rule.rule_type === 'total' ? ' selected' : '', '>total（累计）</option>',
-                '<option value="monthly"', rule.rule_type === 'monthly' ? ' selected' : '', '>monthly（本月）</option>',
-                '</select></label>',
+                '<div class="block"><span class="text-sm">规则类型</span><p class="mt-1 text-sm font-semibold">', escapeHtml(typeLabel(rule.rule_type)), '</p></div>',
                 '</div>'
             ].join('');
             card.appendChild(baseBlock);
@@ -603,6 +594,46 @@
         }
     }
 
+    function resolveSettingCheckbox(selector, fallback) {
+        var node = root.querySelector(selector);
+        if (node instanceof HTMLInputElement) {
+            return node.checked ? 1 : 0;
+        }
+        return fallback;
+    }
+
+    function refreshTestModeStatusCard() {
+        var testSendEnabled = resolveSettingCheckbox('input[name="signin_reward_test_send_enabled"]', toInt((bootstrap.settings || {}).test_send_enabled, 1) === 1 ? 1 : 0);
+        var repeatEnabled = resolveSettingCheckbox('input[name="admin_repeat_test_enabled"]', toInt((bootstrap.settings || {}).admin_repeat_test_enabled, 0) === 1 ? 1 : 0);
+        var badge = document.getElementById('signin-status-test-send-badge');
+        var repeatState = document.getElementById('signin-status-repeat-test-state');
+        if (badge) {
+            badge.classList.toggle('ok', testSendEnabled === 1);
+            badge.classList.toggle('off', testSendEnabled !== 1);
+            badge.textContent = testSendEnabled === 1 ? '已开启' : '已关闭';
+        }
+        if (repeatState) {
+            repeatState.textContent = repeatEnabled === 1 ? '已开启' : '默认关闭';
+        }
+    }
+
+    function scrollToTarget(targetId) {
+        var target = document.getElementById(targetId);
+        if (!target) {
+            return;
+        }
+
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function toggleStatusHelp(helpId) {
+        var helpNode = document.getElementById(helpId);
+        if (!helpNode) {
+            return;
+        }
+        helpNode.classList.toggle('hidden');
+    }
+
     cardsRoot.addEventListener('input', function (event) {
         var target = event.target;
         if (!(target instanceof HTMLElement)) return;
@@ -626,25 +657,7 @@
         refreshPreview();
     });
 
-    cardsRoot.addEventListener('change', function (event) {
-        var target = event.target;
-        if (!(target instanceof HTMLElement)) {
-            refreshPreview();
-            return;
-        }
-
-        if (target.matches('[data-field="rule_type"]')) {
-            var card = target.closest('[data-rule-index]');
-            if (card) {
-                syncRuleFromCard(card);
-                var idx = toInt(card.getAttribute('data-rule-index'), -1);
-                if (idx >= 0 && idx < rules.length) {
-                    setActiveRuleTab(rules[idx].rule_type, true);
-                    return;
-                }
-            }
-        }
-
+    cardsRoot.addEventListener('change', function () {
         refreshPreview();
     });
 
@@ -730,41 +743,50 @@
             }
 
             rules.splice(ruleIndex, 1);
-            if (rules.length === 0) {
-                rules.push(defaultRuleForType('daily'));
-            }
             syncSortOrders();
-            if (!rules.some(function (item) { return normalizeRuleType(item.rule_type) === activeRuleTab; })) {
+            if (rules.length > 0 && !rules.some(function (item) { return normalizeRuleType(item.rule_type) === activeRuleTab; })) {
                 activeRuleTab = normalizeRuleType((rules[0] || {}).rule_type || 'daily');
             }
             renderCards();
         }
     });
 
-    tabButtons.forEach(function (button) {
-        button.addEventListener('click', function () {
-            syncVisibleRulesFromDom();
-            setActiveRuleTab(button.getAttribute('data-rule-tab') || 'daily', true);
-        });
-    });
+    root.addEventListener('click', function (event) {
+        var target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
 
-    if (addCurrentTabButton) {
-        addCurrentTabButton.addEventListener('click', function () {
+        var tab = target.closest('[data-rule-tab]');
+        if (tab) {
+            event.preventDefault();
+            syncVisibleRulesFromDom();
+            setActiveRuleTab(tab.dataset.ruleTab || 'daily', true);
+            return;
+        }
+
+        var addCurrentTab = target.closest('#signin-add-current-tab');
+        if (addCurrentTab) {
+            event.preventDefault();
             syncVisibleRulesFromDom();
             rules.push(defaultRuleForType(activeRuleTab));
             syncSortOrders();
             renderCards();
-        });
-    }
+            return;
+        }
 
-    legacyAddButtons.forEach(function (button) {
-        button.addEventListener('click', function () {
-            syncVisibleRulesFromDom();
-            var type = normalizeRuleType(button.getAttribute('data-add-rule') || 'daily');
-            rules.push(defaultRuleForType(type));
-            syncSortOrders();
-            setActiveRuleTab(type, true);
-        });
+        var scrollTrigger = target.closest('[data-scroll-target]');
+        if (scrollTrigger) {
+            event.preventDefault();
+            scrollToTarget(String(scrollTrigger.getAttribute('data-scroll-target') || '').trim());
+            return;
+        }
+
+        var helpToggle = target.closest('[data-toggle-status-help]');
+        if (helpToggle) {
+            event.preventDefault();
+            toggleStatusHelp(String(helpToggle.getAttribute('data-toggle-status-help') || '').trim());
+        }
     });
 
     if (testForm) {
@@ -782,11 +804,17 @@
         payloadInput.value = JSON.stringify({
             name: draftNameNode ? String(draftNameNode.value || '').trim() : '',
             rules: rules,
-            admin_repeat_test_enabled: (saveForm.querySelector('input[name="admin_repeat_test_enabled"]') || {}).checked ? 1 : 0
+            test_send_enabled: resolveSettingCheckbox('input[name="signin_reward_test_send_enabled"]', 1),
+            admin_repeat_test_enabled: resolveSettingCheckbox('input[name="admin_repeat_test_enabled"]', 0)
         });
     });
+
+    if (settingsRoot) {
+        settingsRoot.addEventListener('change', refreshTestModeStatusCard);
+    }
 
     syncSortOrders();
     setActiveRuleTab(activeRuleTab, false);
     renderCards();
+    refreshTestModeStatusCard();
 })();

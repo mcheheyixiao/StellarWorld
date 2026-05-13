@@ -999,8 +999,12 @@ class AdminController extends Controller
 
         $this->redirectOrJson(
             '/admin?tab=signin-rewards&saved=1',
-            ['success' => true, 'ok' => true, 'message' => '草稿已保存'],
-            '草稿已保存',
+            [
+                'success' => true,
+                'ok' => true,
+                'message' => '草稿已保存，但不会影响普通玩家签到。请点击“发布到生效日期”后，配置才会在指定日期生效。',
+            ],
+            '草稿已保存，但不会影响普通玩家签到。请点击“发布到生效日期”后，配置才会在指定日期生效。',
             200
         );
     }
@@ -1034,6 +1038,9 @@ class AdminController extends Controller
         }
 
         $effectiveOut = trim((string)($result['effective_date'] ?? ''));
+        if ($effectiveOut === '') {
+            $effectiveOut = date('Y-m-d', strtotime('+1 day'));
+        }
         $redirect = '/admin?tab=signin-rewards&published=1';
         if ($effectiveOut !== '') {
             $redirect .= '&effective_date=' . rawurlencode($effectiveOut);
@@ -1044,10 +1051,10 @@ class AdminController extends Controller
             [
                 'success' => true,
                 'ok' => true,
-                'message' => '草稿已发布',
+                'message' => '配置已发布并排期，将于 ' . $effectiveOut . ' 00:00 后成为当前生效配置。',
                 'effective_date' => $effectiveOut,
             ],
-            '草稿已发布',
+            '配置已发布并排期，将于 ' . $effectiveOut . ' 00:00 后成为当前生效配置。',
             200
         );
     }
@@ -1107,12 +1114,12 @@ class AdminController extends Controller
             [
                 'success' => true,
                 'ok' => true,
-                'message' => '测试奖励已入队',
+                'message' => '测试奖励已入队，source=signin_test，不会影响正式签到统计。',
                 'request_id' => (string)($result['request_id'] ?? ''),
                 'payload' => is_array($result['payload'] ?? null) ? $result['payload'] : [],
                 'target' => is_array($result['target'] ?? null) ? $result['target'] : [],
             ],
-            '测试奖励已入队',
+            '测试奖励已入队，source=signin_test，不会影响正式签到统计。',
             200
         );
     }

@@ -166,7 +166,7 @@ class SigninGateway extends Model
                     'ok' => true,
                     'http_status' => 200,
                     'status' => 'already_signed',
-                    'message' => '今日已签到',
+                    'message' => $this->defaultMessageForStatus('already_signed'),
                     'request_id' => $requestId,
                     'status_data' => $this->getStatusForUser($userId),
                 ];
@@ -185,9 +185,18 @@ class SigninGateway extends Model
             if ($total < 1) {
                 $total = 1;
             }
+            $monthDays = $this->countSignedDaysInMonth($userId, $serverId, $today) + 1;
+            if ($monthDays < 1) {
+                $monthDays = 1;
+            }
 
             $requestId = $this->buildRequestId();
-            $rewardPayload = $this->buildSigninRewardPayload($today, $continuous, $total);
+            $rewardPayload = $this->buildSigninRewardPayload($today, $continuous, $total, $monthDays, [
+                'player' => $user['mc_username'],
+                'uuid' => $user['mc_uuid'],
+                'server_id' => $serverId,
+                'source' => 'web_queue',
+            ]);
             if ($this->isSigninRewardPayloadEmpty($rewardPayload)) {
                 if ($ownsTx && $this->db->inTransaction()) {
                     $this->db->rollBack();
@@ -574,8 +583,29 @@ class SigninGateway extends Model
         return $stmt->fetchColumn() !== false;
     }
 
-    private function buildSigninRewardPayload(string $signDate, int $continuous, int $total): array
-    {
+    private function buildSigninRewardPayload(
+        string $signDate,
+        int $continuous,
+        int $total,
+        int $monthDays = 1,
+        array $context = []
+    ): array {
+        try {
+            $rewardConfig = new SigninRewardConfig();
+            $dbPayload = $rewardConfig->buildPayloadForSignDate(
+                $signDate,
+                max(1, $continuous),
+                max(1, $total),
+                max(1, $monthDays),
+                $context
+            );
+            if (is_array($dbPayload) && $dbPayload !== []) {
+                return $this->normalizeSigninRewardPayload($dbPayload);
+            }
+        } catch (\Throwable $e) {
+            // Keep constant-based fallback path available even when DB reward config is unavailable.
+        }
+
         $payload = [
             'mail' => [
                 'title' => '每日签到奖励',
@@ -598,7 +628,9 @@ class SigninGateway extends Model
                 'signDate' => $signDate,
                 'continuous' => max(1, $continuous),
                 'total' => max(1, $total),
+                'month_days' => max(1, $monthDays),
                 'source' => 'web_queue',
+                'matchedRules' => [],
             ],
         ];
 
@@ -713,16 +745,25 @@ class SigninGateway extends Model
 
         $commandsNode = isset($payload['commands']) && is_array($payload['commands']) ? $payload['commands'] : [];
         $commands = [];
+        $seenCommands = [];
         foreach ($commandsNode as $command) {
             if (!is_scalar($command)) {
                 continue;
             }
             $text = trim((string)$command);
-            if ($text !== '') {
+            if ($text === '' || preg_match('/[\r\n]/', $text) === 1) {
+                continue;
+            }
+            $text = ltrim($text, '/');
+            $text = trim($text);
+            if ($text === '') {
+                continue;
+            }
+            if (!isset($seenCommands[$text])) {
+                $seenCommands[$text] = true;
                 $commands[] = $text;
             }
         }
-        $commands = array_values(array_unique($commands));
 
         $metaNode = isset($payload['meta']) && is_array($payload['meta']) ? $payload['meta'] : [];
         $signDate = trim((string)($metaNode['signDate'] ?? ''));
@@ -731,17 +772,35 @@ class SigninGateway extends Model
         }
         $continuous = max(1, (int)($metaNode['continuous'] ?? 1));
         $total = max(1, (int)($metaNode['total'] ?? 1));
+        $monthDays = max(1, (int)($metaNode['month_days'] ?? 1));
         $source = trim((string)($metaNode['source'] ?? 'web_queue'));
         if ($source === '') {
             $source = 'web_queue';
         }
+        $matchedRules = isset($metaNode['matchedRules']) && is_array($metaNode['matchedRules'])
+            ? array_values($metaNode['matchedRules'])
+            : [];
+        $configId = (int)($metaNode['configId'] ?? 0);
+        $configName = trim((string)($metaNode['configName'] ?? ''));
+        $configStatus = trim((string)($metaNode['configStatus'] ?? ''));
 
         $meta = [
             'signDate' => $signDate,
             'continuous' => $continuous,
             'total' => $total,
+            'month_days' => $monthDays,
             'source' => $source,
+            'matchedRules' => $matchedRules,
         ];
+        if ($configId > 0) {
+            $meta['configId'] = $configId;
+        }
+        if ($configName !== '') {
+            $meta['configName'] = $configName;
+        }
+        if ($configStatus !== '') {
+            $meta['configStatus'] = $configStatus;
+        }
         if ($items === [] && $commands === []) {
             $meta['rewardEmpty'] = true;
         }
@@ -840,6 +899,84 @@ class SigninGateway extends Model
 
         return [
             'created' => $stmt->rowCount() === 1 && trim((string)($outboxRow['request_id'] ?? '')) === $requestId,
+            'row' => $outboxRow,
+        ];
+    }
+
+    public function createSigninTestRewardOutbox(array $row): array
+    {
+        $requestId = trim((string)($row['request_id'] ?? ''));
+        if ($requestId === '') {
+            $requestId = 'signin_test_' . date('YmdHis') . '_' . bin2hex(random_bytes(5));
+        }
+
+        $playerUuid = $this->normalizePlayerUuid((string)($row['player_uuid'] ?? ''));
+        $playerName = trim((string)($row['player_name'] ?? ''));
+        if ($playerUuid === '' || $playerName === '') {
+            throw new \InvalidArgumentException('Test outbox requires player_uuid and player_name');
+        }
+
+        $serverId = $this->cutString((string)($row['server_id'] ?? $this->signinServerId()), 64);
+        if ($serverId === '') {
+            $serverId = $this->signinServerId();
+        }
+
+        $stmt = $this->db->prepare('
+            INSERT INTO stellar_reward_outbox (
+                request_id,
+                website_user_id,
+                player_uuid,
+                player_name,
+                server_id,
+                sign_date,
+                source,
+                reward_type,
+                reward_payload_json,
+                status,
+                attempts,
+                last_error,
+                created_at,
+                updated_at
+            ) VALUES (
+                :request_id,
+                :website_user_id,
+                :player_uuid,
+                :player_name,
+                :server_id,
+                NULL,
+                :source,
+                :reward_type,
+                :reward_payload_json,
+                :status,
+                :attempts,
+                :last_error,
+                NOW(),
+                NOW()
+            )
+        ');
+        $stmt->execute([
+            ':request_id' => $requestId,
+            ':website_user_id' => max(0, (int)($row['website_user_id'] ?? 0)),
+            ':player_uuid' => $playerUuid,
+            ':player_name' => $this->cutString($playerName, 64),
+            ':server_id' => $serverId,
+            ':source' => 'signin_test',
+            ':reward_type' => (string)($row['reward_type'] ?? 'sweetmail'),
+            ':reward_payload_json' => (string)($row['reward_payload_json'] ?? '{}'),
+            ':status' => (string)($row['status'] ?? 'pending'),
+            ':attempts' => max(0, (int)($row['attempts'] ?? 0)),
+            ':last_error' => $this->nullableString($row['last_error'] ?? null),
+        ]);
+
+        $outboxId = (int)$this->db->lastInsertId();
+        $outboxRow = $outboxId > 0 ? $this->findRewardOutboxById($outboxId) : null;
+        if ($outboxRow === null) {
+            throw new \RuntimeException('Failed to resolve test reward outbox row after write');
+        }
+
+        return [
+            'created' => true,
+            'request_id' => $requestId,
             'row' => $outboxRow,
         ];
     }
@@ -1425,6 +1562,33 @@ class SigninGateway extends Model
         return $row ?: null;
     }
 
+    private function countSignedDaysInMonth(int $userId, string $serverId, string $signDate): int
+    {
+        $timestamp = strtotime($signDate . ' 00:00:00');
+        if ($timestamp === false) {
+            return 0;
+        }
+
+        $monthStart = date('Y-m-01', $timestamp);
+        $stmt = $this->db->prepare('
+            SELECT COUNT(*)
+            FROM stellar_signin_daily_cache
+            WHERE website_user_id = :website_user_id
+              AND server_id = :server_id
+              AND sign_date >= :month_start
+              AND sign_date < :sign_date
+              AND signed_today = 1
+        ');
+        $stmt->execute([
+            ':website_user_id' => $userId,
+            ':server_id' => $serverId,
+            ':month_start' => $monthStart,
+            ':sign_date' => $signDate,
+        ]);
+
+        return max(0, (int)$stmt->fetchColumn());
+    }
+
     private function upsertDailyCache(array $row): void
     {
         $signDate = $this->extractSignDate($row);
@@ -1657,3 +1821,4 @@ class SigninGateway extends Model
         ];
     }
 }
+

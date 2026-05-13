@@ -55,7 +55,12 @@ $checkinExpanded = $checkinActiveTarget !== '' || strpos($adminCurrentPath, '/ad
             </button>
         <?php endif; ?>
 
-        <!-- Deprecated independent check-in admin menu removed -->
+        <button type="button" class="admin-tab-btn ta-sidebar-item" data-tab-target="tab-signin-rewards">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 7a2 2 0 0 1 2-2h3v2a2 2 0 1 0 4 0V5h5a2 2 0 0 1 2 2v3h-2a2 2 0 1 0 0 4h2v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3h2a2 2 0 1 0 0-4H4V7Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>签到奖励</span>
+        </button>
 
         <button type="button" class="admin-tab-btn ta-sidebar-item" data-tab-target="tab-redeem">
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">

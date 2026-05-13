@@ -6,6 +6,7 @@ $csrfToken = htmlspecialchars(
 );
 $adminRealtimePanelScriptUrl = '/scripts/admin-realtime-panel.js';
 $adminRedeemScriptUrl = '/scripts/admin-redeem.js';
+$adminSigninRewardsScriptUrl = '/scripts/admin-signin-rewards.js';
 ?>
 
 <style>
@@ -1617,6 +1618,7 @@ window.adminRealtimePanelConfig = <?= json_encode(
 <!--suppress HtmlUnknownTarget -->
 <script src="<?= htmlspecialchars($adminRealtimePanelScriptUrl, ENT_QUOTES, 'UTF-8') ?>"></script>
 <script src="<?= htmlspecialchars($adminRedeemScriptUrl, ENT_QUOTES, 'UTF-8') ?>"></script>
+<script src="<?= htmlspecialchars($adminSigninRewardsScriptUrl, ENT_QUOTES, 'UTF-8') ?>"></script>
 
 <script>
 function toDatetimeLocalValue(mysqlDatetime) {
@@ -1781,6 +1783,8 @@ function editTeamMember(id, username, role) {
     var map = {
         dashboard: 'tab-dashboard',
         realtime: 'tab-realtime',
+        'signin-rewards': 'tab-signin-rewards',
+        'checkin-rewards': 'tab-signin-rewards',
         redeem: 'tab-redeem',
         players: 'tab-players',
         users: 'tab-players',

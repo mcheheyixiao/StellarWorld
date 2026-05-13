@@ -10,6 +10,9 @@ use DateTimeInterface;
 use PDO;
 use PDOException;
 
+/**
+ * @deprecated Legacy check-in subsystem. Kept for historical compatibility only.
+ */
 class Checkin extends Model
 {
     private const USERNAME_PATTERN = '/^[a-zA-Z0-9_]{1,16}$/';

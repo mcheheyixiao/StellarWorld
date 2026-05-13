@@ -11,21 +11,21 @@ use Core\Database;
 use Core\EmailDomainWhitelist;
 use Core\ImageProcessor;
 use Core\MinecraftUuid;
-use Model\Checkin;
 use Model\Feedback;
+use Model\SigninRewardConfig;
 use Model\User;
 
 class AdminController extends Controller
 {
     private User $users;
-    private Checkin $checkins;
+    private SigninRewardConfig $signinRewards;
     private Feedback $feedbacks;
 
     public function __construct()
     {
         parent::__construct();
         $this->users = new User();
-        $this->checkins = new Checkin();
+        $this->signinRewards = new SigninRewardConfig();
         $this->feedbacks = new Feedback();
         if (!$this->isRealtimeTicketVerifyEndpoint()) {
             $this->requireAdmin();
@@ -533,7 +533,10 @@ class AdminController extends Controller
         };
 
         $activeTab = trim((string)($_GET['tab'] ?? 'dashboard'));
-        $allowedTabs = ['dashboard', 'realtime', 'checkin-rewards', 'checkin-logs', 'checkin-stats', 'redeem', 'players', 'feedback', 'announcements', 'milestones', 'gallery', 'site-settings', 'team', 'ip-whitelist', 'ip-blacklist'];
+        if ($activeTab === 'checkin-rewards') {
+            $activeTab = 'signin-rewards';
+        }
+        $allowedTabs = ['dashboard', 'realtime', 'signin-rewards', 'redeem', 'players', 'feedback', 'announcements', 'milestones', 'gallery', 'site-settings', 'team', 'ip-whitelist', 'ip-blacklist'];
         if (!in_array($activeTab, $allowedTabs, true)) {
             $activeTab = 'dashboard';
         }
@@ -547,21 +550,7 @@ class AdminController extends Controller
         $siteSettings = [];
         $teamMembers = [];
         $ipWhitelist = [];
-        $checkinLogs = [];
-        $checkinStats = [
-            'today_count' => 0,
-            'yesterday_count' => 0,
-            'month_total' => 0,
-            'pending_deliveries' => 0,
-            'failed_deliveries' => 0,
-            'delivered_deliveries' => 0,
-            'top_streaks' => [],
-        ];
-        $checkinRewardRules = [
-            'month_key' => date('Y-m'),
-            'daily' => [],
-            'monthly' => [],
-        ];
+        $signinRewardEditorState = [];
 
         $playersPagination = $buildPagination(0, 1, $perPage, 'players_page');
         $announcementsPagination = $buildPagination(0, 1, $perPage, 'announcements_page');
@@ -705,16 +694,8 @@ class AdminController extends Controller
             }
         }
 
-        if ($activeTab === 'checkin-logs') {
-            $checkinLogs = $this->checkins->getAdminLogs();
-        }
-
-        if ($activeTab === 'checkin-stats') {
-            $checkinStats = $this->checkins->getAdminStats();
-        }
-
-        if ($activeTab === 'checkin-rewards') {
-            $checkinRewardRules = $this->checkins->getAdminRewardRules();
+        if ($activeTab === 'signin-rewards') {
+            $signinRewardEditorState = $this->signinRewards->getAdminEditorState((int)($_SESSION['user_id'] ?? 0));
         }
 
         return $this->render('admin/dashboard', [
@@ -741,9 +722,7 @@ class AdminController extends Controller
             'teamMembersPagination' => $teamMembersPagination,
             'ipWhitelist' => $ipWhitelist,
             'ipWhitelistPagination' => $ipWhitelistPagination,
-            'checkinLogs' => $checkinLogs,
-            'checkinStats' => $checkinStats,
-            'checkinRewardRules' => $checkinRewardRules,
+            'signinRewardEditorState' => $signinRewardEditorState,
             'realtimePanelEnabled' => (bool)$realtimeWsConfig['enable_realtime_panel'],
             'realtimeWsConfig' => $realtimeWsConfig,
         ]);
@@ -979,13 +958,153 @@ class AdminController extends Controller
         );
     }
 
+    public function legacyCheckinRewardsRedirect(): void
+    {
+        $this->completeAdminAction('/admin?tab=signin-rewards');
+    }
+
     public function checkinRewardSave(): void
     {
-        $this->json([
-            'success' => false,
-            'ok' => false,
-            'message' => 'Legacy check-in reward save endpoint is no longer available',
-        ], 410);
+        // Legacy endpoint compatibility.
+        $this->completeAdminAction('/admin?tab=signin-rewards');
+    }
+
+    public function signinRewardsSaveDraft(): void
+    {
+        $this->validateCsrfToken();
+        $adminUserId = (int)($_SESSION['user_id'] ?? 0);
+
+        $payloadRaw = trim((string)($_POST['payload_json'] ?? ''));
+        $payload = json_decode($payloadRaw, true);
+        if (!is_array($payload)) {
+            $this->redirectOrJson(
+                '/admin?tab=signin-rewards&err=invalid_payload',
+                ['success' => false, 'ok' => false, 'message' => '请求数据无效：payload_json'],
+                '请求数据无效：payload_json',
+                400
+            );
+            return;
+        }
+
+        $result = $this->signinRewards->saveDraftFromAdmin($payload, $adminUserId);
+        if (($result['ok'] ?? false) !== true) {
+            $this->redirectOrJson(
+                '/admin?tab=signin-rewards&err=save_draft',
+                ['success' => false, 'ok' => false, 'message' => (string)($result['message'] ?? '保存草稿失败')],
+                (string)($result['message'] ?? '保存草稿失败'),
+                (int)($result['status'] ?? 500)
+            );
+            return;
+        }
+
+        $this->redirectOrJson(
+            '/admin?tab=signin-rewards&saved=1',
+            ['success' => true, 'ok' => true, 'message' => '草稿已保存'],
+            '草稿已保存',
+            200
+        );
+    }
+
+    public function signinRewardsPublish(): void
+    {
+        $this->validateCsrfToken();
+        $adminUserId = (int)($_SESSION['user_id'] ?? 0);
+        $effectiveDate = trim((string)($_POST['effective_date'] ?? ''));
+        $effectiveDate = $effectiveDate === '' ? null : $effectiveDate;
+
+        $result = $this->signinRewards->publishDraft($effectiveDate, $adminUserId);
+        if (($result['ok'] ?? false) !== true) {
+            $this->redirectOrJson(
+                '/admin?tab=signin-rewards&err=publish',
+                ['success' => false, 'ok' => false, 'message' => (string)($result['message'] ?? '发布失败')],
+                (string)($result['message'] ?? '发布失败'),
+                (int)($result['status'] ?? 500)
+            );
+            return;
+        }
+
+        $effectiveOut = trim((string)($result['effective_date'] ?? ''));
+        $redirect = '/admin?tab=signin-rewards&published=1';
+        if ($effectiveOut !== '') {
+            $redirect .= '&effective_date=' . rawurlencode($effectiveOut);
+        }
+
+        $this->redirectOrJson(
+            $redirect,
+            [
+                'success' => true,
+                'ok' => true,
+                'message' => '草稿已发布',
+                'effective_date' => $effectiveOut,
+            ],
+            '草稿已发布',
+            200
+        );
+    }
+
+    public function signinRewardsDeleteRule(): void
+    {
+        $this->validateCsrfToken();
+        $ruleId = (int)($_POST['rule_id'] ?? 0);
+        $result = $this->signinRewards->deleteDraftRule($ruleId);
+
+        if (($result['ok'] ?? false) !== true) {
+            $this->redirectOrJson(
+                '/admin?tab=signin-rewards&err=delete_rule',
+                ['success' => false, 'ok' => false, 'message' => (string)($result['message'] ?? '删除规则失败')],
+                (string)($result['message'] ?? '删除规则失败'),
+                (int)($result['status'] ?? 500)
+            );
+            return;
+        }
+
+        $this->redirectOrJson(
+            '/admin?tab=signin-rewards&deleted=1',
+            ['success' => true, 'ok' => true, 'message' => '规则已删除'],
+            '规则已删除',
+            200
+        );
+    }
+
+    public function signinRewardsTestSend(): void
+    {
+        $this->validateCsrfToken();
+        $adminUserId = (int)($_SESSION['user_id'] ?? 0);
+
+        $input = [
+            'target_player_name' => trim((string)($_POST['target_player_name'] ?? '')),
+            'target_player_uuid' => trim((string)($_POST['target_player_uuid'] ?? '')),
+            'continuous' => (int)($_POST['continuous'] ?? 1),
+            'total' => (int)($_POST['total'] ?? 1),
+            'month_days' => (int)($_POST['month_days'] ?? 1),
+            'sign_date' => trim((string)($_POST['sign_date'] ?? '')),
+            'server_id' => trim((string)($_POST['server_id'] ?? '')),
+        ];
+
+        $result = $this->signinRewards->createTestRewardOutbox($adminUserId, $input);
+        if (($result['ok'] ?? false) !== true) {
+            $this->redirectOrJson(
+                '/admin?tab=signin-rewards&err=test_send',
+                ['success' => false, 'ok' => false, 'message' => (string)($result['message'] ?? '测试发送失败')],
+                (string)($result['message'] ?? '测试发送失败'),
+                (int)($result['status'] ?? 500)
+            );
+            return;
+        }
+
+        $this->redirectOrJson(
+            '/admin?tab=signin-rewards&test_sent=1',
+            [
+                'success' => true,
+                'ok' => true,
+                'message' => '测试奖励已入队',
+                'request_id' => (string)($result['request_id'] ?? ''),
+                'payload' => is_array($result['payload'] ?? null) ? $result['payload'] : [],
+                'target' => is_array($result['target'] ?? null) ? $result['target'] : [],
+            ],
+            '测试奖励已入队',
+            200
+        );
     }
 
     public function announcementSave(): void

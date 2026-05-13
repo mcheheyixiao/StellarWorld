@@ -35,6 +35,7 @@ $announcements = is_array($announcements ?? null) ? $announcements : [];
 $milestones = is_array($milestones ?? null) ? $milestones : [];
 $images = is_array($images ?? null) ? $images : [];
 $siteSettings = is_array($siteSettings ?? null) ? $siteSettings : [];
+$signinRewardEditorState = is_array($signinRewardEditorState ?? null) ? $signinRewardEditorState : [];
 $teamMembers = is_array($teamMembers ?? null) ? $teamMembers : [];
 $ipWhitelist = is_array($ipWhitelist ?? null) ? $ipWhitelist : [];
 $ipBlacklist = is_array($ipBlacklist ?? null) ? $ipBlacklist : [];
@@ -137,6 +138,10 @@ $feedbackCategoryLabels = [
 
         <!-- 玩家管理 Tab -->
         <!-- Deprecated independent check-in admin tabs removed -->
+
+        <div id="tab-signin-rewards" class="ta-tab-content tab-hidden">
+            <?php include BASE_PATH . '/app/views/admin/signin/rewards.php'; ?>
+        </div>
 
         <div id="tab-redeem" class="ta-tab-content tab-hidden">
             <?php include BASE_PATH . '/app/views/admin/redeem/index.php'; ?>

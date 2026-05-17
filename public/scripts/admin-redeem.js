@@ -78,6 +78,71 @@
         return String(raw || '');
     }
 
+    function compactText(value, fallback) {
+        var text = String(value || '').trim();
+        if (!text) return fallback || '-';
+        return text;
+    }
+
+    function truncateText(value, maxLength) {
+        var text = compactText(value, '-');
+        if (text === '-') return text;
+        maxLength = maxLength || 80;
+        return text.length > maxLength ? text.slice(0, maxLength - 1) + '…' : text;
+    }
+
+    function formatJsonLike(raw) {
+        var text = compactText(raw, '-');
+        if (text === '-') return '-';
+        var parsed = parseJsonSafe(text);
+        if (parsed && typeof parsed === 'object') {
+            try {
+                return JSON.stringify(parsed, null, 2);
+            } catch (err) {
+                return text;
+            }
+        }
+        return text;
+    }
+
+    function statusPill(status) {
+        var raw = compactText(status, '-');
+        if (raw === '-') return '-';
+        var key = raw.toLowerCase();
+        var labelMap = {
+            executing: '执行中',
+            success: '成功',
+            failed: '失败',
+            pending: '待处理',
+            handled: '已处理',
+            ignored: '已忽略',
+            passed: '通过',
+            rejected: '拒绝',
+            skipped: '跳过'
+        };
+        var display = labelMap[key] || raw;
+        var safeClass = key.replace(/[^a-z0-9_-]/g, '-');
+        return '<span class="redeem-status-pill redeem-status-' + escapeHtml(safeClass) + '" data-status="' + escapeHtml(key) + '">' + escapeHtml(display) + '</span>';
+    }
+
+    function detailItem(label, value) {
+        return ''
+            + '<div class="redeem-log-detail-item">'
+            + '<span class="redeem-log-detail-label">' + escapeHtml(label) + '</span>'
+            + '<div class="redeem-log-detail-value">' + escapeHtml(compactText(value, '-')) + '</div>'
+            + '</div>';
+    }
+
+    function evidenceCard(title, content) {
+        return ''
+            + '<section class="redeem-log-evidence-card">'
+            + '<div class="redeem-log-evidence-head">'
+            + '<h4 class="redeem-log-evidence-title">' + escapeHtml(title) + '</h4>'
+            + '</div>'
+            + '<pre class="redeem-log-code-box">' + escapeHtml(compactText(content, '-')) + '</pre>'
+            + '</section>';
+    }
+
     function toApiDatetime(value) {
         var v = String(value || '').trim();
         if (!v) return '';
@@ -361,59 +426,100 @@
         byId('redeem-logs-page-text').textContent = 'Page ' + page + ' / ' + totalPages;
     }
 
+    function renderLogAdminPanel(item, adminNote) {
+        var id = Number(item.id || 0);
+        var status = String(item.status || '');
+
+        if (status !== 'failed') {
+            return ''
+                + '<section class="redeem-log-admin-panel">'
+                + '<div class="redeem-log-muted">仅失败记录需要人工处理；当前记录无需处理。</div>'
+                + '</section>';
+        }
+
+        return ''
+            + '<section class="redeem-log-admin-panel">'
+            + '<label class="redeem-field">'
+            + '<span class="redeem-field-label">管理员备注</span>'
+            + '<input type="text" class="redeem-log-admin-note" data-id="' + id + '" value="' + escapeHtml(adminNote) + '" placeholder="填写处理说明" maxlength="500">'
+            + '</label>'
+            + '<div class="redeem-log-admin-actions">'
+            + '<button type="button" class="ta-btn ta-btn-secondary redeem-log-mark" data-id="' + id + '" data-status="handled">标记已处理</button>'
+            + '<button type="button" class="ta-btn ta-btn-secondary redeem-log-mark" data-id="' + id + '" data-status="ignored">标记已忽略</button>'
+            + '<button type="button" class="ta-btn ta-btn-secondary redeem-log-mark" data-id="' + id + '" data-status="pending">标记待处理</button>'
+            + '</div>'
+            + '</section>';
+    }
+
     function renderLogsTable(items) {
         var tbody = document.querySelector('#redeem-logs-table tbody');
         if (!tbody) return;
         tbody.innerHTML = '';
+
         if (!items.length) {
             var emptyTr = document.createElement('tr');
-            emptyTr.innerHTML = '<td colspan="17" class="ta-help-text">No logs</td>';
+            emptyTr.innerHTML = '<td colspan="11" class="ta-help-text">暂无兑换日志</td>';
             tbody.appendChild(emptyTr);
             return;
         }
 
         items.forEach(function (item) {
+            var id = Number(item.id || 0);
             var commandSnapshot = parseCommandSnapshot(item.command_snapshot);
             var executedCommands = parseCommandSnapshot(item.executed_commands);
-            var ruleSnapshot = parseRuleSnapshot(item.rule_snapshot_json);
+            var ruleSnapshot = formatJsonLike(parseRuleSnapshot(item.rule_snapshot_json));
             var combined = commandSnapshot;
-            if (executedCommands) combined += (combined ? '\n---\n' : '') + executedCommands;
+            if (executedCommands) {
+                combined += (combined ? '\n--- 已执行命令 ---\n' : '') + executedCommands;
+            }
 
             var isPendingFailed = String(item.status || '') === 'failed' && String(item.admin_status || '') === 'pending';
             var adminNote = String(item.admin_note || '');
-            var actionHtml = '-';
-            if (String(item.status || '') === 'failed') {
-                actionHtml = ''
-                    + '<div class="ta-action-stack">'
-                    + '<input type="text" class="redeem-log-admin-note" data-id="' + Number(item.id) + '" value="' + escapeHtml(adminNote) + '" placeholder="admin note" maxlength="500">'
-                    + '<button type="button" class="ta-btn ta-btn-secondary redeem-log-mark" data-id="' + Number(item.id) + '" data-status="handled">handled</button>'
-                    + '<button type="button" class="ta-btn ta-btn-secondary redeem-log-mark" data-id="' + Number(item.id) + '" data-status="ignored">ignored</button>'
-                    + '<button type="button" class="ta-btn ta-btn-secondary redeem-log-mark" data-id="' + Number(item.id) + '" data-status="pending">pending</button>'
-                    + '</div>';
-            }
+            var detailRowId = 'redeem-log-detail-' + id;
 
-            var tr = document.createElement('tr');
-            tr.setAttribute('data-log-id', String(Number(item.id || 0)));
-            tr.style.background = isPendingFailed ? 'rgba(239, 68, 68, 0.08)' : '';
-            tr.innerHTML = ''
-                + '<td>#' + Number(item.id) + '</td>'
-                + '<td>' + escapeHtml(String(item.created_at || '-')) + '</td>'
-                + '<td>' + escapeHtml(String(item.player_name || '-')) + '</td>'
-                + '<td>' + escapeHtml(String(item.player_uuid || '-')) + '</td>'
-                + '<td>' + escapeHtml(String(item.server_id || '-')) + '</td>'
-                + '<td>' + escapeHtml(String(item.world_name || '-')) + '</td>'
-                + '<td>' + escapeHtml(String(item.status || '-')) + '</td>'
-                + '<td>' + escapeHtml(String(item.admin_status || '-')) + '</td>'
-                + '<td>' + escapeHtml(String(item.rule_result || '-')) + '</td>'
-                + '<td>' + escapeHtml(String(item.rule_reason || '-')) + '</td>'
-                + '<td>' + escapeHtml(String(item.website_user_id || '-')) + '</td>'
-                + '<td>' + escapeHtml(String((item.batch_no || '-') + ' / ' + (item.channel || '-'))) + '</td>'
-                + '<td>' + escapeHtml(String(item.failure_reason || '-')) + '</td>'
-                + '<td>' + escapeHtml(adminNote || '-') + '</td>'
-                + '<td><textarea rows="4" readonly>' + escapeHtml(ruleSnapshot || '-') + '</textarea></td>'
-                + '<td><textarea rows="4" readonly>' + escapeHtml(combined || '-') + '</textarea></td>'
-                + '<td>' + actionHtml + '</td>';
-            tbody.appendChild(tr);
+            var mainTr = document.createElement('tr');
+            mainTr.className = 'redeem-log-main-row' + (isPendingFailed ? ' is-pending-failed' : '');
+            mainTr.setAttribute('data-log-id', String(id));
+            mainTr.innerHTML = ''
+                + '<td>#' + id + '</td>'
+                + '<td>' + escapeHtml(compactText(item.created_at, '-')) + '</td>'
+                + '<td>' + escapeHtml(compactText(item.player_name, '-')) + '</td>'
+                + '<td>' + escapeHtml(compactText(item.server_id, '-')) + '</td>'
+                + '<td>' + statusPill(item.status) + '</td>'
+                + '<td>' + statusPill(item.admin_status) + '</td>'
+                + '<td>' + statusPill(item.rule_result) + '</td>'
+                + '<td title="' + escapeHtml(compactText(item.rule_reason, '-')) + '">' + escapeHtml(truncateText(item.rule_reason, 28)) + '</td>'
+                + '<td>' + escapeHtml(compactText((item.batch_no || '-') + ' / ' + (item.channel || '-'), '-')) + '</td>'
+                + '<td title="' + escapeHtml(compactText(item.failure_reason, '-')) + '">' + escapeHtml(truncateText(item.failure_reason, 44)) + '</td>'
+                + '<td><button type="button" class="ta-btn ta-btn-secondary redeem-log-toggle" data-detail-row="' + escapeHtml(detailRowId) + '" aria-expanded="false">详情</button></td>';
+
+            var detailHtml = ''
+                + '<div class="redeem-log-detail-panel">'
+                + '<div class="redeem-log-detail-grid">'
+                + detailItem('日志ID', '#' + id)
+                + detailItem('玩家 UUID', item.player_uuid)
+                + detailItem('世界', item.world_name)
+                + detailItem('网站用户ID', item.website_user_id)
+                + detailItem('批次', item.batch_no)
+                + detailItem('渠道', item.channel)
+                + detailItem('完成时间', item.completed_at)
+                + detailItem('处理人 / 处理时间', (item.handled_by || '-') + ' / ' + (item.handled_at || '-'))
+                + '</div>'
+                + '<div class="redeem-log-evidence-grid">'
+                + evidenceCard('规则快照', ruleSnapshot)
+                + evidenceCard('命令快照 / 已执行命令', combined || '-')
+                + '</div>'
+                + renderLogAdminPanel(item, adminNote)
+                + '</div>';
+
+            var detailTr = document.createElement('tr');
+            detailTr.className = 'redeem-log-detail-row';
+            detailTr.id = detailRowId;
+            detailTr.hidden = true;
+            detailTr.innerHTML = '<td colspan="11" class="redeem-log-detail-cell">' + detailHtml + '</td>';
+
+            tbody.appendChild(mainTr);
+            tbody.appendChild(detailTr);
         });
     }
 
@@ -584,7 +690,10 @@
 
     async function markLogAdminStatus(logId, status) {
         var row = document.querySelector('tr[data-log-id="' + logId + '"]');
-        var noteInput = row ? row.querySelector('.redeem-log-admin-note[data-id="' + logId + '"]') : null;
+        var noteInput = document.querySelector('.redeem-log-admin-note[data-id="' + logId + '"]');
+        if (!noteInput && row) {
+            noteInput = row.querySelector('.redeem-log-admin-note[data-id="' + logId + '"]');
+        }
         var adminNote = noteInput ? String(noteInput.value || '').trim() : '';
         var res = await request('/api/admin/redeem/logs/' + logId + '/admin-status', {
             method: 'PATCH',
@@ -845,6 +954,29 @@
             if (state.logs.page < state.logs.totalPages) loadLogs(state.logs.page + 1);
         });
         byId('redeem-logs-table').addEventListener('click', function (event) {
+            var toggleBtn = event.target.closest('.redeem-log-toggle');
+            if (toggleBtn) {
+                var detailRowId = String(toggleBtn.getAttribute('data-detail-row') || '');
+                var detailRow = detailRowId ? byId(detailRowId) : null;
+                var mainRow = toggleBtn.closest('.redeem-log-main-row');
+
+                if (!detailRow) return;
+
+                var willOpen = !!detailRow.hidden;
+                detailRow.hidden = !willOpen;
+                toggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+                toggleBtn.textContent = willOpen ? '收起' : '详情';
+
+                if (mainRow) {
+                    if (willOpen) {
+                        mainRow.classList.add('is-expanded');
+                    } else {
+                        mainRow.classList.remove('is-expanded');
+                    }
+                }
+                return;
+            }
+
             var btn = event.target.closest('.redeem-log-mark');
             if (!btn) return;
             var id = Number(btn.getAttribute('data-id'));

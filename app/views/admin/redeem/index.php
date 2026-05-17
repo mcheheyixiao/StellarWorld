@@ -463,6 +463,148 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
   width: 100%;
 }
 
+.redeem-page-v4 #redeem-logs-table {
+  min-width: 1080px;
+}
+
+.redeem-page-v4 #redeem-logs-table td,
+.redeem-page-v4 #redeem-logs-table th {
+  white-space: nowrap;
+}
+
+.redeem-log-main-row.is-expanded {
+  background: #f8fafc;
+}
+
+.redeem-log-main-row.is-pending-failed {
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.redeem-log-toggle {
+  min-width: 72px;
+}
+
+.redeem-log-detail-row {
+  background: #f8fafc;
+}
+
+.redeem-log-detail-row[hidden] {
+  display: none;
+}
+
+.redeem-log-detail-cell {
+  padding: 0 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.redeem-log-detail-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-top: 1px solid #eef2f7;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.96), #ffffff);
+}
+
+.redeem-log-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.redeem-log-detail-item {
+  border: 1px solid var(--redeem-border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.redeem-log-detail-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--redeem-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.redeem-log-detail-value {
+  color: var(--redeem-text);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.redeem-log-evidence-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.redeem-log-evidence-card {
+  min-width: 0;
+  border: 1px solid var(--redeem-border);
+  border-radius: 14px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.redeem-log-evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--redeem-border);
+  background: #f8fafc;
+}
+
+.redeem-log-evidence-title {
+  margin: 0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.redeem-log-code-box {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  color: #0f172a;
+  background: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.redeem-log-admin-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  border: 1px solid var(--redeem-border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 12px;
+}
+
+.redeem-log-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.redeem-log-admin-note {
+  min-width: 260px;
+}
+
+.redeem-log-muted {
+  color: var(--redeem-muted);
+}
+
 .redeem-status-pill,
 .redeem-badge {
   display: inline-flex;
@@ -581,6 +723,19 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
   .redeem-filter-bar {
     grid-template-columns: repeat(3, minmax(150px, 1fr));
   }
+
+  .redeem-log-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .redeem-log-evidence-grid,
+  .redeem-log-admin-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .redeem-log-admin-actions {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 767px) {
@@ -612,6 +767,18 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
   .redeem-config-card,
   .redeem-preview-card {
     padding: 16px;
+  }
+
+  .redeem-page-v4 #redeem-logs-table {
+    min-width: 900px;
+  }
+
+  .redeem-log-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .redeem-log-detail-panel {
+    padding: 12px;
   }
 }
 
@@ -1202,19 +1369,13 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
                     <th>ID</th>
                     <th>时间</th>
                     <th>玩家</th>
-                    <th>UUID</th>
                     <th>服务器</th>
-                    <th>世界</th>
                     <th>状态</th>
                     <th>人工状态</th>
                     <th>规则结果</th>
                     <th>规则原因</th>
-                    <th>网站用户ID</th>
                     <th>批次/渠道</th>
                     <th>失败原因</th>
-                    <th>管理员备注</th>
-                    <th>规则快照</th>
-                    <th>命令快照</th>
                     <th>操作</th>
                 </tr>
                 </thead>
@@ -1360,14 +1521,13 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
 
     function runStatusBeautify() {
         beautifyStatusCells('redeem-keys-table', [12]);
-        beautifyStatusCells('redeem-logs-table', [6, 7]);
     }
 
     var observer = new MutationObserver(function () {
         runStatusBeautify();
     });
 
-    ['redeem-keys-table', 'redeem-logs-table'].forEach(function (tableId) {
+    ['redeem-keys-table'].forEach(function (tableId) {
         var tbody = document.querySelector('#' + tableId + ' tbody');
         if (tbody) {
             observer.observe(tbody, { childList: true, subtree: true });

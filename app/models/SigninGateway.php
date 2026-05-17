@@ -1299,8 +1299,8 @@ class SigninGateway extends Model
                     CURLOPT_FOLLOWLOCATION => false,
                     CURLOPT_CONNECTTIMEOUT_MS => $timeoutMs,
                     CURLOPT_TIMEOUT_MS => $timeoutMs,
-                    CURLOPT_SSL_VERIFYPEER => false,
-                    CURLOPT_SSL_VERIFYHOST => 0,
+                    CURLOPT_SSL_VERIFYPEER => true,
+                    CURLOPT_SSL_VERIFYHOST => 2,
                     CURLOPT_HTTPHEADER => $headers,
                 ]);
                 $response = curl_exec($ch);

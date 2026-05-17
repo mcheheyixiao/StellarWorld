@@ -770,7 +770,7 @@ class ApiController extends Controller
             return false;
         }
 
-        if (strlen($nonce) > 128) {
+        if (preg_match('/^[A-Za-z0-9._:-]{1,128}$/', $nonce) !== 1) {
             $this->setPluginAuthFailure(401, 'Invalid HMAC nonce');
             return false;
         }
@@ -790,7 +790,112 @@ class ApiController extends Controller
             return false;
         }
 
+        $nonceTtl = $timeWindow + 30;
+        $actor = $this->resolvePluginHmacActor();
+        if (!$this->consumePluginHmacNonceOnce($method, $path, $actor, $nonce, $nonceTtl)) {
+            $this->setPluginAuthFailure(401, 'HMAC nonce already used');
+            return false;
+        }
+
         return true;
+    }
+
+    private function resolvePluginHmacActor(): string
+    {
+        foreach ([
+            'HTTP_X_STELLAR_SERVER_ID',
+            'HTTP_X_SERVER_ID',
+            'HTTP_X_PLUGIN_INSTANCE',
+            'HTTP_X_PLUGIN_NAME',
+        ] as $key) {
+            $value = trim((string)($_SERVER[$key] ?? ''));
+            if ($value !== '') {
+                return mb_substr($value, 0, 128);
+            }
+        }
+
+        $body = $this->readJsonRequestBody();
+        foreach (['serverId', 'server_id', 'pluginId', 'plugin_id'] as $key) {
+            $value = trim((string)($body[$key] ?? ''));
+            if ($value !== '') {
+                return mb_substr($value, 0, 128);
+            }
+        }
+
+        $token = $this->extractPluginToken();
+        if ($token !== '') {
+            return 'token:' . substr(hash('sha256', $token), 0, 32);
+        }
+
+        $remoteAddr = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
+        if ($remoteAddr !== '') {
+            return 'ip:' . mb_substr($remoteAddr, 0, 100);
+        }
+
+        return 'unknown';
+    }
+
+    private function consumePluginHmacNonceOnce(string $method, string $path, string $actor, string $nonce, int $ttl): bool
+    {
+        $safeTtl = max(60, $ttl);
+        $cacheKey = 'stellar:plugin_hmac_nonce:' . hash('sha256', $method . "\n" . $path . "\n" . $actor . "\n" . $nonce);
+
+        $redis = Database::redis();
+        if ($redis !== null) {
+            try {
+                $created = $redis->setnx($cacheKey, (string)time());
+                if ($created === true || $created === 1) {
+                    $redis->expire($cacheKey, $safeTtl);
+                    return true;
+                }
+                if ($created === false || $created === 0) {
+                    return false;
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        $cacheDir = rtrim((string)CACHE_PATH, '/\\') . DIRECTORY_SEPARATOR . 'nonce';
+        if (!is_dir($cacheDir)) {
+            @mkdir($cacheDir, 0775, true);
+        }
+        if (!is_dir($cacheDir)) {
+            return false;
+        }
+
+        $file = $cacheDir . DIRECTORY_SEPARATOR . hash('sha256', $cacheKey) . '.lock';
+        $handle = @fopen($file, 'c+');
+        if ($handle === false) {
+            return false;
+        }
+
+        try {
+            if (!flock($handle, LOCK_EX)) {
+                fclose($handle);
+                return false;
+            }
+
+            $now = time();
+            $raw = stream_get_contents($handle);
+            $expiresAt = is_string($raw) ? (int)trim($raw) : 0;
+            if ($expiresAt > $now) {
+                flock($handle, LOCK_UN);
+                fclose($handle);
+                return false;
+            }
+
+            $newExpiresAt = $now + $safeTtl;
+            ftruncate($handle, 0);
+            rewind($handle);
+            fwrite($handle, (string)$newExpiresAt);
+            fflush($handle);
+            flock($handle, LOCK_UN);
+            fclose($handle);
+            return true;
+        } catch (\Throwable $e) {
+            @fclose($handle);
+            return false;
+        }
     }
 
     private function extractPluginToken(?string &$source = null): string

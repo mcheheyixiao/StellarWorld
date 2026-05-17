@@ -26,6 +26,7 @@
     var ticketEndpoint = String(config.ws_ticket_endpoint || '/admin/realtime-ticket');
     var ticketQueryParam = String(config.ws_ticket_query_param || 'token').trim() || 'token';
     var ticketSyncHintShown = false;
+    var connectInFlight = false;
 
     var minSnapshotIntervalMs = Math.max(1500, Number(config.min_snapshot_interval_ms || 2000));
     var snapshotIntervalMs = Math.max(minSnapshotIntervalMs, Number(config.snapshot_interval_ms || 3000));
@@ -55,8 +56,12 @@
     var metricToneClasses = ['ta-metric-good', 'ta-metric-warn', 'ta-metric-bad'];
     var healthToneClasses = ['ta-health-good', 'ta-health-warn', 'ta-health-bad'];
 
-    function connect(isReconnect) {
+    async function connect(isReconnect) {
         if (document.hidden || !isRealtimeTabActive()) {
+            return;
+        }
+
+        if (connectInFlight) {
             return;
         }
 
@@ -64,11 +69,30 @@
             return;
         }
 
+        connectInFlight = true;
         clearReconnectTimer();
         clearSnapshotTimer();
-        var wsTicket = acquireRealtimeTicketSync();
+        var wsTicket = '';
+        try {
+            wsTicket = await acquireRealtimeTicket();
+        } catch (err) {
+            connectInFlight = false;
+            if (!ticketSyncHintShown) {
+                ticketSyncHintShown = true;
+            }
+            setConnectionState('reconnecting', 'WS ticket unavailable');
+            reconnect();
+            return;
+        }
+        if (!wsTicket) {
+            connectInFlight = false;
+            setConnectionState('reconnecting', 'WS ticket unavailable');
+            reconnect();
+            return;
+        }
         var wsUrl = buildWsUrl(config.ws_url, wsTicket, ticketQueryParam);
         if (!wsUrl) {
+            connectInFlight = false;
             setConnectionState('error', '未配置 ws_url');
             return;
         }
@@ -79,10 +103,12 @@
         try {
             socket = new WebSocket(wsUrl);
         } catch (err) {
+            connectInFlight = false;
             setConnectionState('error', '连接失败');
             reconnect();
             return;
         }
+        connectInFlight = false;
 
         socket.onopen = function () {
             reconnectAttempts = 0;
@@ -1049,41 +1075,36 @@
         }
     }
 
-    function acquireRealtimeTicketSync() {
+    async function acquireRealtimeTicket() {
         if (!ticketEndpoint) {
-            return '';
+            throw new Error('Missing ticket endpoint');
         }
 
-        try {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', ticketEndpoint + '?t=' + Date.now(), false);
-            xhr.withCredentials = true;
-            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-            xhr.setRequestHeader('Cache-Control', 'no-store');
-            xhr.send(null);
-            if (xhr.status < 200 || xhr.status >= 300) {
-                throw new Error('HTTP ' + xhr.status);
+        var response = await fetch(ticketEndpoint + '?t=' + Date.now(), {
+            method: 'GET',
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Cache-Control': 'no-store'
             }
-
-            var payload = JSON.parse(xhr.responseText || '{}');
-            var data = extractTicketPayload(payload);
-            var ticket = data && typeof data.ticket === 'string' ? data.ticket.trim() : '';
-            if (typeof data.ticket_query_param === 'string' && data.ticket_query_param.trim() !== '') {
-                ticketQueryParam = data.ticket_query_param.trim();
-            }
-
-            if (ticket === '') {
-                throw new Error('Missing ticket');
-            }
-
-            return ticket;
-        } catch (err) {
-            if (!ticketSyncHintShown) {
-                ticketSyncHintShown = true;
-                setConnectionState('reconnecting', 'WS ticket unavailable; fallback without token');
-            }
-            return '';
+        });
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
         }
+
+        var payload = await response.json();
+        var data = extractTicketPayload(payload);
+        var ticket = data && typeof data.ticket === 'string' ? data.ticket.trim() : '';
+        if (typeof data.ticket_query_param === 'string' && data.ticket_query_param.trim() !== '') {
+            ticketQueryParam = data.ticket_query_param.trim();
+        }
+
+        if (ticket === '') {
+            throw new Error('Missing ticket');
+        }
+
+        return ticket;
     }
 
     function extractTicketPayload(payload) {

@@ -701,6 +701,24 @@
         });
         byId('redeem-keys-export-btn').addEventListener('click', exportCurrentKeyFilters);
 
+        var headerGenerateJumpBtn = byId('redeem-header-generate-jump-btn');
+        if (headerGenerateJumpBtn) {
+            headerGenerateJumpBtn.addEventListener('click', function () {
+                var form = byId('redeem-batch-form');
+                if (!form) return;
+
+                var target = form.closest('.redeem-config-card') || form;
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                var categorySelect = byId('redeem-batch-category');
+                if (categorySelect) {
+                    setTimeout(function () {
+                        categorySelect.focus({ preventScroll: true });
+                    }, 350);
+                }
+            });
+        }
+
         byId('redeem-batch-form').addEventListener('submit', async function (event) {
             event.preventDefault();
             var formData = new FormData(event.target);

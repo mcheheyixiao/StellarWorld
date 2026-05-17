@@ -261,6 +261,21 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
   font-size: 12px;
 }
 
+.redeem-command-warning {
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.redeem-command-warning strong {
+  color: #c2410c;
+  font-weight: 800;
+}
+
 .redeem-checkbox-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -616,8 +631,7 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
         </div>
         <div class="redeem-header-actions">
             <button type="button" class="ta-btn ta-btn-secondary redeem-btn redeem-btn-secondary" id="redeem-header-refresh-btn">刷新</button>
-            <button type="button" class="ta-btn ta-btn-secondary redeem-btn redeem-btn-secondary" id="redeem-header-export-btn">导出当前筛选 CSV</button>
-            <button type="submit" form="redeem-batch-form" class="ta-btn ta-btn-primary redeem-btn redeem-btn-primary">批量生成卡密</button>
+            <button type="button" class="ta-btn ta-btn-primary redeem-btn redeem-btn-primary" id="redeem-header-generate-jump-btn">前往批量生成</button>
         </div>
     </section>
 
@@ -778,6 +792,10 @@ $redeemCsrfToken = htmlspecialchars((string)($_SESSION['csrf_token'] ?? ''), ENT
                     <h3 class="redeem-form-section-title">命令模板</h3>
                     <div class="redeem-field">
                         <label>命令模板（可空：若选择分类则继承分类模板）</label>
+                        <div class="redeem-command-warning" role="note">
+                            <strong>填写提示：</strong>
+                            未选择分类时必须填写命令模板；选择分类后可继承分类默认模板。命令将由服务器控制台执行，请仅填写可信奖励命令。
+                        </div>
                         <textarea name="commandTemplate" rows="5" placeholder="每行一条命令，例如：eco give {player} 1000"></textarea>
                     </div>
                 </div>
